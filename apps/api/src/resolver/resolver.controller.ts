@@ -17,7 +17,7 @@ export class ResolverController {
   }
 
   // POST /api/resolve
-  // Body: { "url": "https://...", "targetPlatforms": ["spotify", "deezer", "netease"] }
+  // Body: { "url": "https://...", "targetPlatforms": ["spotify", "deezer", "netease", "appleMusic", "qqMusic"] }
   @Post('resolve')
   async resolveByBody(@Body() dto: ResolveDto) {
     return this.resolverService.resolveUrl(dto.url, dto.targetPlatforms);

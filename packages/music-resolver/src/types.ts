@@ -76,4 +76,7 @@ export interface ResolverConfig {
     lookupUrl?: string;
     country?: string;
   };
+  qqMusic?: {
+    apiUrl?: string;
+  };
 }

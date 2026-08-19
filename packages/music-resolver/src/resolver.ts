@@ -1,10 +1,12 @@
 import { AppleMusicAdapter } from './adapters/apple-music.js';
 import { DeezerAdapter } from './adapters/deezer.js';
 import { NeteaseAdapter } from './adapters/netease.js';
+import { QQMusicAdapter } from './adapters/qq-music.js';
 import { SpotifyAdapter } from './adapters/spotify.js';
 import { AppleMusicParser } from './parsers/apple-music.js';
 import { DeezerParser } from './parsers/deezer.js';
 import { NeteaseParser } from './parsers/netease.js';
+import { QQMusicParser } from './parsers/qq-music.js';
 import { SpotifyParser } from './parsers/spotify.js';
 import type {
   MusicAdapter,
@@ -31,6 +33,7 @@ export class MusicResolver {
     this.registerParser(new SpotifyParser());
     this.registerParser(new DeezerParser());
     this.registerParser(new NeteaseParser());
+    this.registerParser(new QQMusicParser());
 
     // Register built-in default adapters
     this.registerAdapter(
@@ -53,6 +56,11 @@ export class MusicResolver {
     this.registerAdapter(
       new NeteaseAdapter({
         apiUrl: config?.netease?.apiUrl,
+      })
+    );
+    this.registerAdapter(
+      new QQMusicAdapter({
+        apiUrl: config?.qqMusic?.apiUrl,
       })
     );
   }

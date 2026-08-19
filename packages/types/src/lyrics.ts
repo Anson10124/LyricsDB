@@ -25,6 +25,8 @@ export interface TrackMetadata {
   spotifyId?: string | null;
   appleMusicId?: string | null;
   deezerId?: string | null;
+  neteaseId?: string | null;
+  qqMusicId?: string | null;
   youtubeId?: string | null;
   title: string;
   artistName: string;
