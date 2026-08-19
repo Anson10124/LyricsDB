@@ -286,3 +286,26 @@ export function decodeQrcHex(hexStr: string): string {
 
   return decodeQrcBuffer(bytes);
 }
+
+export const XML_CONTENT_REGEX = /<Lyric_1[^>]*LyricContent="([^"]*)"/s;
+
+export function decodeXmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#10;/g, '\n')
+    .replace(/&#13;/g, '\r');
+}
+
+export function extractLyricContent(xmlOrText: string): string {
+  if (!xmlOrText) return '';
+  const match = xmlOrText.match(XML_CONTENT_REGEX);
+  if (match && match[1] !== undefined) {
+    return decodeXmlEntities(match[1]);
+  }
+  return xmlOrText;
+}
+

@@ -1,12 +1,13 @@
-import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
+import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
 import { weapiEncrypt } from '../utils/netease-crypto.js';
-import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
+import { normalizeSongTitle } from '../utils/query.js';
+import { BaseMusicParser } from './base.js';
 
 export const NETEASE_LINK_REGEX =
   /(?:https?:\/\/)?(?:music\.163\.com|163cn\.tv)\/(?:#\/)?(song|album|artist|playlist)(?:\?id=|\/)(\d+)/;
 
-export class NeteaseParser implements MusicParser {
+export class NeteaseParser extends BaseMusicParser {
   readonly id = 'netease';
   readonly name = 'NetEase Cloud Music';
 
@@ -94,13 +95,6 @@ export class NeteaseParser implements MusicParser {
       title: `NetEase Track ${id}`,
       type: itemType,
     };
-  }
-
-  buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
-    const artist = metadata.artist;
-    const raw = artist ? `${title} ${artist}` : title;
-    return cleanSearchQuery(raw);
   }
 }
 

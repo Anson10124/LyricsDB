@@ -14,7 +14,7 @@ import {
   tracks,
   type NewTrack,
 } from '@repo/database';
-import { type ResolveResult } from '@repo/music-resolver';
+import { type ResolvedLink, type ResolveResult } from '@repo/music-resolver';
 import { LyricsEngine } from '@repo/lyrics';
 import { DATABASE_CONNECTION } from '../database/database.constants';
 import { ResolverService } from '../resolver/resolver.service';
@@ -42,7 +42,7 @@ export class TracksService {
   async getOrSyncTrack(options: GetOrSyncTrackOptions): Promise<Track> {
     const { platform, id, url } = options;
 
-    let targetPlatform = platform?.toLowerCase().replace(/[-_]/g, '');
+    let targetPlatform = platform ? this.normalizePlatform(platform) : undefined;
     let targetId = id?.trim();
     let targetUrl = url?.trim();
 
@@ -99,6 +99,19 @@ export class TracksService {
     return syncPromise;
   }
 
+  // Normalizes platform identifiers across inputs
+  private normalizePlatform(platform: string): string {
+    const p = platform.toLowerCase().replace(/[-_]/g, '');
+    if (p === 'applemusic' || p === 'apple') return 'apple';
+    if (p === '163' || p === 'netease') return 'netease';
+    if (p === 'qqmusic' || p === 'qq') return 'qq';
+    return p;
+  }
+
+  private getHighConfidencePlatformId(link?: ResolvedLink | null): string | undefined {
+    return link?.isVerified || (link?.score ?? 0) >= 0.8 ? link?.id : undefined;
+  }
+
   // Find a track by internal database UUID
   async findById(id: string): Promise<Track> {
     const result = await this.db
@@ -116,36 +129,21 @@ export class TracksService {
 
   // Fast O(1) indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC)
   async findByPlatformId(platform: string, id: string): Promise<Track | null> {
-    const normalizedPlatform = platform.toLowerCase().replace(/[-_]/g, '');
+    const normalizedPlatform = this.normalizePlatform(platform);
 
-    let condition;
-    switch (normalizedPlatform) {
-      case 'spotify':
-        condition = eq(tracks.spotifyId, id);
-        break;
-      case 'applemusic':
-      case 'apple':
-        condition = eq(tracks.appleMusicId, id);
-        break;
-      case 'deezer':
-        condition = eq(tracks.deezerId, id);
-        break;
-      case 'netease':
-      case '163':
-        condition = eq(tracks.neteaseId, id);
-        break;
-      case 'qqmusic':
-      case 'qq':
-        condition = eq(tracks.qqMusicId, id);
-        break;
-      case 'isrc':
-        condition = eq(tracks.isrc, id);
-        break;
-      default:
-        return null;
-    }
+    const columnMap: Record<string, any> = {
+      spotify: tracks.spotifyId,
+      apple: tracks.appleMusicId,
+      deezer: tracks.deezerId,
+      netease: tracks.neteaseId,
+      qq: tracks.qqMusicId,
+      isrc: tracks.isrc,
+    };
 
-    const result = await this.db.select().from(tracks).where(condition).limit(1);
+    const col = columnMap[normalizedPlatform];
+    if (!col) return null;
+
+    const result = await this.db.select().from(tracks).where(eq(col, id)).limit(1);
     return result[0] ?? null;
   }
 
@@ -210,35 +208,30 @@ export class TracksService {
     const appleLink = resolved.links['appleMusic'] || resolved.links['applemusic'];
     const qqLink = resolved.links['qqMusic'] || resolved.links['qqmusic'];
 
+    const platformLinks: Array<[string, ResolvedLink | null | undefined]> = [
+      ['spotify', spotifyLink],
+      ['deezer', deezerLink],
+      ['netease', neteaseLink],
+      ['apple', appleLink],
+      ['qq', qqLink],
+    ];
+
     // Check if track already exists by any verified platform ID
     let existingTrack: Track | null = null;
-    if (spotifyLink?.id && (spotifyLink.isVerified || (spotifyLink.score ?? 0) >= 0.8)) {
-      existingTrack = await this.findByPlatformId('spotify', spotifyLink.id);
-    }
-    if (!existingTrack && deezerLink?.id && (deezerLink.isVerified || (deezerLink.score ?? 0) >= 0.8)) {
-      existingTrack = await this.findByPlatformId('deezer', deezerLink.id);
-    }
-    if (!existingTrack && neteaseLink?.id && (neteaseLink.isVerified || (neteaseLink.score ?? 0) >= 0.8)) {
-      existingTrack = await this.findByPlatformId('netease', neteaseLink.id);
-    }
-    if (!existingTrack && appleLink?.id && (appleLink.isVerified || (appleLink.score ?? 0) >= 0.8)) {
-      existingTrack = await this.findByPlatformId('apple', appleLink.id);
-    }
-    if (!existingTrack && qqLink?.id && (qqLink.isVerified || (qqLink.score ?? 0) >= 0.8)) {
-      existingTrack = await this.findByPlatformId('qq', qqLink.id);
+    for (const [platform, link] of platformLinks) {
+      const platformId = this.getHighConfidencePlatformId(link);
+      if (platformId) {
+        existingTrack = await this.findByPlatformId(platform, platformId);
+        if (existingTrack) break;
+      }
     }
 
     // Only save IDs that have high confidence score (>= 0.8 or isVerified)
-    const validSpotifyId =
-      (spotifyLink?.isVerified || (spotifyLink?.score ?? 0) >= 0.8) ? spotifyLink?.id : undefined;
-    const validDeezerId =
-      (deezerLink?.isVerified || (deezerLink?.score ?? 0) >= 0.8) ? deezerLink?.id : undefined;
-    const validNeteaseId =
-      (neteaseLink?.isVerified || (neteaseLink?.score ?? 0) >= 0.8) ? neteaseLink?.id : undefined;
-    const validAppleId =
-      (appleLink?.isVerified || (appleLink?.score ?? 0) >= 0.8) ? appleLink?.id : undefined;
-    const validQqId =
-      (qqLink?.isVerified || (qqLink?.score ?? 0) >= 0.8) ? qqLink?.id : undefined;
+    const validSpotifyId = this.getHighConfidencePlatformId(spotifyLink);
+    const validDeezerId = this.getHighConfidencePlatformId(deezerLink);
+    const validNeteaseId = this.getHighConfidencePlatformId(neteaseLink);
+    const validAppleId = this.getHighConfidencePlatformId(appleLink);
+    const validQqId = this.getHighConfidencePlatformId(qqLink);
 
     // Resolve lyrics if not already present
     let lyricsType = existingTrack?.lyricsType ?? null;
@@ -301,18 +294,16 @@ export class TracksService {
   }
 
   private buildPlatformUrl(platform: string, id: string): string {
-    switch (platform) {
+    const norm = this.normalizePlatform(platform);
+    switch (norm) {
       case 'spotify':
         return `https://open.spotify.com/track/${id}`;
       case 'deezer':
         return `https://www.deezer.com/track/${id}`;
       case 'netease':
-      case '163':
         return `https://music.163.com/#/song?id=${id}`;
-      case 'applemusic':
       case 'apple':
         return `https://music.apple.com/song/${id}`;
-      case 'qqmusic':
       case 'qq':
         return `https://y.qq.com/n/ryqq/songDetail/${id}`;
       default:

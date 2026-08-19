@@ -54,12 +54,7 @@ export class TracksController {
       url,
       format,
     });
-
-    if (res) {
-      res.setHeader('Content-Type', result.contentType);
-      return res.send(result.content);
-    }
-    return result.content;
+    return this.sendLyricsResponse(result, res);
   }
 
   // GET /api/tracks/:id/lyrics?format=ttml
@@ -74,7 +69,10 @@ export class TracksController {
       trackId,
       format,
     });
+    return this.sendLyricsResponse(result, res);
+  }
 
+  private sendLyricsResponse(result: { content: any; contentType: string }, res?: Response) {
     if (res) {
       res.setHeader('Content-Type', result.contentType);
       return res.send(result.content);

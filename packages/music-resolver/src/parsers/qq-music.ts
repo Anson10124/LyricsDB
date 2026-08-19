@@ -1,7 +1,8 @@
-import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
+import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
+import { normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
+import { BaseMusicParser } from './base.js';
 
 export const QQ_MUSIC_LINK_REGEX =
   /(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)?(?:y\.qq\.com|qqmusic\.qq\.com|qqmusic\.com|i\.y\.qq\.com|c\.y\.qq\.com)(?:\/.*)?/i;
@@ -31,7 +32,7 @@ interface FcgAlbumInfoResponse {
   };
 }
 
-export class QQMusicParser implements MusicParser {
+export class QQMusicParser extends BaseMusicParser {
   readonly id = 'qqMusic';
   readonly name = 'QQ Music';
 
@@ -258,13 +259,6 @@ export class QQMusicParser implements MusicParser {
       title: `QQ Music Item ${id}`,
       type: itemType,
     };
-  }
-
-  buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
-    const artist = metadata.artist;
-    const raw = artist ? `${title} ${artist}` : title;
-    return cleanSearchQuery(raw);
   }
 }
 

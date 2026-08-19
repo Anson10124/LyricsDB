@@ -1,7 +1,8 @@
-import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
+import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
 import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
+import { BaseMusicParser } from './base.js';
 
 export const DEEZER_LINK_REGEX =
   /^https:\/\/www\.deezer\.com\/(?:[a-z]{2}\/)?(track|album|playlist|artist|episode|show)\/(\d+)/;
@@ -51,7 +52,7 @@ interface DeezerApiPlaylist {
   error?: { type: string; message: string; code: number };
 }
 
-export class DeezerParser implements MusicParser {
+export class DeezerParser extends BaseMusicParser {
   readonly id = 'deezer';
   readonly name = 'Deezer';
 
@@ -195,14 +196,9 @@ export class DeezerParser implements MusicParser {
     };
   }
 
-  buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
-    const artist = metadata.artist;
-    let query = artist ? `${title} ${artist}` : title;
-    if (metadata.type === 'playlist') {
-      query = `${query} playlist`;
-    }
-    return cleanSearchQuery(query);
+  override buildSearchQuery(metadata: TrackMetadata): string {
+    const baseQuery = super.buildSearchQuery(metadata);
+    return metadata.type === 'playlist' ? `${baseQuery} playlist` : baseQuery;
   }
 }
 

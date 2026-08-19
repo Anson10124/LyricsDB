@@ -1,7 +1,8 @@
-import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
+import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
+import { normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
+import { BaseMusicParser } from './base.js';
 
 export const SPOTIFY_LINK_REGEX =
   /^https:\/\/(open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(track|album|playlist|artist|episode|show)|spotify\.link)\/(\w{11,24})(?:[?#].*)?$/;
@@ -28,7 +29,7 @@ interface SpotifyEmbedEntity {
   visualIdentity?: { image?: Array<{ url?: string }> };
 }
 
-export class SpotifyParser implements MusicParser {
+export class SpotifyParser extends BaseMusicParser {
   readonly id = 'spotify';
   readonly name = 'Spotify';
 
@@ -174,13 +175,6 @@ export class SpotifyParser implements MusicParser {
       image,
       audio,
     };
-  }
-
-  buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
-    const artist = metadata.artist;
-    const raw = artist ? `${title} ${artist}` : title;
-    return cleanSearchQuery(raw);
   }
 }
 

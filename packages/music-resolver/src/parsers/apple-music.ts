@@ -1,7 +1,8 @@
-import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
+import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
+import { normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
+import { BaseMusicParser } from './base.js';
 
 export const APPLE_MUSIC_LINK_REGEX =
   /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:music|itunes|geo|embed)\.apple\.com\/(?:([a-z]{2}(?:-[a-z]{2})?)\/)?(album|song|artist|playlist|station|music-video|curator|post)\/(?:([^/?#]+)\/)?(?:id)?([0-9a-zA-Z._-]+)(?:[?#].*)?$/i;
@@ -35,7 +36,7 @@ interface ITunesLookupResponse {
   }>;
 }
 
-export class AppleMusicParser implements MusicParser {
+export class AppleMusicParser extends BaseMusicParser {
   readonly id = 'appleMusic';
   readonly name = 'Apple Music';
 
@@ -43,6 +44,7 @@ export class AppleMusicParser implements MusicParser {
   private defaultCountry: string;
 
   constructor(options?: { lookupUrl?: string; country?: string }) {
+    super();
     this.lookupUrl = options?.lookupUrl || 'https://itunes.apple.com/lookup';
     this.defaultCountry = options?.country || 'us';
   }
@@ -218,13 +220,6 @@ export class AppleMusicParser implements MusicParser {
         type: itemType,
       };
     }
-  }
-
-  buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
-    const artist = metadata.artist;
-    const raw = artist ? `${title} ${artist}` : title;
-    return cleanSearchQuery(raw);
   }
 }
 

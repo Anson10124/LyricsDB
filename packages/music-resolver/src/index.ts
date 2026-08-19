@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './resolver.js';
+export * from './parsers/base.js';
 export * from './parsers/apple-music.js';
 export * from './parsers/spotify.js';
 export * from './parsers/deezer.js';

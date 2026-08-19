@@ -99,6 +99,48 @@ export class MusicResolver {
     return undefined;
   }
 
+  // Normalizes title and splits artist strings if not already done
+  private normalizeMetadata(metadata: TrackMetadata): TrackMetadata {
+    if (!metadata.cleanTitle || !metadata.extraArtists) {
+      const normalized = normalizeSongTitle(metadata.title);
+      metadata.cleanTitle = metadata.cleanTitle || normalized.cleanTitle;
+      metadata.extraArtists = metadata.extraArtists || normalized.extraArtists;
+    }
+    if (!metadata.artists && metadata.artist) {
+      metadata.artists = splitArtists(metadata.artist);
+    }
+    return metadata;
+  }
+
+  // Executes primary search and falls back to cleanTitle + primary artist if unverified
+  private async queryAdapterWithFallback(
+    adapter: MusicAdapter,
+    query: string,
+    metadata: TrackMetadata,
+    options?: ResolveOptions
+  ): Promise<ResolvedLink | null> {
+    try {
+      let result = await adapter.search(query, metadata, options);
+
+      // If primary search yielded no verified match, try fallback with raw title + primary artist
+      if ((!result || !result.isVerified) && metadata.cleanTitle && metadata.cleanTitle !== metadata.title) {
+        const fallbackQuery = cleanSearchQuery(
+          metadata.artist ? `${metadata.cleanTitle} ${metadata.artist}` : metadata.cleanTitle
+        );
+        if (fallbackQuery !== query) {
+          const fallbackResult = await adapter.search(fallbackQuery, metadata, options);
+          if (fallbackResult && (fallbackResult.score || 0) > (result?.score || 0)) {
+            result = fallbackResult;
+          }
+        }
+      }
+
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
   // Resolves a streaming service link across all (or selected) registered platforms.
   async resolve(
     url: string,
@@ -117,18 +159,8 @@ export class MusicResolver {
       preferredCountry: options?.preferredCountry || (parsedInfo as { storefront?: string }).storefront,
     };
 
-    const metadata = await parser.fetchMetadata(sourceId, url, resolveOpts);
-
-    // Ensure metadata has normalized fields populated
-    if (!metadata.cleanTitle || !metadata.extraArtists) {
-      const normalized = normalizeSongTitle(metadata.title);
-      metadata.cleanTitle = metadata.cleanTitle || normalized.cleanTitle;
-      metadata.extraArtists = metadata.extraArtists || normalized.extraArtists;
-    }
-    if (!metadata.artists && metadata.artist) {
-      metadata.artists = splitArtists(metadata.artist);
-    }
-
+    const rawMetadata = await parser.fetchMetadata(sourceId, url, resolveOpts);
+    const metadata = this.normalizeMetadata(rawMetadata);
     const query = parser.buildSearchQuery(metadata);
 
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
@@ -149,27 +181,7 @@ export class MusicResolver {
       .filter((platformId) => platformId !== parser.id && this.adapters.has(platformId))
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
-        try {
-          // Primary Search
-          let result = await adapter.search(query, metadata, resolveOpts);
-
-          // If primary search yielded no verified match, try fallback with raw title + primary artist
-          if ((!result || !result.isVerified) && metadata.cleanTitle && metadata.cleanTitle !== metadata.title) {
-            const fallbackQuery = cleanSearchQuery(
-              metadata.artist ? `${metadata.cleanTitle} ${metadata.artist}` : metadata.cleanTitle
-            );
-            if (fallbackQuery !== query) {
-              const fallbackResult = await adapter.search(fallbackQuery, metadata, resolveOpts);
-              if (fallbackResult && (fallbackResult.score || 0) > (result?.score || 0)) {
-                result = fallbackResult;
-              }
-            }
-          }
-
-          links[platformId] = result;
-        } catch {
-          links[platformId] = null;
-        }
+        links[platformId] = await this.queryAdapterWithFallback(adapter, query, metadata, resolveOpts);
       });
 
     await Promise.all(adapterPromises);
@@ -191,16 +203,7 @@ export class MusicResolver {
     targetPlatforms?: string[],
     options?: ResolveOptions
   ): Promise<Record<string, ResolvedLink | null>> {
-    // Ensure metadata has normalized fields populated
-    if (!metadata.cleanTitle || !metadata.extraArtists) {
-      const normalized = normalizeSongTitle(metadata.title);
-      metadata.cleanTitle = metadata.cleanTitle || normalized.cleanTitle;
-      metadata.extraArtists = metadata.extraArtists || normalized.extraArtists;
-    }
-    if (!metadata.artists && metadata.artist) {
-      metadata.artists = splitArtists(metadata.artist);
-    }
-
+    const normalizedMeta = this.normalizeMetadata(metadata);
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
     const links: Record<string, ResolvedLink | null> = {};
 
@@ -208,26 +211,7 @@ export class MusicResolver {
       .filter((platformId) => this.adapters.has(platformId))
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
-        try {
-          let result = await adapter.search(query, metadata, options);
-
-          // Fallback if not verified
-          if ((!result || !result.isVerified) && metadata.cleanTitle && metadata.cleanTitle !== metadata.title) {
-            const fallbackQuery = cleanSearchQuery(
-              metadata.artist ? `${metadata.cleanTitle} ${metadata.artist}` : metadata.cleanTitle
-            );
-            if (fallbackQuery !== query) {
-              const fallbackResult = await adapter.search(fallbackQuery, metadata, options);
-              if (fallbackResult && (fallbackResult.score || 0) > (result?.score || 0)) {
-                result = fallbackResult;
-              }
-            }
-          }
-
-          links[platformId] = result;
-        } catch {
-          links[platformId] = null;
-        }
+        links[platformId] = await this.queryAdapterWithFallback(adapter, query, normalizedMeta, options);
       });
 
     await Promise.all(adapterPromises);
