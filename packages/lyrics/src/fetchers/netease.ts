@@ -1,5 +1,13 @@
 import { weapiEncrypt } from '@repo/music-resolver';
 
+export interface NeteaseLyricsQueryParams {
+  neteaseId?: string;
+  title?: string;
+  artist?: string;
+  artists?: string[];
+  durationMs?: number;
+}
+
 export interface NeteaseLyricsResponse {
   code: number;
   yrc?: { lyric?: string; version?: number };
@@ -8,11 +16,84 @@ export interface NeteaseLyricsResponse {
   romalrc?: { lyric?: string; version?: number };
 }
 
+async function searchNeteaseSongId(
+  title: string,
+  artist?: string,
+  options?: { timeout?: number }
+): Promise<string | null> {
+  try {
+    const keyword = artist ? `${title} ${artist}` : title;
+    const payload = {
+      s: keyword,
+      type: 1, // Song
+      limit: 5,
+      offset: 0,
+      total: true,
+      csrf_token: '',
+    };
+
+    const encrypted = weapiEncrypt(payload);
+    const body = new URLSearchParams({
+      params: encrypted.params,
+      encSecKey: encrypted.encSecKey,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options?.timeout ?? 8000);
+
+    const res = await fetch('https://music.163.com/weapi/cloudsearch/pc', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Referer: 'https://music.163.com',
+        Cookie:
+          'os=pc; osver=Microsoft-Windows-10-Professional-build-19045-64bit; appver=3.1.17.204416; channel=netease;',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      },
+      body,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      code: number;
+      result?: { songs?: Array<{ id: number }> };
+    };
+
+    const firstSong = json.result?.songs?.[0];
+    if (!firstSong) return null;
+
+    return String(firstSong.id);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchNeteaseLyrics(
-  id: string,
+  idOrParams: string | NeteaseLyricsQueryParams,
   options?: { timeout?: number }
 ): Promise<NeteaseLyricsResponse | null> {
   try {
+    let id: string | undefined;
+
+    if (typeof idOrParams === 'string') {
+      id = idOrParams.trim();
+    } else {
+      id = idOrParams.neteaseId?.trim();
+      if (!id && idOrParams.title) {
+        const artist = idOrParams.artist || idOrParams.artists?.[0];
+        const foundId = await searchNeteaseSongId(idOrParams.title, artist, options);
+        if (foundId) {
+          id = foundId;
+        }
+      }
+    }
+
+    if (!id) return null;
+
     const payload = {
       id: String(id),
       cp: false,

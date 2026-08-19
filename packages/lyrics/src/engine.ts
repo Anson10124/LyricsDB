@@ -29,15 +29,18 @@ export interface ResolvedLyricsResult {
 
 export class LyricsEngine {
   // Automatically resolves lyrics following priority order:
-  // 1. QQ Music (qq) - Word-by-Word (QRC) -> Line-by-Line (LRC)
-  // 2. NetEase Cloud Music (163) - Word-by-Word (YRC) -> Line-by-Line (LRC)
-  // 3. LRCLIB (lrc) - Line-by-Line (LRC) -> Plain text
+  // Tier 1: Word-by-Word (QQ Music QRC -> NetEase YRC)
+  // Tier 2: Line-by-Line (QQ Music LRC -> NetEase LRC -> LRCLIB Synced LRC)
+  // Tier 3: Plain text (LRCLIB Plain)
   async resolveLyrics(context: ResolveLyricsContext): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
 
-    // Priority 1: QQ Music (QRC Word-by-Word -> LRC Line-by-Line)
-    try {
-      if (context.qqMusicId || context.title) {
+    let qqLineCandidate: ResolvedLyricsResult | null = null;
+    let neteaseLineCandidate: ResolvedLyricsResult | null = null;
+
+    // Step 1: Try QQ Music for Word-by-Word (QRC), or stash Line-by-Line (LRC) candidate
+    if (context.qqMusicId || context.title) {
+      try {
         const qqData = await fetchQQMusicLyrics({
           qqMusicId: context.qqMusicId,
           title: context.title,
@@ -61,7 +64,7 @@ export class LyricsEngine {
         if (qqData?.lrc) {
           const parsed = parseLrc(qqData.lrc);
           if (parsed.length > 0) {
-            return {
+            qqLineCandidate = {
               lyricsType: 'line',
               lyrics: parsed,
               source: 'qq-lrc',
@@ -69,15 +72,22 @@ export class LyricsEngine {
             };
           }
         }
+      } catch {
+        // Fallthrough to NetEase
       }
-    } catch {
-      // Fallthrough to NetEase
     }
 
-    // Priority 2: NetEase Cloud Music / 163 (YRC Word-by-Word -> LRC Line-by-Line)
-    if (context.neteaseId) {
+    // Step 2: Try NetEase Cloud Music / 163 for Word-by-Word (YRC), or stash Line-by-Line (LRC) candidate
+    if (context.neteaseId || context.title) {
       try {
-        const neteaseData = await fetchNeteaseLyrics(context.neteaseId);
+        const neteaseData = await fetchNeteaseLyrics({
+          neteaseId: context.neteaseId,
+          title: context.title,
+          artist,
+          artists: context.artists,
+          durationMs: context.durationMs,
+        });
+
         if (neteaseData?.yrc?.lyric) {
           const parsed = parseYrc(neteaseData.yrc.lyric);
           if (parsed.length > 0) {
@@ -90,11 +100,11 @@ export class LyricsEngine {
           }
         }
 
-        // NetEase standard LRC fallback
+        // Stash NetEase standard LRC candidate
         if (neteaseData?.lrc?.lyric) {
           const parsed = parseLrc(neteaseData.lrc.lyric);
           if (parsed.length > 0) {
-            return {
+            neteaseLineCandidate = {
               lyricsType: 'line',
               lyrics: parsed,
               source: 'netease-lrc',
@@ -103,11 +113,20 @@ export class LyricsEngine {
           }
         }
       } catch {
-        // Fallthrough to LRCLIB
+        // Fallthrough
       }
     }
 
-    // Priority 3: LRCLIB (Line-by-Line Synced & Plain)
+    // Step 3: If no Word-by-Word lyrics were found, fall back to Line-by-Line synced lyrics
+    if (qqLineCandidate) {
+      return qqLineCandidate;
+    }
+
+    if (neteaseLineCandidate) {
+      return neteaseLineCandidate;
+    }
+
+    // Step 4: Fallback to LRCLIB (Line-by-Line Synced & Plain)
     try {
       const lrclibData = await fetchLrclibLyrics({
         title: context.title,
