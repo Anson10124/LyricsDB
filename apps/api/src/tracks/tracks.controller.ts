@@ -63,7 +63,8 @@ export class TracksController {
   }
 
   // GET /api/tracks/:id/lyrics?format=ttml
-  @Get('tracks/:id/lyrics')
+  // GET /api/lyrics/:id?format=lrc
+  @Get(['tracks/:id/lyrics', 'lyrics/:id'])
   async getLyricsById(
     @Param('id') trackId: string,
     @Query('format') format?: string,
