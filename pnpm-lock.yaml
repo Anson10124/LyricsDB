@@ -32,6 +32,9 @@ importers:
       '@repo/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@repo/lyrics':
+        specifier: workspace:*
+        version: link:../../packages/lyrics
       '@repo/music-resolver':
         specifier: workspace:*
         version: link:../../packages/music-resolver
@@ -192,6 +195,40 @@ importers:
         specifier: ^8.50.0
         version: 8.50.0(eslint@9.39.1)(typescript@5.9.2)
 
+  packages/lyrics:
+    dependencies:
+      '@applemusic-like-lyrics/lyric':
+        specifier: ^1.0.2
+        version: 1.0.2
+      '@applemusic-like-lyrics/ttml':
+        specifier: ^1.0.1
+        version: 1.0.1
+      '@repo/music-resolver':
+        specifier: workspace:*
+        version: link:../music-resolver
+      '@repo/types':
+        specifier: workspace:*
+        version: link:../types
+      pako:
+        specifier: ^2.1.0
+        version: 2.2.0
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      '@types/pako':
+        specifier: ^2.0.3
+        version: 2.0.4
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
   packages/music-resolver:
     dependencies:
       cheerio:
@@ -215,6 +252,13 @@ importers:
         version: 5.9.2
 
   packages/types:
+    dependencies:
+      '@applemusic-like-lyrics/lyric':
+        specifier: ^1.0.2
+        version: 1.0.2
+      '@applemusic-like-lyrics/ttml':
+        specifier: ^1.0.1
+        version: 1.0.1
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -291,6 +335,12 @@ packages:
   '@angular-devkit/schematics@19.2.27':
     resolution: {integrity: sha512-/PZmyAlb2NGWPikRRuiWLdfHQd8Wrx6lX4HqvTcaDhlU43M3T0ud4PH2T3QDp7BzHYY92xtD8iPxX2asg67G1A==}
     engines: {node: ^18.19.1 || ^20.11.1 || >=22.0.0, npm: ^6.11.0 || ^7.5.6 || >=8.0.0, yarn: '>= 1.13.0'}
+
+  '@applemusic-like-lyrics/lyric@1.0.2':
+    resolution: {integrity: sha512-dMCruzU1BERPkUFFcoumsT6oQL79nE9s3jmmhyVt9sXHG+87v1ZWFaC6j8SeyZzSur08i1xsivnCsly0ydrb5g==}
+
+  '@applemusic-like-lyrics/ttml@1.0.1':
+    resolution: {integrity: sha512-xhLajMI9Jm+Etv99GbK5Fx8wqa5m9wnS3kCqOTBUy9imjsah2PrV1XyCc6LBssPhEFcQt2SrFNQlwT6GZwpY7A==}
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -1189,6 +1239,9 @@ packages:
 
   '@types/node@22.15.3':
     resolution: {integrity: sha512-lX7HFZeHf4QG/J7tBZqrCAXwz9J5RD56Y6MpP0eJkka8p+K0RY/yBTW7CYFJ4VGCclxqOLKmiGP5juQc6MKgcw==}
+
+  '@types/pako@2.0.4':
+    resolution: {integrity: sha512-VWDCbrLeVXJM9fihYodcLiIv0ku+AlOa/TQ1SvYOaBuyrSKgEcro95LJyIsJ4vSo6BXIxOKxiJAat04CmST9Fw==}
 
   '@types/qs@6.15.1':
     resolution: {integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==}
@@ -2647,6 +2700,9 @@ packages:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
 
+  pako@2.2.0:
+    resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
+
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -3389,6 +3445,13 @@ snapshots:
     transitivePeerDependencies:
       - chokidar
 
+  '@applemusic-like-lyrics/lyric@1.0.2':
+    dependencies:
+      '@applemusic-like-lyrics/ttml': 1.0.1
+      pako: 2.2.0
+
+  '@applemusic-like-lyrics/ttml@1.0.1': {}
+
   '@babel/code-frame@7.29.7':
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
@@ -4127,6 +4190,8 @@ snapshots:
   '@types/node@22.15.3':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/pako@2.0.4': {}
 
   '@types/qs@6.15.1': {}
 
@@ -5769,6 +5834,8 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
+
+  pako@2.2.0: {}
 
   parent-module@1.0.1:
     dependencies:

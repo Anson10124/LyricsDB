@@ -1,0 +1,34 @@
+{
+  "name": "@repo/lyrics",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@applemusic-like-lyrics/lyric": "^1.0.2",
+    "@applemusic-like-lyrics/ttml": "^1.0.1",
+    "@repo/music-resolver": "workspace:*",
+    "@repo/types": "workspace:*",
+    "pako": "^2.1.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "@types/pako": "^2.0.3",
+    "typescript": "5.9.2"
+  }
+}

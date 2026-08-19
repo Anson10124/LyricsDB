@@ -17,6 +17,7 @@
     "@nestjs/core": "^11.0.11",
     "@nestjs/platform-express": "^11.0.11",
     "@repo/database": "workspace:*",
+    "@repo/lyrics": "workspace:*",
     "@repo/music-resolver": "workspace:*",
     "@repo/types": "workspace:*",
     "dotenv": "^16.4.7",

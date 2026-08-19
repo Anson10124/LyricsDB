@@ -15,6 +15,7 @@ import {
   type NewTrack,
 } from '@repo/database';
 import { type ResolveResult } from '@repo/music-resolver';
+import { LyricsEngine } from '@repo/lyrics';
 import { DATABASE_CONNECTION } from '../database/database.constants';
 import { ResolverService } from '../resolver/resolver.service';
 
@@ -28,17 +29,16 @@ export interface GetOrSyncTrackOptions {
 export class TracksService {
   // In-flight request deduplication map to prevent thundering herd
   private inFlightRequests = new Map<string, Promise<Track>>();
+  private lyricsEngine = new LyricsEngine();
 
   constructor(
     @Inject(DATABASE_CONNECTION) private readonly db: DatabaseClient,
     private readonly resolverService: ResolverService
   ) {}
 
-  /**
-   * Universal Read-Through Endpoint:
-   * 1. Checks PostgreSQL database first (Instant ~2ms response).
-   * 2. If not found, resolves across all platforms, stores in PostgreSQL, and returns the unified track.
-   */
+  // Universal Read-Through Endpoint:
+  // 1. Checks PostgreSQL database first (Instant ~2ms response).
+  // 2. If not found, resolves across all platforms, stores in PostgreSQL, and returns the unified track.
   async getOrSyncTrack(options: GetOrSyncTrackOptions): Promise<Track> {
     const { platform, id, url } = options;
 
@@ -99,9 +99,7 @@ export class TracksService {
     return syncPromise;
   }
 
-  /**
-   * Find a track by internal database UUID
-   */
+  // Find a track by internal database UUID
   async findById(id: string): Promise<Track> {
     const result = await this.db
       .select()
@@ -116,9 +114,7 @@ export class TracksService {
     return result[0];
   }
 
-  /**
-   * Fast O(1) indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC)
-   */
+  // Fast O(1) indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC)
   async findByPlatformId(platform: string, id: string): Promise<Track | null> {
     const normalizedPlatform = platform.toLowerCase().replace(/[-_]/g, '');
 
@@ -153,9 +149,7 @@ export class TracksService {
     return result[0] ?? null;
   }
 
-  /**
-   * Search tracks by title or artist in database
-   */
+  // Search tracks by title or artist in database
   async search(query: string, limit = 20): Promise<Track[]> {
     if (!query || query.trim().length === 0) {
       return [];
@@ -175,9 +169,7 @@ export class TracksService {
       .limit(limit);
   }
 
-  /**
-   * Internal method: Resolves link and persists to PostgreSQL
-   */
+  // Internal method: Resolves link and persists to PostgreSQL
   private async executeSyncAndStore(url: string): Promise<Track> {
     const resolved: ResolveResult = await this.resolverService.resolveUrl(url);
     const meta = resolved.metadata;
@@ -218,6 +210,30 @@ export class TracksService {
     const validQqId =
       (qqLink?.isVerified || (qqLink?.score ?? 0) >= 0.8) ? qqLink?.id : undefined;
 
+    // Resolve lyrics if not already present
+    let lyricsType = existingTrack?.lyricsType ?? null;
+    let lyrics = existingTrack?.lyrics ?? null;
+
+    if (!lyrics) {
+      const resolvedLyrics = await this.lyricsEngine.resolveLyrics({
+        title: meta.title,
+        artist: meta.artist,
+        artists: meta.artists,
+        album: meta.album,
+        durationMs: meta.durationMs,
+        isrc: meta.isrc || existingTrack?.isrc || undefined,
+        neteaseId: validNeteaseId || existingTrack?.neteaseId || undefined,
+        qqMusicId: validQqId || existingTrack?.qqMusicId || undefined,
+        appleMusicId: validAppleId || existingTrack?.appleMusicId || undefined,
+        spotifyId: validSpotifyId || existingTrack?.spotifyId || undefined,
+      });
+
+      if (resolvedLyrics) {
+        lyricsType = resolvedLyrics.lyricsType;
+        lyrics = resolvedLyrics.lyrics;
+      }
+    }
+
     const newTrackData: NewTrack = {
       ...(existingTrack?.id ? { id: existingTrack.id } : {}),
       title: meta.title,
@@ -231,8 +247,8 @@ export class TracksService {
       neteaseId: validNeteaseId || existingTrack?.neteaseId,
       appleMusicId: validAppleId || existingTrack?.appleMusicId,
       qqMusicId: validQqId || existingTrack?.qqMusicId,
-      lyricsType: existingTrack?.lyricsType ?? null,
-      lyrics: existingTrack?.lyrics ?? null,
+      lyricsType,
+      lyrics,
       isVerified: existingTrack?.isVerified ?? false,
     };
 
