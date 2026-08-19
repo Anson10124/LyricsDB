@@ -32,15 +32,15 @@ export interface ResolvedLyricsResult {
 
 export class LyricsEngine {
   // Automatically resolves lyrics following priority order:
-  // Tier 1: Word-by-Word (QQ Music QRC -> NetEase YRC -> Deezer Word-by-Word)
-  // Tier 2: Line-by-Line (QQ Music LRC -> NetEase LRC -> Deezer Synced LRC -> LRCLIB Synced LRC)
+  // Tier 1: Word-by-Word (QQ Music QRC -> Deezer Word-by-Word -> NetEase YRC)
+  // Tier 2: Line-by-Line (QQ Music LRC -> Deezer Synced LRC -> NetEase LRC -> LRCLIB Synced LRC)
   // Tier 3: Plain text (Deezer Plain -> LRCLIB Plain)
   async resolveLyrics(context: ResolveLyricsContext): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
 
     let qqLineCandidate: ResolvedLyricsResult | null = null;
-    let neteaseLineCandidate: ResolvedLyricsResult | null = null;
     let deezerLineCandidate: ResolvedLyricsResult | null = null;
+    let neteaseLineCandidate: ResolvedLyricsResult | null = null;
     let deezerPlainCandidate: ResolvedLyricsResult | null = null;
 
     // Step 1: Try QQ Music for Word-by-Word (QRC), or stash Line-by-Line (LRC) candidate
@@ -74,47 +74,11 @@ export class LyricsEngine {
           }
         }
       } catch {
-        // Fallthrough to NetEase
-      }
-    }
-
-    // Step 2: Try NetEase Cloud Music / 163 for Word-by-Word (YRC), or stash Line-by-Line (LRC) candidate
-    if (context.neteaseId) {
-      try {
-        const neteaseData = await fetchNeteaseLyrics({
-          neteaseId: context.neteaseId,
-        });
-
-        if (neteaseData?.yrc?.lyric) {
-          const parsed = parseYrc(neteaseData.yrc.lyric);
-          if (parsed.length > 0) {
-            return {
-              lyricsType: 'word',
-              lyrics: parsed,
-              source: 'netease-yrc',
-              provider: 'netease',
-            };
-          }
-        }
-
-        // Stash NetEase standard LRC candidate
-        if (neteaseData?.lrc?.lyric) {
-          const parsed = parseLrc(neteaseData.lrc.lyric);
-          if (parsed.length > 0) {
-            neteaseLineCandidate = {
-              lyricsType: 'line',
-              lyrics: parsed,
-              source: 'netease-lrc',
-              provider: 'netease',
-            };
-          }
-        }
-      } catch {
         // Fallthrough to Deezer
       }
     }
 
-    // Step 3: Try Deezer for Word-by-Word, or stash Line-by-Line / Plain text candidates
+    // Step 2: Try Deezer for Word-by-Word, or stash Line-by-Line / Plain text candidates
     if (context.deezerId) {
       try {
         const deezerData = await fetchDeezerLyrics({
@@ -160,6 +124,42 @@ export class LyricsEngine {
           };
         }
       } catch {
+        // Fallthrough to NetEase
+      }
+    }
+
+    // Step 3: Try NetEase Cloud Music for Word-by-Word (YRC), or stash Line-by-Line (LRC) candidate
+    if (context.neteaseId) {
+      try {
+        const neteaseData = await fetchNeteaseLyrics({
+          neteaseId: context.neteaseId,
+        });
+
+        if (neteaseData?.yrc?.lyric) {
+          const parsed = parseYrc(neteaseData.yrc.lyric);
+          if (parsed.length > 0) {
+            return {
+              lyricsType: 'word',
+              lyrics: parsed,
+              source: 'netease-yrc',
+              provider: 'netease',
+            };
+          }
+        }
+
+        // Stash NetEase standard LRC candidate
+        if (neteaseData?.lrc?.lyric) {
+          const parsed = parseLrc(neteaseData.lrc.lyric);
+          if (parsed.length > 0) {
+            neteaseLineCandidate = {
+              lyricsType: 'line',
+              lyrics: parsed,
+              source: 'netease-lrc',
+              provider: 'netease',
+            };
+          }
+        }
+      } catch {
         // Fallthrough
       }
     }
@@ -169,12 +169,12 @@ export class LyricsEngine {
       return qqLineCandidate;
     }
 
-    if (neteaseLineCandidate) {
-      return neteaseLineCandidate;
-    }
-
     if (deezerLineCandidate) {
       return deezerLineCandidate;
+    }
+
+    if (neteaseLineCandidate) {
+      return neteaseLineCandidate;
     }
 
     // Step 5: Fallback to LRCLIB (Line-by-Line Synced & Plain)
