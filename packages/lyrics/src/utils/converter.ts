@@ -1,5 +1,19 @@
-import type { LyricLine } from '@applemusic-like-lyrics/lyric';
+import {
+  stringifyAss,
+  stringifyEslrc,
+  stringifyLqe,
+  stringifyLrc,
+  stringifyLrcA2,
+  stringifyLyl,
+  stringifyLys,
+  stringifyQrc,
+  stringifyYrc,
+  type LyricLine,
+  type LyricWord,
+} from '@applemusic-like-lyrics/lyric';
+import { TTMLGenerator } from '@applemusic-like-lyrics/ttml';
 import type { CompactLyricLine, CompactLyricWord, SyncedLyricsPayload, VocalType } from '@repo/types';
+import { DOMImplementation, XMLSerializer } from '@xmldom/xmldom';
 
 // Converts AMLL LyricLine array to our compact line-grouped format:
 // [
@@ -49,4 +63,153 @@ export function convertAmllLinesToCompact(rawLines: LyricLine[]): SyncedLyricsPa
   }
 
   return lines;
+}
+
+// Converts our compact tuple payload back to AMLL LyricLine array
+export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLine[] {
+  if (!payload || !Array.isArray(payload)) {
+    return [];
+  }
+
+  const amllLines: LyricLine[] = [];
+
+  for (const line of payload) {
+    if (!Array.isArray(line) || line.length === 0) continue;
+
+    const firstWord = line[0];
+    if (!firstWord) continue;
+
+    const vocalType = firstWord[0];
+    const isBG = vocalType === 2 || vocalType === 4;
+    const isDuet = vocalType === 3 || vocalType === 4;
+
+    const words: LyricWord[] = line.map((w: CompactLyricWord) => {
+      const startTime = w[1];
+      const endTime = w[1] + w[2];
+      const word = w[3];
+      return {
+        startTime,
+        endTime,
+        word,
+      };
+    });
+
+    const lineStartTime = words[0]?.startTime ?? 0;
+    const lineEndTime = words[words.length - 1]?.endTime ?? lineStartTime;
+
+    amllLines.push({
+      words,
+      startTime: lineStartTime,
+      endTime: lineEndTime,
+      translatedLyric: '',
+      romanLyric: '',
+      isBG,
+      isDuet,
+    });
+  }
+
+  return amllLines;
+}
+
+export type SupportedLyricFormat =
+  | 'ttml'
+  | 'lrc'
+  | 'lrca2'
+  | 'yrc'
+  | 'qrc'
+  | 'eslrc'
+  | 'ass'
+  | 'lyl'
+  | 'lys'
+  | 'lqe'
+  | 'json';
+
+export function formatLyricsPayload(
+  lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null | undefined,
+  format: string = 'json'
+): { content: string | SyncedLyricsPayload | Record<string, unknown>; contentType: string } {
+  const normFormat = format.toLowerCase().trim().replace(/^\./, '') as SupportedLyricFormat;
+
+  if (!lyrics) {
+    return { content: '', contentType: 'text/plain' };
+  }
+
+  // If plain text string
+  if (typeof lyrics === 'string') {
+    if (normFormat === 'json') {
+      return { content: { plain: lyrics }, contentType: 'application/json' };
+    }
+    return { content: lyrics, contentType: 'text/plain; charset=utf-8' };
+  }
+
+  // If not structured array, fallback
+  if (!Array.isArray(lyrics)) {
+    if (normFormat === 'json') {
+      return { content: lyrics, contentType: 'application/json' };
+    }
+    return { content: JSON.stringify(lyrics), contentType: 'application/json' };
+  }
+
+  if (normFormat === 'json') {
+    return { content: lyrics, contentType: 'application/json' };
+  }
+
+  const amllLines = convertCompactToAmllLines(lyrics as SyncedLyricsPayload);
+
+  let formatted = '';
+  let contentType = 'text/plain; charset=utf-8';
+
+  switch (normFormat) {
+    case 'ttml':
+      {
+        const generator = new TTMLGenerator({
+          domImplementation: new DOMImplementation(),
+          xmlSerializer: new XMLSerializer(),
+        });
+        const ttmlLines = amllLines.map((line) => ({
+          ...line,
+          text: line.words.map((w) => w.word).join(''),
+          words: line.words.map((w) => ({
+            text: w.word,
+            startTime: w.startTime,
+            endTime: w.endTime,
+          })),
+        }));
+        formatted = generator.generate({ lines: ttmlLines as any, metadata: {} });
+        contentType = 'application/xml; charset=utf-8';
+      }
+      break;
+    case 'lrc':
+      formatted = stringifyLrc(amllLines);
+      break;
+    case 'lrca2':
+      formatted = stringifyLrcA2(amllLines);
+      break;
+    case 'yrc':
+      formatted = stringifyYrc(amllLines);
+      break;
+    case 'qrc':
+      formatted = stringifyQrc(amllLines);
+      break;
+    case 'eslrc':
+      formatted = stringifyEslrc(amllLines);
+      break;
+    case 'ass':
+      formatted = stringifyAss(amllLines);
+      break;
+    case 'lyl':
+      formatted = stringifyLyl(amllLines);
+      break;
+    case 'lys':
+      formatted = stringifyLys(amllLines);
+      break;
+    case 'lqe':
+      formatted = stringifyLqe(amllLines);
+      break;
+    default:
+      formatted = stringifyLrc(amllLines);
+      break;
+  }
+
+  return { content: formatted, contentType };
 }

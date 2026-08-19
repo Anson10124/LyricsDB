@@ -3,6 +3,7 @@ import { fetchLrclibLyrics } from './fetchers/lrclib.js';
 import { fetchNeteaseLyrics } from './fetchers/netease.js';
 import { parseLrc } from './parsers/lrc.js';
 import { parseYrc } from './parsers/yrc.js';
+import { formatLyricsPayload } from './utils/converter.js';
 
 export interface ResolveLyricsContext {
   title: string;
@@ -100,6 +101,10 @@ export class LyricsEngine {
     }
 
     return null;
+  }
+
+  formatLyrics(lyrics: any, format: string) {
+    return formatLyricsPayload(lyrics, format);
   }
 }
 

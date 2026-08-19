@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { TracksService } from './tracks.service';
 
 class TrackQueryDto {
@@ -7,44 +8,83 @@ class TrackQueryDto {
   url?: string;
 }
 
-@Controller('api/tracks')
+@Controller('api')
 export class TracksController {
   constructor(private readonly tracksService: TracksService) {}
 
-  // Primary Unified Endpoint (Read-Through Cache):
-  // GET /api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT
-  // GET /api/tracks?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
-  //
-  // Flow:
-  // 1. Checks PostgreSQL database (Instant ~2ms if already indexed).
-  // 2. If missing, resolves across all streaming services, saves to PostgreSQL, and returns unified track.
-  @Get()
+  // GET /api/tracks
+  @Get('tracks')
   async getTrack(
     @Query('platform') platform?: string,
     @Query('id') id?: string,
     @Query('url') url?: string
   ) {
-    return this.tracksService.getOrSyncTrack({ platform, id, url });
+    const track = await this.tracksService.getOrSyncTrack({ platform, id, url });
+    return this.tracksService.sanitizeTrack(track);
   }
 
   // POST /api/tracks
-  // JSON Body alternative: { "platform": "spotify", "id": "..." } or { "url": "..." }
-  @Post()
+  @Post('tracks')
   async postTrack(@Body() dto: TrackQueryDto) {
-    return this.tracksService.getOrSyncTrack(dto);
+    const track = await this.tracksService.getOrSyncTrack(dto);
+    return this.tracksService.sanitizeTrack(track);
   }
 
   // GET /api/tracks/search?q=Rick+Astley
-  // Search already indexed tracks in the database by title/artist
-  @Get('search')
+  @Get('tracks/search')
   async search(@Query('q') q: string, @Query('limit') limit?: string) {
     return this.tracksService.search(q, limit ? parseInt(limit, 10) : 20);
   }
 
+  // GET /api/lyrics?platform=spotify&id=...&format=ttml
+  // GET /api/lyrics?trackId=...&format=ttml
+  @Get('lyrics')
+  async getLyrics(
+    @Query('trackId') trackId?: string,
+    @Query('platform') platform?: string,
+    @Query('id') id?: string,
+    @Query('url') url?: string,
+    @Query('format') format?: string,
+    @Res() res?: Response
+  ) {
+    const result = await this.tracksService.getLyrics({
+      trackId,
+      platform,
+      id,
+      url,
+      format,
+    });
+
+    if (res) {
+      res.setHeader('Content-Type', result.contentType);
+      return res.send(result.content);
+    }
+    return result.content;
+  }
+
+  // GET /api/tracks/:id/lyrics?format=ttml
+  @Get('tracks/:id/lyrics')
+  async getLyricsById(
+    @Param('id') trackId: string,
+    @Query('format') format?: string,
+    @Res() res?: Response
+  ) {
+    const result = await this.tracksService.getLyrics({
+      trackId,
+      format,
+    });
+
+    if (res) {
+      res.setHeader('Content-Type', result.contentType);
+      return res.send(result.content);
+    }
+    return result.content;
+  }
+
   // GET /api/tracks/:id
-  // Lookup by internal database UUID
-  @Get(':id')
+  @Get('tracks/:id')
   async getById(@Param('id') id: string) {
-    return this.tracksService.findById(id);
+    const track = await this.tracksService.findById(id);
+    return this.tracksService.sanitizeTrack(track);
   }
 }

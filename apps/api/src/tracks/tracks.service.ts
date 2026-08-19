@@ -149,14 +149,42 @@ export class TracksService {
     return result[0] ?? null;
   }
 
+  // Strip raw lyrics from track object for API responses
+  public sanitizeTrack<T extends Track>(track: T): Omit<T, 'lyrics'> & { hasLyrics: boolean } {
+    const { lyrics, ...rest } = track;
+    return {
+      ...rest,
+      hasLyrics: Boolean(lyrics),
+    };
+  }
+
+  // Get formatted lyrics for a track
+  async getLyrics(
+    options: GetOrSyncTrackOptions & { trackId?: string; format?: string }
+  ): Promise<{ content: any; contentType: string }> {
+    let track: Track | null = null;
+
+    if (options.trackId) {
+      track = await this.findById(options.trackId);
+    } else {
+      track = await this.getOrSyncTrack(options);
+    }
+
+    if (!track || !track.lyrics) {
+      throw new NotFoundException('Lyrics not available for this track.');
+    }
+
+    return this.lyricsEngine.formatLyrics(track.lyrics, options.format || 'json');
+  }
+
   // Search tracks by title or artist in database
-  async search(query: string, limit = 20): Promise<Track[]> {
+  async search(query: string, limit = 20): Promise<Array<Omit<Track, 'lyrics'> & { hasLyrics: boolean }>> {
     if (!query || query.trim().length === 0) {
       return [];
     }
 
     const searchTerm = `%${query.trim()}%`;
-    return this.db
+    const results = await this.db
       .select()
       .from(tracks)
       .where(
@@ -167,6 +195,8 @@ export class TracksService {
         )
       )
       .limit(limit);
+
+    return results.map((t) => this.sanitizeTrack(t));
   }
 
   // Internal method: Resolves link and persists to PostgreSQL
