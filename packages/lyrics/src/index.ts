@@ -7,4 +7,8 @@ export * from './fetchers/netease.js';
 export * from './fetchers/lrclib.js';
 export * from './utils/qrc-decoder.js';
 export * from './utils/converter.js';
+export * from './utils/info-lines.js';
+export * from './utils/explicit.js';
+export * from './utils/syllable-sanitizer.js';
+export * from './utils/capitalization.js';
 export * from './engine.js';

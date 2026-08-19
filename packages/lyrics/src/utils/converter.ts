@@ -15,12 +15,32 @@ import { TTMLGenerator } from '@applemusic-like-lyrics/ttml';
 import type { CompactLyricLine, CompactLyricWord, SyncedLyricsPayload, VocalType } from '@repo/types';
 import { DOMImplementation, XMLSerializer } from '@xmldom/xmldom';
 
+import { stripInfoLines } from './info-lines.js';
+import { fixExplicitLyrics } from './explicit.js';
+import { standardizeSyllables } from './syllable-sanitizer.js';
+import { normalizeCapitalization } from './capitalization.js';
+
+export function optimizeLyricsPayload(
+  payload: SyncedLyricsPayload,
+  metadata?: { title?: string; artist?: string }
+): SyncedLyricsPayload {
+  let result = payload;
+  result = stripInfoLines(result, metadata);
+  result = fixExplicitLyrics(result);
+  result = standardizeSyllables(result);
+  result = normalizeCapitalization(result);
+  return result;
+}
+
 // Converts AMLL LyricLine array to our compact line-grouped format:
 // [
 //   [ [1, startMs, lengthMs, "word "], ... ], // Line 1
 //   [ [1, startMs, lengthMs, "word "], ... ]  // Line 2
 // ]
-export function convertAmllLinesToCompact(rawLines: LyricLine[]): SyncedLyricsPayload {
+export function convertAmllLinesToCompact(
+  rawLines: LyricLine[],
+  metadata?: { title?: string; artist?: string }
+): SyncedLyricsPayload {
   if (!rawLines || !Array.isArray(rawLines)) {
     return [];
   }
@@ -62,7 +82,7 @@ export function convertAmllLinesToCompact(rawLines: LyricLine[]): SyncedLyricsPa
     }
   }
 
-  return lines;
+  return optimizeLyricsPayload(lines, metadata);
 }
 
 // Converts our compact tuple payload back to AMLL LyricLine array

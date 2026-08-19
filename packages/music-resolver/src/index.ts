@@ -15,5 +15,6 @@ export * from './utils/http.js';
 export * from './utils/query.js';
 export * from './utils/scraper.js';
 export * from './utils/string-similarity.js';
+export * from './utils/compare-helper.js';
 export * from './utils/totp.js';
 export * from './utils/netease-crypto.js';
