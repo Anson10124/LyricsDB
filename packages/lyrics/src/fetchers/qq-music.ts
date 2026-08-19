@@ -15,26 +15,33 @@ export interface QQMusicLyricsResponse {
   tlyric?: string;
 }
 
-
-async function searchQQMusicSongId(
-  title: string,
-  artist?: string,
+export async function resolveQQNumericSongId(
+  qqMusicId: string,
   options?: { timeout?: number }
 ): Promise<string | null> {
+  const trimmed = qqMusicId.trim();
+  if (!trimmed) return null;
+
+  // Already numeric song ID
+  if (/^\d+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // If alphanumeric songmid (e.g. 0039MnYb0qxYtV), resolve numeric ID directly by ID
   try {
-    const params = new URLSearchParams({
-      SONGNAME: title,
-      SINGERNAME: artist || '',
-      TYPE: '2',
-      RANGE_MIN: '1',
-      RANGE_MAX: '10',
-    });
+    const payload = {
+      songinfo: {
+        method: 'get_song_detail_yqq',
+        param: { song_mid: trimmed },
+        module: 'music.pf_song_detail_svr',
+      },
+    };
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), options?.timeout ?? 8000);
 
     const res = await fetch(
-      `https://c.y.qq.com/lyric/fcgi-bin/fcg_search_pc_lrc.fcg?${params.toString()}`,
+      `https://u.y.qq.com/cgi-bin/musicu.fcg?data=${encodeURIComponent(JSON.stringify(payload))}`,
       {
         headers: {
           Referer: 'https://y.qq.com',
@@ -47,29 +54,37 @@ async function searchQQMusicSongId(
 
     clearTimeout(timeoutId);
 
-    if (!res.ok) return null;
-    const text = await res.text();
+    if (res.ok) {
+      const json = (await res.json()) as {
+        songinfo?: {
+          data?: {
+            track_info?: {
+              id?: number;
+            };
+          };
+        };
+      };
 
-    const idMatch = text.match(/<songinfo\s+id="(\d+)"/i);
-    if (idMatch && idMatch[1]) {
-      return idMatch[1];
+      const id = json.songinfo?.data?.track_info?.id;
+      if (id) {
+        return String(id);
+      }
     }
 
-    // Fallback to client_search_cp if pc_lrc didn't find results
-    const searchUrl = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p=1&n=5&w=${encodeURIComponent(
-      artist ? `${title} ${artist}` : title
-    )}&format=json&t=0`;
+    // Direct single-song ID lookup fallback
+    const singleRes = await fetch(
+      `https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid=${encodeURIComponent(trimmed)}&format=json`,
+      {
+        headers: { Referer: 'https://y.qq.com' },
+      }
+    );
 
-    const searchRes = await fetch(searchUrl, {
-      headers: { Referer: 'https://y.qq.com' },
-    });
-    if (searchRes.ok) {
-      const searchRaw = await searchRes.text();
-      const cleanJson = searchRaw.replace(/^callback\(|\)$/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      const songList = parsed?.data?.song?.list;
-      if (Array.isArray(songList) && songList.length > 0 && songList[0]?.songid) {
-        return String(songList[0].songid);
+    if (singleRes.ok) {
+      const singleJson = (await singleRes.json()) as {
+        data?: Array<{ id?: number }>;
+      };
+      if (singleJson.data?.[0]?.id) {
+        return String(singleJson.data[0].id);
       }
     }
 
@@ -80,20 +95,15 @@ async function searchQQMusicSongId(
 }
 
 export async function fetchQQMusicLyrics(
-  params: QQMusicLyricsQueryParams,
+  params: QQMusicLyricsQueryParams | string,
   options?: { timeout?: number }
 ): Promise<QQMusicLyricsResponse | null> {
   try {
-    let numericSongId = params.qqMusicId?.trim();
+    const rawId = typeof params === 'string' ? params : params.qqMusicId;
+    if (!rawId?.trim()) return null;
 
-    // If ID is missing or non-numeric (e.g. songmid string), search for the numeric song ID
-    if (!numericSongId || !/^\d+$/.test(numericSongId)) {
-      if (!params.title) return null;
-      const artist = params.artist || params.artists?.[0];
-      const foundId = await searchQQMusicSongId(params.title, artist, options);
-      if (!foundId) return null;
-      numericSongId = foundId;
-    }
+    const numericSongId = await resolveQQNumericSongId(rawId, options);
+    if (!numericSongId) return null;
 
     const downloadParams = new URLSearchParams({
       version: '15',

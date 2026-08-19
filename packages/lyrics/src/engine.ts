@@ -39,14 +39,10 @@ export class LyricsEngine {
     let neteaseLineCandidate: ResolvedLyricsResult | null = null;
 
     // Step 1: Try QQ Music for Word-by-Word (QRC), or stash Line-by-Line (LRC) candidate
-    if (context.qqMusicId || context.title) {
+    if (context.qqMusicId) {
       try {
         const qqData = await fetchQQMusicLyrics({
           qqMusicId: context.qqMusicId,
-          title: context.title,
-          artist,
-          artists: context.artists,
-          durationMs: context.durationMs,
         });
 
         if (qqData?.qrc) {
@@ -78,14 +74,10 @@ export class LyricsEngine {
     }
 
     // Step 2: Try NetEase Cloud Music / 163 for Word-by-Word (YRC), or stash Line-by-Line (LRC) candidate
-    if (context.neteaseId || context.title) {
+    if (context.neteaseId) {
       try {
         const neteaseData = await fetchNeteaseLyrics({
           neteaseId: context.neteaseId,
-          title: context.title,
-          artist,
-          artists: context.artists,
-          durationMs: context.durationMs,
         });
 
         if (neteaseData?.yrc?.lyric) {
@@ -127,37 +119,39 @@ export class LyricsEngine {
     }
 
     // Step 4: Fallback to LRCLIB (Line-by-Line Synced & Plain)
-    try {
-      const lrclibData = await fetchLrclibLyrics({
-        title: context.title,
-        artist,
-        album: context.album,
-        durationMs: context.durationMs,
-        isrc: context.isrc,
-      });
+    if (context.title) {
+      try {
+        const lrclibData = await fetchLrclibLyrics({
+          title: context.title,
+          artist,
+          album: context.album,
+          durationMs: context.durationMs,
+          isrc: context.isrc,
+        });
 
-      if (lrclibData?.syncedLyrics) {
-        const parsed = parseLrc(lrclibData.syncedLyrics);
-        if (parsed.length > 0) {
+        if (lrclibData?.syncedLyrics) {
+          const parsed = parseLrc(lrclibData.syncedLyrics);
+          if (parsed.length > 0) {
+            return {
+              lyricsType: 'line',
+              lyrics: parsed,
+              source: 'lrclib',
+              provider: 'lrclib',
+            };
+          }
+        }
+
+        if (lrclibData?.plainLyrics) {
           return {
-            lyricsType: 'line',
-            lyrics: parsed,
-            source: 'lrclib',
+            lyricsType: 'plain',
+            lyrics: lrclibData.plainLyrics,
+            source: 'lrclib-plain',
             provider: 'lrclib',
           };
         }
+      } catch {
+        // Fallthrough
       }
-
-      if (lrclibData?.plainLyrics) {
-        return {
-          lyricsType: 'plain',
-          lyrics: lrclibData.plainLyrics,
-          source: 'lrclib-plain',
-          provider: 'lrclib',
-        };
-      }
-    } catch {
-      // Fallthrough
     }
 
     return null;
