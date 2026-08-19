@@ -43,6 +43,7 @@ export interface TrackMetadata {
   artworkUrl?: string | null;
   lyricsType?: LyricsType | null;
   lyrics?: SyncedLyricsPayload | string | null;
+  lyricsProvider?: string | null;
   isVerified: boolean;
   createdAt: string;
   updatedAt: string;

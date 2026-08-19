@@ -1,0 +1,1 @@
+ALTER TABLE "tracks" ADD COLUMN "lyrics_provider" varchar(100);

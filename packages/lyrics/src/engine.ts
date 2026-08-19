@@ -21,6 +21,7 @@ export interface ResolvedLyricsResult {
   lyricsType: LyricsType;
   lyrics: SyncedLyricsPayload | string;
   source: string;
+  provider: string;
 }
 
 export class LyricsEngine {
@@ -42,6 +43,7 @@ export class LyricsEngine {
               lyricsType: 'word',
               lyrics: parsed,
               source: 'netease-yrc',
+              provider: 'netease',
             };
           }
         }
@@ -54,6 +56,7 @@ export class LyricsEngine {
               lyricsType: 'line',
               lyrics: parsed,
               source: 'netease-lrc',
+              provider: 'netease',
             };
           }
         }
@@ -79,6 +82,7 @@ export class LyricsEngine {
             lyricsType: 'line',
             lyrics: parsed,
             source: 'lrclib',
+            provider: 'lrclib',
           };
         }
       }
@@ -88,6 +92,7 @@ export class LyricsEngine {
           lyricsType: 'plain',
           lyrics: lrclibData.plainLyrics,
           source: 'lrclib-plain',
+          provider: 'lrclib',
         };
       }
     } catch {

@@ -213,6 +213,7 @@ export class TracksService {
     // Resolve lyrics if not already present
     let lyricsType = existingTrack?.lyricsType ?? null;
     let lyrics = existingTrack?.lyrics ?? null;
+    let lyricsProvider = existingTrack?.lyricsProvider ?? null;
 
     if (!lyrics) {
       const resolvedLyrics = await this.lyricsEngine.resolveLyrics({
@@ -231,6 +232,7 @@ export class TracksService {
       if (resolvedLyrics) {
         lyricsType = resolvedLyrics.lyricsType;
         lyrics = resolvedLyrics.lyrics;
+        lyricsProvider = resolvedLyrics.provider;
       }
     }
 
@@ -249,6 +251,7 @@ export class TracksService {
       qqMusicId: validQqId || existingTrack?.qqMusicId,
       lyricsType,
       lyrics,
+      lyricsProvider,
       isVerified: existingTrack?.isVerified ?? false,
     };
 

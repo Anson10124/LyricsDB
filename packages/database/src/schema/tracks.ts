@@ -34,11 +34,13 @@ export const tracks = pgTable(
     durationMs: integer('duration_ms').notNull(),
     artworkUrl: text('artwork_url'),
 
-    // Lyrics Content & Sync Type
+    // Lyrics Content & Sync Type & Provider
     // lyricsType: 'word' | 'line' | 'plain' | null
     // lyrics: JSONB structured payload or string (null if no lyrics)
+    // lyricsProvider: 'netease-yrc' | 'lrclib' | etc.
     lyricsType: varchar('lyrics_type', { length: 20 }).$type<LyricsType>(),
     lyrics: jsonb('lyrics').$type<SyncedLyricsPayload | string | Record<string, unknown>>(),
+    lyricsProvider: varchar('lyrics_provider', { length: 100 }),
 
     // Verification Flag (defaults to false for human review)
     isVerified: boolean('is_verified').default(false).notNull(),
