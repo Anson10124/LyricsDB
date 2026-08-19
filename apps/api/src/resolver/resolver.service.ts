@@ -20,7 +20,7 @@ export class ResolverService {
   }
 
   async resolveSample(): Promise<ResolveResult> {
-    // Sample track
+    // Sample track: "Never Gonna Give You Up"
     const sampleUrl = 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT';
     return this.resolveUrl(sampleUrl);
   }

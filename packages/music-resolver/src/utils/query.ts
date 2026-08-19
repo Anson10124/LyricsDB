@@ -1,7 +1,5 @@
-/**
- * Cleans a search query by removing problematic typographic characters
- * while preserving valid content (emojis, punctuation, etc.)
- */
+// Cleans a search query by removing problematic typographic characters
+// while preserving valid content (emojis, punctuation, etc.)
 export function cleanSearchQuery(query: string): string {
   return query
     // Remove special quotation marks (German „", French «», Asian 『』, etc.)

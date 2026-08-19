@@ -1,6 +1,8 @@
 import { DeezerAdapter } from './adapters/deezer.js';
+import { NeteaseAdapter } from './adapters/netease.js';
 import { SpotifyAdapter } from './adapters/spotify.js';
 import { DeezerParser } from './parsers/deezer.js';
+import { NeteaseParser } from './parsers/netease.js';
 import { SpotifyParser } from './parsers/spotify.js';
 import type {
   MusicAdapter,
@@ -20,15 +22,25 @@ export class MusicResolver {
     // Register built-in default parsers
     this.registerParser(new SpotifyParser());
     this.registerParser(new DeezerParser());
+    this.registerParser(new NeteaseParser());
 
     // Register built-in default adapters
-    this.registerAdapter(new SpotifyAdapter({
-      apiUrl: config?.spotify?.apiUrl,
-      baseUrl: config?.spotify?.baseUrl,
-    }));
-    this.registerAdapter(new DeezerAdapter({
-      apiUrl: config?.deezer?.apiUrl,
-    }));
+    this.registerAdapter(
+      new SpotifyAdapter({
+        apiUrl: config?.spotify?.apiUrl,
+        baseUrl: config?.spotify?.baseUrl,
+      })
+    );
+    this.registerAdapter(
+      new DeezerAdapter({
+        apiUrl: config?.deezer?.apiUrl,
+      })
+    );
+    this.registerAdapter(
+      new NeteaseAdapter({
+        apiUrl: config?.netease?.apiUrl,
+      })
+    );
   }
 
   // Register a custom parser (e.g. for a custom streaming endpoint)
@@ -49,6 +61,10 @@ export class MusicResolver {
 
   unregisterAdapter(id: string): boolean {
     return this.adapters.delete(id);
+  }
+
+  getAdapter(id: string): MusicAdapter | undefined {
+    return this.adapters.get(id);
   }
 
   getParserForUrl(url: string): MusicParser | undefined {
@@ -112,7 +128,7 @@ export class MusicResolver {
     };
   }
 
-  // Resolves a search query across all (or selected) registered platforms.
+  // Search across all platforms with a raw query and metadata object
   async searchAcross(
     query: string,
     metadata: TrackMetadata,

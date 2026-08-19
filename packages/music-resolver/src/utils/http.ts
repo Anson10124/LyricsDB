@@ -105,12 +105,21 @@ export class HttpClient {
           );
         }
 
+        const text = await response.text();
         const contentType = response.headers.get('content-type') ?? '';
-        if (contentType.includes('application/json')) {
-          return (await response.json()) as T;
+        if (
+          contentType.includes('application/json') ||
+          (text.startsWith('{') && text.endsWith('}')) ||
+          (text.startsWith('[') && text.endsWith(']'))
+        ) {
+          try {
+            return JSON.parse(text) as T;
+          } catch {
+            return text as unknown as T;
+          }
         }
 
-        return (await response.text()) as T;
+        return text as unknown as T;
       } catch (error) {
         clearTimeout(timeoutId);
         lastError = error;

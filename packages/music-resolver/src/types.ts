@@ -46,13 +46,13 @@ export interface ResolveOptions {
 }
 
 export interface MusicAdapter {
-  readonly id: string; // e.g. 'spotify', 'deezer', 'custom-service'
+  readonly id: string; // e.g. 'spotify', 'deezer', 'netease', 'custom-service'
   readonly name: string;
   search(query: string, metadata: TrackMetadata, options?: ResolveOptions): Promise<ResolvedLink | null>;
 }
 
 export interface MusicParser {
-  readonly id: string; // e.g. 'spotify', 'deezer', 'custom-service'
+  readonly id: string; // e.g. 'spotify', 'deezer', 'netease', 'custom-service'
   readonly name: string;
   match(url: string): boolean;
   parse(url: string): { id: string; type?: MetadataType };
@@ -66,6 +66,9 @@ export interface ResolverConfig {
     baseUrl?: string;
   };
   deezer?: {
+    apiUrl?: string;
+  };
+  netease?: {
     apiUrl?: string;
   };
 }

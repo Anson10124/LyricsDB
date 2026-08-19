@@ -11,7 +11,7 @@ export class AppService {
         health: 'GET /health',
         resolveQuery: 'GET /api/resolve?url={streaming_link}',
         resolveBody: 'POST /api/resolve (Body: { url: "..." })',
-        sample: 'GET /api/sample (Resolves sample Rick Astley track across Spotify and Deezer)',
+        sample: 'GET /api/sample (Resolves sample Rick Astley track across Spotify, Deezer, NetEase)',
       },
     };
   }
