@@ -15,6 +15,13 @@
       "when": 1787161109468,
       "tag": "0001_colorful_mentallo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787181560602,
+      "tag": "0002_calm_luke_cage",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,9 @@
 import type { LyricsType, SyncedLyricsPayload } from '@repo/types';
+import { fetchDeezerLyrics } from './fetchers/deezer.js';
 import { fetchLrclibLyrics } from './fetchers/lrclib.js';
 import { fetchNeteaseLyrics } from './fetchers/netease.js';
 import { fetchQQMusicLyrics } from './fetchers/qq-music.js';
+import { parseDeezerSyncedLines, parseDeezerWordLyrics } from './parsers/deezer.js';
 import { parseLrc } from './parsers/lrc.js';
 import { parseQrc } from './parsers/qrc.js';
 import { parseYrc } from './parsers/yrc.js';
@@ -14,6 +16,7 @@ export interface ResolveLyricsContext {
   album?: string;
   durationMs?: number;
   isrc?: string;
+  deezerId?: string;
   neteaseId?: string;
   qqMusicId?: string;
   appleMusicId?: string;
@@ -29,14 +32,16 @@ export interface ResolvedLyricsResult {
 
 export class LyricsEngine {
   // Automatically resolves lyrics following priority order:
-  // Tier 1: Word-by-Word (QQ Music QRC -> NetEase YRC)
-  // Tier 2: Line-by-Line (QQ Music LRC -> NetEase LRC -> LRCLIB Synced LRC)
-  // Tier 3: Plain text (LRCLIB Plain)
+  // Tier 1: Word-by-Word (QQ Music QRC -> NetEase YRC -> Deezer Word-by-Word)
+  // Tier 2: Line-by-Line (QQ Music LRC -> NetEase LRC -> Deezer Synced LRC -> LRCLIB Synced LRC)
+  // Tier 3: Plain text (Deezer Plain -> LRCLIB Plain)
   async resolveLyrics(context: ResolveLyricsContext): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
 
     let qqLineCandidate: ResolvedLyricsResult | null = null;
     let neteaseLineCandidate: ResolvedLyricsResult | null = null;
+    let deezerLineCandidate: ResolvedLyricsResult | null = null;
+    let deezerPlainCandidate: ResolvedLyricsResult | null = null;
 
     // Step 1: Try QQ Music for Word-by-Word (QRC), or stash Line-by-Line (LRC) candidate
     if (context.qqMusicId) {
@@ -105,11 +110,61 @@ export class LyricsEngine {
           }
         }
       } catch {
+        // Fallthrough to Deezer
+      }
+    }
+
+    // Step 3: Try Deezer for Word-by-Word, or stash Line-by-Line / Plain text candidates
+    if (context.deezerId) {
+      try {
+        const deezerData = await fetchDeezerLyrics({
+          deezerId: context.deezerId,
+        });
+
+        if (deezerData?.synchronizedWordByWordLines && deezerData.synchronizedWordByWordLines.length > 0) {
+          const parsed = parseDeezerWordLyrics(deezerData.synchronizedWordByWordLines, {
+            title: context.title,
+            artist,
+          });
+          if (parsed.length > 0) {
+            return {
+              lyricsType: 'word',
+              lyrics: parsed,
+              source: 'deezer-word',
+              provider: 'deezer',
+            };
+          }
+        }
+
+        if (deezerData?.synchronizedLines && deezerData.synchronizedLines.length > 0) {
+          const parsed = parseDeezerSyncedLines(deezerData.synchronizedLines, {
+            title: context.title,
+            artist,
+          });
+          if (parsed.length > 0) {
+            deezerLineCandidate = {
+              lyricsType: 'line',
+              lyrics: parsed,
+              source: 'deezer-synced',
+              provider: 'deezer',
+            };
+          }
+        }
+
+        if (deezerData?.text) {
+          deezerPlainCandidate = {
+            lyricsType: 'plain',
+            lyrics: deezerData.text,
+            source: 'deezer-plain',
+            provider: 'deezer',
+          };
+        }
+      } catch {
         // Fallthrough
       }
     }
 
-    // Step 3: If no Word-by-Word lyrics were found, fall back to Line-by-Line synced lyrics
+    // Step 4: If no Word-by-Word lyrics were found, fall back to Line-by-Line synced lyrics
     if (qqLineCandidate) {
       return qqLineCandidate;
     }
@@ -118,7 +173,11 @@ export class LyricsEngine {
       return neteaseLineCandidate;
     }
 
-    // Step 4: Fallback to LRCLIB (Line-by-Line Synced & Plain)
+    if (deezerLineCandidate) {
+      return deezerLineCandidate;
+    }
+
+    // Step 5: Fallback to LRCLIB (Line-by-Line Synced & Plain)
     if (context.title) {
       try {
         const lrclibData = await fetchLrclibLyrics({
@@ -152,6 +211,11 @@ export class LyricsEngine {
       } catch {
         // Fallthrough
       }
+    }
+
+    // Step 6: Fallback to Deezer Plain text if LRCLIB had nothing
+    if (deezerPlainCandidate) {
+      return deezerPlainCandidate;
     }
 
     return null;

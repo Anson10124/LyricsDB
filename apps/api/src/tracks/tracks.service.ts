@@ -246,6 +246,7 @@ export class TracksService {
         album: meta.album,
         durationMs: meta.durationMs,
         isrc: meta.isrc || existingTrack?.isrc || undefined,
+        deezerId: validDeezerId || existingTrack?.deezerId || undefined,
         neteaseId: validNeteaseId || existingTrack?.neteaseId || undefined,
         qqMusicId: validQqId || existingTrack?.qqMusicId || undefined,
         appleMusicId: validAppleId || existingTrack?.appleMusicId || undefined,
