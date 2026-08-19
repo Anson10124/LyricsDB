@@ -23,6 +23,8 @@ interface ITunesSearchResultItem {
   collectionViewUrl?: string;
   artistViewUrl?: string;
   artistLinkUrl?: string;
+  trackTimeMillis?: number;
+  isrc?: string;
 }
 
 interface ITunesSearchResponse {
@@ -60,27 +62,51 @@ export class AppleMusicAdapter implements MusicAdapter {
     options?: ResolveOptions
   ): Promise<ResolvedLink | null> {
     try {
+      const searchCountry = options?.preferredCountry || this.country;
       const entity = ITUNES_SEARCH_ENTITIES[metadata.type] || 'song';
-      const params = new URLSearchParams({
-        term: query,
-        media: 'music',
-        entity,
-        limit: '5',
-        country: this.country,
-      });
 
-      const url = `${this.apiUrl}?${params.toString()}`;
-      let response = await HttpClient.get<ITunesSearchResponse>(url, {
-        timeout: options?.timeout,
-        retries: options?.retries,
-      });
+      const executeSearch = async (term: string) => {
+        const params = new URLSearchParams({
+          term,
+          media: 'music',
+          entity,
+          limit: '15',
+          country: searchCountry,
+        });
 
-      if (typeof response === 'string') {
-        try {
-          response = JSON.parse((response as string).trim());
-        } catch {
-          // invalid json
+        const url = `${this.apiUrl}?${params.toString()}`;
+        let res = await HttpClient.get<ITunesSearchResponse>(url, {
+          timeout: options?.timeout,
+          retries: options?.retries,
+        });
+
+        if (typeof res === 'string') {
+          try {
+            res = JSON.parse((res as string).trim());
+          } catch {
+            // invalid json
+          }
         }
+        return res;
+      };
+
+      let response: ITunesSearchResponse | null = null;
+
+      // 1. Try ISRC lookup if available
+      if (metadata.type === 'song' && metadata.isrc) {
+        try {
+          const isrcRes = await executeSearch(metadata.isrc.trim());
+          if (isrcRes && isrcRes.results && isrcRes.results.length > 0) {
+            response = isrcRes;
+          }
+        } catch {
+          // Fallback to keyword search
+        }
+      }
+
+      // 2. Regular keyword search if ISRC was not found
+      if (!response || !response.results || response.results.length === 0) {
+        response = await executeSearch(query);
       }
 
       if (!response || !response.results || response.results.length === 0) {
@@ -98,6 +124,7 @@ export class AppleMusicAdapter implements MusicAdapter {
             candidates.push({
               title: itemTitle,
               artist: item.artistName,
+              album: item.collectionName,
               url: itemUrl,
               id: itemId,
             });
@@ -122,6 +149,9 @@ export class AppleMusicAdapter implements MusicAdapter {
             candidates.push({
               title: itemTitle,
               artist: item.artistName,
+              album: item.collectionName,
+              durationMs: item.trackTimeMillis,
+              isrc: item.isrc,
               url: itemUrl,
               id: itemId,
             });
@@ -131,7 +161,7 @@ export class AppleMusicAdapter implements MusicAdapter {
 
       if (candidates.length === 0) return null;
 
-      const { bestMatch } = findBestMatch(candidates, query, this.id);
+      const { bestMatch } = findBestMatch(candidates, metadata, this.id);
       return bestMatch;
     } catch {
       return null;

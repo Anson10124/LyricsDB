@@ -6,6 +6,8 @@ import { generateSpotifyTotp } from '../utils/totp.js';
 interface SpotifyTrackItem {
   uri: string;
   name: string;
+  duration?: { totalMilliseconds?: number };
+  albumOfTrack?: { name: string; uri?: string };
   artists?: { items: Array<{ profile: { name: string } }> };
 }
 
@@ -59,30 +61,52 @@ export class SpotifyAdapter implements MusicAdapter {
     try {
       const accessToken = await this.getAccessToken(options);
 
-      const variables = {
-        searchTerm: query,
-        offset: 0,
-        limit: 5,
-        numberOfTopResults: 5,
+      // Helper to execute GraphQL searchDesktop
+      const executeSearch = async (searchTerm: string) => {
+        const variables = {
+          searchTerm,
+          offset: 0,
+          limit: 15,
+          numberOfTopResults: 15,
+        };
+
+        const extensions = {
+          persistedQuery: { version: 1, sha256Hash: SEARCH_DESKTOP_HASH },
+        };
+
+        const url = new URL(`${this.apiUrl}/query`);
+        url.searchParams.set('operationName', 'searchDesktop');
+        url.searchParams.set('variables', JSON.stringify(variables));
+        url.searchParams.set('extensions', JSON.stringify(extensions));
+
+        return HttpClient.get<SpotifySearchResponse>(url.toString(), {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'app-platform': 'WebPlayer',
+          },
+          timeout: options?.timeout,
+          retries: options?.retries,
+        });
       };
 
-      const extensions = {
-        persistedQuery: { version: 1, sha256Hash: SEARCH_DESKTOP_HASH },
-      };
+      let data: SpotifySearchResponse | null = null;
 
-      const url = new URL(`${this.apiUrl}/query`);
-      url.searchParams.set('operationName', 'searchDesktop');
-      url.searchParams.set('variables', JSON.stringify(variables));
-      url.searchParams.set('extensions', JSON.stringify(extensions));
+      // 1. Try ISRC query if available and resolving a song
+      if (metadata.type === 'song' && metadata.isrc) {
+        try {
+          const isrcData = await executeSearch(`isrc:${metadata.isrc.trim()}`);
+          if (isrcData?.data?.searchV2?.tracks?.items && isrcData.data.searchV2.tracks.items.length > 0) {
+            data = isrcData;
+          }
+        } catch {
+          // Fallback to regular search
+        }
+      }
 
-      const data = await HttpClient.get<SpotifySearchResponse>(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'app-platform': 'WebPlayer',
-        },
-        timeout: options?.timeout,
-        retries: options?.retries,
-      });
+      // 2. Regular keyword search if ISRC was not found or not available
+      if (!data) {
+        data = await executeSearch(query);
+      }
 
       const searchV2 = data?.data?.searchV2;
       if (!searchV2) return null;
@@ -93,9 +117,13 @@ export class SpotifyAdapter implements MusicAdapter {
         for (const item of searchV2.tracks.items) {
           const track = item.track;
           const { url: trackUrl, id } = uriToUrl(track.uri);
+          const artists = track.artists?.items?.map((a) => a.profile.name).filter(Boolean) || [];
           candidates.push({
             title: track.name,
-            artist: track.artists?.items?.map((a) => a.profile.name).join(', '),
+            artist: artists.join(', ') || undefined,
+            artists: artists.length > 0 ? artists : undefined,
+            album: track.albumOfTrack?.name,
+            durationMs: track.duration?.totalMilliseconds,
             url: trackUrl,
             id,
           });
@@ -103,9 +131,11 @@ export class SpotifyAdapter implements MusicAdapter {
       } else if (metadata.type === 'album' && searchV2.albums?.items) {
         for (const album of searchV2.albums.items) {
           const { url: albumUrl, id } = uriToUrl(album.uri);
+          const artists = album.artists?.items?.map((a) => a.profile.name).filter(Boolean) || [];
           candidates.push({
             title: album.name,
-            artist: album.artists?.items?.map((a) => a.profile.name).join(', '),
+            artist: artists.join(', ') || undefined,
+            artists: artists.length > 0 ? artists : undefined,
             url: albumUrl,
             id,
           });
@@ -132,7 +162,7 @@ export class SpotifyAdapter implements MusicAdapter {
 
       if (candidates.length === 0) return null;
 
-      const { bestMatch } = findBestMatch(candidates, query, this.id);
+      const { bestMatch } = findBestMatch(candidates, metadata, this.id);
       return bestMatch;
     } catch {
       return null;

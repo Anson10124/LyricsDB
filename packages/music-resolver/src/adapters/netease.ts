@@ -18,9 +18,10 @@ export enum NeteaseSearchType {
 export interface NeteaseSongItem {
   id: number;
   name: string;
-  ar?: Array<{ id: number; name: string }>;
-  al?: { id: number; name: string; picUrl?: string };
+  ar?: Array<{ id: number; name: string; tns?: string[]; alias?: string[] }>;
+  al?: { id: number; name: string; picUrl?: string; tns?: string[] };
   dt?: number; // duration in ms
+  alia?: string[];
 }
 
 export interface NeteaseCloudSearchResponse {
@@ -57,7 +58,7 @@ export class NeteaseAdapter implements MusicAdapter {
     const payload = {
       s: keywords,
       type: options?.type || NeteaseSearchType.Song,
-      limit: options?.limit || 10,
+      limit: options?.limit || 20,
       offset: options?.offset || 0,
       total: true,
       csrf_token: '',
@@ -94,7 +95,7 @@ export class NeteaseAdapter implements MusicAdapter {
       else if (metadata.type === 'artist') searchType = NeteaseSearchType.Artist;
       else if (metadata.type === 'playlist') searchType = NeteaseSearchType.Playlist;
 
-      const response = await this.cloudSearch(query, { type: searchType, limit: 10 }, options);
+      const response = await this.cloudSearch(query, { type: searchType, limit: 20 }, options);
 
       if (response.code !== 200 || !response.result) {
         return null;
@@ -104,9 +105,23 @@ export class NeteaseAdapter implements MusicAdapter {
 
       if (searchType === NeteaseSearchType.Song && response.result.songs) {
         for (const song of response.result.songs) {
+          const artists = song.ar?.map((a) => a.name).filter(Boolean) || [];
+          const aliases: string[] = [];
+          if (song.alia) aliases.push(...song.alia);
+          if (song.ar) {
+            for (const ar of song.ar) {
+              if (ar.tns) aliases.push(...ar.tns);
+              if (ar.alias) aliases.push(...ar.alias);
+            }
+          }
+
           candidates.push({
             title: song.name,
-            artist: song.ar?.map((a) => a.name).join(', '),
+            artist: artists.join(', ') || undefined,
+            artists: artists.length > 0 ? artists : undefined,
+            album: song.al?.name,
+            durationMs: song.dt,
+            aliases: aliases.length > 0 ? aliases : undefined,
             url: `https://music.163.com/#/song?id=${song.id}`,
             id: String(song.id),
           });
@@ -140,7 +155,7 @@ export class NeteaseAdapter implements MusicAdapter {
 
       if (candidates.length === 0) return null;
 
-      const { bestMatch } = findBestMatch(candidates, query, this.id);
+      const { bestMatch } = findBestMatch(candidates, metadata, this.id);
       return bestMatch;
     } catch {
       return null;

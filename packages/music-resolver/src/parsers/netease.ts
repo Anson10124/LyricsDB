@@ -1,7 +1,7 @@
 import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
 import { weapiEncrypt } from '../utils/netease-crypto.js';
-import { cleanSearchQuery } from '../utils/query.js';
+import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
 
 export const NETEASE_LINK_REGEX =
   /(?:https?:\/\/)?(?:music\.163\.com|163cn\.tv)\/(?:#\/)?(song|album|artist|playlist)(?:\?id=|\/)(\d+)/;
@@ -49,9 +49,10 @@ export class NeteaseParser implements MusicParser {
         songs?: Array<{
           id: number;
           name: string;
-          ar?: Array<{ name: string }>;
-          al?: { name: string; picUrl?: string };
+          ar?: Array<{ name: string; tns?: string[]; alias?: string[] }>;
+          al?: { name: string; picUrl?: string; tns?: string[] };
           dt?: number;
+          alia?: string[];
         }>;
       }>('https://music.163.com/weapi/v3/song/detail', body, {
         headers: {
@@ -67,10 +68,17 @@ export class NeteaseParser implements MusicParser {
 
       if (res.code === 200 && res.songs?.[0]) {
         const song = res.songs[0];
+        const rawTitle = song.name;
+        const normalized = normalizeSongTitle(rawTitle);
+        const artists = song.ar?.map((a) => a.name).filter(Boolean) || [];
+
         return {
           id,
-          title: song.name,
-          artist: song.ar?.map((a) => a.name).join(', '),
+          title: rawTitle,
+          cleanTitle: normalized.cleanTitle,
+          artist: artists.join(', ') || undefined,
+          artists: artists.length > 0 ? artists : undefined,
+          extraArtists: normalized.extraArtists,
           album: song.al?.name,
           type: itemType,
           image: song.al?.picUrl,
@@ -89,9 +97,10 @@ export class NeteaseParser implements MusicParser {
   }
 
   buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.title;
+    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
     const artist = metadata.artist;
     const raw = artist ? `${title} ${artist}` : title;
     return cleanSearchQuery(raw);
   }
 }
+

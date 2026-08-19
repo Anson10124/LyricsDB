@@ -155,12 +155,19 @@ export class QQMusicAdapter implements MusicAdapter {
       if (searchType === QQMusicSearchType.Song && response.data.song?.list) {
         for (const song of response.data.song.list) {
           const title = song.songname || stripHighlight(song.songname_hilight);
-          const artist = song.singer?.map((s) => s.name || stripHighlight(s.name_hilight)).join(', ');
+          const singers: string[] = song.singer
+            ? song.singer.map((s) => s.name || stripHighlight(s.name_hilight)).filter((name): name is string => Boolean(name))
+            : [];
+          const artist = singers.join(', ') || undefined;
+          const album = song.albumname || stripHighlight(song.albumname_hilight);
           const songMid = song.songmid || String(song.songid);
           if (songMid) {
             candidates.push({
               title,
               artist,
+              artists: singers.length > 0 ? singers : undefined,
+              album: album || undefined,
+              durationMs: song.interval ? song.interval * 1000 : undefined,
               url: `https://y.qq.com/n/ryqq/songDetail/${songMid}`,
               id: songMid,
             });
@@ -199,7 +206,7 @@ export class QQMusicAdapter implements MusicAdapter {
 
       if (candidates.length === 0) return null;
 
-      const { bestMatch } = findBestMatch(candidates, query, this.id);
+      const { bestMatch } = findBestMatch(candidates, metadata, this.id);
       return bestMatch;
     } catch {
       return null;

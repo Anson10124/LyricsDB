@@ -17,6 +17,7 @@ import type {
   ResolvedLink,
   TrackMetadata,
 } from './types.js';
+import { cleanSearchQuery, normalizeSongTitle, splitArtists } from './utils/query.js';
 
 export class MusicResolver {
   private parsers = new Map<string, MusicParser>();
@@ -109,8 +110,25 @@ export class MusicResolver {
       throw new Error(`No parser found for URL: ${url}`);
     }
 
-    const { id: sourceId } = parser.parse(url);
-    const metadata = await parser.fetchMetadata(sourceId, url, options);
+    const parsedInfo = parser.parse(url);
+    const sourceId = parsedInfo.id;
+    const resolveOpts: ResolveOptions = {
+      ...options,
+      preferredCountry: options?.preferredCountry || (parsedInfo as { storefront?: string }).storefront,
+    };
+
+    const metadata = await parser.fetchMetadata(sourceId, url, resolveOpts);
+
+    // Ensure metadata has normalized fields populated
+    if (!metadata.cleanTitle || !metadata.extraArtists) {
+      const normalized = normalizeSongTitle(metadata.title);
+      metadata.cleanTitle = metadata.cleanTitle || normalized.cleanTitle;
+      metadata.extraArtists = metadata.extraArtists || normalized.extraArtists;
+    }
+    if (!metadata.artists && metadata.artist) {
+      metadata.artists = splitArtists(metadata.artist);
+    }
+
     const query = parser.buildSearchQuery(metadata);
 
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
@@ -123,6 +141,7 @@ export class MusicResolver {
       id: sourceId,
       isVerified: true,
       score: 1,
+      matchReason: 'direct',
     };
 
     // Query all other requested adapters concurrently
@@ -131,7 +150,22 @@ export class MusicResolver {
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
         try {
-          const result = await adapter.search(query, metadata, options);
+          // Primary Search
+          let result = await adapter.search(query, metadata, resolveOpts);
+
+          // If primary search yielded no verified match, try fallback with raw title + primary artist
+          if ((!result || !result.isVerified) && metadata.cleanTitle && metadata.cleanTitle !== metadata.title) {
+            const fallbackQuery = cleanSearchQuery(
+              metadata.artist ? `${metadata.cleanTitle} ${metadata.artist}` : metadata.cleanTitle
+            );
+            if (fallbackQuery !== query) {
+              const fallbackResult = await adapter.search(fallbackQuery, metadata, resolveOpts);
+              if (fallbackResult && (fallbackResult.score || 0) > (result?.score || 0)) {
+                result = fallbackResult;
+              }
+            }
+          }
+
           links[platformId] = result;
         } catch {
           links[platformId] = null;
@@ -157,6 +191,16 @@ export class MusicResolver {
     targetPlatforms?: string[],
     options?: ResolveOptions
   ): Promise<Record<string, ResolvedLink | null>> {
+    // Ensure metadata has normalized fields populated
+    if (!metadata.cleanTitle || !metadata.extraArtists) {
+      const normalized = normalizeSongTitle(metadata.title);
+      metadata.cleanTitle = metadata.cleanTitle || normalized.cleanTitle;
+      metadata.extraArtists = metadata.extraArtists || normalized.extraArtists;
+    }
+    if (!metadata.artists && metadata.artist) {
+      metadata.artists = splitArtists(metadata.artist);
+    }
+
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
     const links: Record<string, ResolvedLink | null> = {};
 
@@ -165,7 +209,21 @@ export class MusicResolver {
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
         try {
-          const result = await adapter.search(query, metadata, options);
+          let result = await adapter.search(query, metadata, options);
+
+          // Fallback if not verified
+          if ((!result || !result.isVerified) && metadata.cleanTitle && metadata.cleanTitle !== metadata.title) {
+            const fallbackQuery = cleanSearchQuery(
+              metadata.artist ? `${metadata.cleanTitle} ${metadata.artist}` : metadata.cleanTitle
+            );
+            if (fallbackQuery !== query) {
+              const fallbackResult = await adapter.search(fallbackQuery, metadata, options);
+              if (fallbackResult && (fallbackResult.score || 0) > (result?.score || 0)) {
+                result = fallbackResult;
+              }
+            }
+          }
+
           links[platformId] = result;
         } catch {
           links[platformId] = null;
@@ -176,3 +234,4 @@ export class MusicResolver {
     return links;
   }
 }
+

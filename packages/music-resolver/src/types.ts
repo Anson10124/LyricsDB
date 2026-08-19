@@ -3,8 +3,12 @@ export type MetadataType = 'song' | 'album' | 'playlist' | 'artist' | 'podcast' 
 export interface TrackMetadata {
   id: string;
   title: string;
+  cleanTitle?: string;
   artist?: string;
+  artists?: string[];
+  extraArtists?: string[];
   album?: string;
+  albumArtist?: string;
   description?: string;
   type: MetadataType;
   image?: string;
@@ -16,8 +20,23 @@ export interface TrackMetadata {
 export interface MatchCandidate {
   title: string;
   artist?: string;
+  artists?: string[];
+  album?: string;
+  durationMs?: number;
+  isrc?: string;
+  aliases?: string[];
   url: string;
   id?: string;
+  raw?: Record<string, unknown>;
+}
+
+export interface ScoreBreakdown {
+  titleScore: number;
+  artistScore: number;
+  durationScore: number;
+  bonusScore: number;
+  penaltyScore: number;
+  finalScore: number;
 }
 
 export interface ResolvedLink {
@@ -27,6 +46,8 @@ export interface ResolvedLink {
   isVerified?: boolean;
   notAvailable?: boolean;
   score?: number;
+  matchReason?: 'isrc' | 'fuzzy' | 'direct';
+  breakdown?: ScoreBreakdown;
   raw?: Record<string, unknown>;
 }
 
@@ -42,6 +63,9 @@ export interface ResolveResult {
 export interface ResolveOptions {
   timeout?: number;
   retries?: number;
+  threshold?: number;
+  minInclusionThreshold?: number;
+  preferredCountry?: string;
   customHeaders?: Record<string, string>;
 }
 

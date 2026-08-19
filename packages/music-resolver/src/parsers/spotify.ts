@@ -1,6 +1,6 @@
 import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery } from '../utils/query.js';
+import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
 
 export const SPOTIFY_LINK_REGEX =
@@ -72,16 +72,21 @@ export class SpotifyParser implements MusicParser {
         const entity: SpotifyEmbedEntity | undefined = nextData.props?.pageProps?.state?.data?.entity;
 
         if (entity && (entity.name || entity.title)) {
-          const title = (entity.name || entity.title || '').trim();
-          const artist = entity.artists?.map((a) => a.name).join(', ') || undefined;
+          const rawTitle = (entity.name || entity.title || '').trim();
+          const normalized = normalizeSongTitle(rawTitle);
+          const artists = entity.artists?.map((a) => a.name).filter(Boolean) || [];
+          const artist = artists.join(', ') || undefined;
           const image = entity.visualIdentity?.image?.[0]?.url;
           const audio = entity.audioPreview?.url;
           const durationMs = entity.duration;
 
           return {
             id,
-            title,
+            title: rawTitle,
+            cleanTitle: normalized.cleanTitle,
             artist,
+            artists: artists.length > 0 ? artists : undefined,
+            extraArtists: normalized.extraArtists,
             type: itemType,
             image,
             audio,
@@ -102,9 +107,12 @@ export class SpotifyParser implements MusicParser {
       }>(oembedUrl, { timeout: options?.timeout });
 
       if (oembed?.title) {
+        const normalized = normalizeSongTitle(oembed.title);
         return {
           id,
           title: oembed.title,
+          cleanTitle: normalized.cleanTitle,
+          extraArtists: normalized.extraArtists,
           type: itemType,
           image: oembed.thumbnail_url,
         };
@@ -153,10 +161,14 @@ export class SpotifyParser implements MusicParser {
       .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}·]/gu, '')
       .trim();
 
+    const normalized = normalizeSongTitle(cleanedTitle);
+
     return {
       id,
       title: cleanedTitle,
+      cleanTitle: normalized.cleanTitle,
       artist,
+      extraArtists: normalized.extraArtists,
       description,
       type,
       image,
@@ -165,9 +177,10 @@ export class SpotifyParser implements MusicParser {
   }
 
   buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.title;
+    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
     const artist = metadata.artist;
     const raw = artist ? `${title} ${artist}` : title;
     return cleanSearchQuery(raw);
   }
 }
+

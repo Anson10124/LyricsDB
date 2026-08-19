@@ -7,10 +7,25 @@ interface DeezerSearchResponse {
   data: Array<{
     id: number;
     title?: string;
+    title_short?: string;
     name?: string;
     link: string;
+    duration?: number; // seconds
     artist?: { name: string };
+    album?: { title: string };
+    isrc?: string;
   }>;
+}
+
+interface DeezerTrackLookupResponse {
+  id?: number;
+  title?: string;
+  link?: string;
+  duration?: number;
+  isrc?: string;
+  artist?: { name: string };
+  album?: { title: string };
+  error?: { type: string; message: string; code: number };
 }
 
 const DEEZER_SEARCH_TYPES: Record<string, string> = {
@@ -27,7 +42,7 @@ export class DeezerAdapter implements MusicAdapter {
   private apiUrl: string;
 
   constructor(options?: { apiUrl?: string }) {
-    this.apiUrl = options?.apiUrl || 'https://api.deezer.com/search';
+    this.apiUrl = options?.apiUrl || 'https://api.deezer.com';
   }
 
   async search(
@@ -36,13 +51,38 @@ export class DeezerAdapter implements MusicAdapter {
     options?: ResolveOptions
   ): Promise<ResolvedLink | null> {
     try {
+      // 1. Direct ISRC Match (if ISRC is available and resolving a song)
+      if (metadata.type === 'song' && metadata.isrc) {
+        try {
+          const isrcUrl = `${this.apiUrl}/track/isrc:${encodeURIComponent(metadata.isrc.trim())}`;
+          const isrcRes = await HttpClient.get<DeezerTrackLookupResponse>(isrcUrl, {
+            timeout: options?.timeout,
+            retries: options?.retries,
+          });
+
+          if (isrcRes && isrcRes.id && isrcRes.link && !isrcRes.error) {
+            return {
+              platform: this.id,
+              url: isrcRes.link,
+              id: String(isrcRes.id),
+              isVerified: true,
+              score: 1.0,
+              matchReason: 'isrc',
+            };
+          }
+        } catch {
+          // Fall back to keyword search
+        }
+      }
+
+      // 2. Keyword Search across Deezer catalog
       const searchType = DEEZER_SEARCH_TYPES[metadata.type] || 'track';
       const params = new URLSearchParams({
         q: query,
-        limit: '5',
+        limit: '15',
       });
 
-      const url = `${this.apiUrl}/${searchType}?${params.toString()}`;
+      const url = `${this.apiUrl}/search/${searchType}?${params.toString()}`;
       const response = await HttpClient.get<DeezerSearchResponse>(url, {
         timeout: options?.timeout,
         retries: options?.retries,
@@ -53,16 +93,20 @@ export class DeezerAdapter implements MusicAdapter {
       }
 
       const candidates: MatchCandidate[] = response.data.map((item) => ({
-        title: item.title || item.name || '',
+        title: item.title || item.title_short || item.name || '',
         artist: item.artist?.name,
+        album: item.album?.title,
+        durationMs: item.duration ? item.duration * 1000 : undefined,
+        isrc: item.isrc,
         url: item.link,
         id: String(item.id),
       }));
 
-      const { bestMatch } = findBestMatch(candidates, query, this.id);
+      const { bestMatch } = findBestMatch(candidates, metadata, this.id);
       return bestMatch;
     } catch {
       return null;
     }
   }
 }
+

@@ -1,6 +1,6 @@
 import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery } from '../utils/query.js';
+import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
 
 export const QQ_MUSIC_LINK_REGEX =
@@ -141,8 +141,12 @@ export class QQMusicParser implements MusicParser {
 
         if (res?.code === 0 && res.data?.[0]) {
           const song = res.data[0];
-          const title = song.name || song.title || '';
-          const artist = song.singer?.map((s) => s.name || s.title).filter(Boolean).join(', ');
+          const rawTitle = song.name || song.title || '';
+          const normalized = normalizeSongTitle(rawTitle);
+          const singers: string[] = song.singer
+            ? song.singer.map((s) => s.name || s.title || '').filter((name): name is string => Boolean(name))
+            : [];
+          const artist = singers.join(', ') || undefined;
           const album = song.album?.name || song.album?.title;
           const albumMid = song.album?.mid;
           const image = albumMid
@@ -152,8 +156,11 @@ export class QQMusicParser implements MusicParser {
 
           return {
             id: song.mid || id,
-            title: title.trim(),
+            title: rawTitle.trim(),
+            cleanTitle: normalized.cleanTitle,
             artist,
+            artists: singers.length > 0 ? singers : undefined,
+            extraArtists: normalized.extraArtists,
             album,
             type: itemType,
             image,
@@ -228,10 +235,16 @@ export class QQMusicParser implements MusicParser {
       const image = metaTagContent(doc, 'og:image');
 
       if (rawTitle) {
+        const cleaned = rawTitle.replace(/\s*-\s*QQ音乐.*$/i, '').trim();
+        const normalized = normalizeSongTitle(cleaned);
+        const artist = description.split(' - ')?.[1]?.trim();
+
         return {
           id: id || 'unknown',
-          title: rawTitle.replace(/\s*-\s*QQ音乐.*$/i, '').trim(),
-          artist: description.split(' - ')?.[1]?.trim(),
+          title: cleaned,
+          cleanTitle: normalized.cleanTitle,
+          artist,
+          extraArtists: normalized.extraArtists,
           type: itemType,
           image,
         };
@@ -248,9 +261,10 @@ export class QQMusicParser implements MusicParser {
   }
 
   buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.title;
+    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
     const artist = metadata.artist;
     const raw = artist ? `${title} ${artist}` : title;
     return cleanSearchQuery(raw);
   }
 }
+

@@ -1,6 +1,6 @@
 import type { MetadataType, MusicParser, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery } from '../utils/query.js';
+import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
 
 export const APPLE_MUSIC_LINK_REGEX =
@@ -105,7 +105,7 @@ export class AppleMusicParser implements MusicParser {
   async fetchMetadata(id: string, url: string, options?: ResolveOptions): Promise<TrackMetadata> {
     const { type: parsedType, storefront } = this.parse(url);
     const itemType = parsedType || 'song';
-    const country = storefront || this.defaultCountry;
+    const country = options?.preferredCountry || storefront || this.defaultCountry;
 
     // 1. Try iTunes Lookup API if the ID is numeric (iTunes store IDs are numeric)
     if (/^\d+$/.test(id)) {
@@ -129,7 +129,7 @@ export class AppleMusicParser implements MusicParser {
           const isTrack = item.wrapperType === 'track' || item.kind === 'song';
           const isAlbum = item.wrapperType === 'collection' || item.collectionType === 'Album';
 
-          const title = (
+          const rawTitle = (
             isTrack
               ? item.trackName || item.trackCensoredName
               : isAlbum
@@ -137,6 +137,7 @@ export class AppleMusicParser implements MusicParser {
                 : item.artistName
           ) || '';
 
+          const normalized = normalizeSongTitle(rawTitle);
           const artist = item.artistName;
           const album = isTrack ? item.collectionName : undefined;
           const image = item.artworkUrl100
@@ -148,8 +149,10 @@ export class AppleMusicParser implements MusicParser {
 
           return {
             id,
-            title: title.trim(),
+            title: rawTitle.trim(),
+            cleanTitle: normalized.cleanTitle,
             artist,
+            extraArtists: normalized.extraArtists,
             album,
             type: itemType,
             image,
@@ -194,10 +197,14 @@ export class AppleMusicParser implements MusicParser {
           .trim();
       }
 
+      const normalized = normalizeSongTitle(title);
+
       return {
         id,
         title: title || `Apple Music Item ${id}`,
+        cleanTitle: normalized.cleanTitle,
         artist,
+        extraArtists: normalized.extraArtists,
         description,
         type: detectedType,
         image,
@@ -214,9 +221,10 @@ export class AppleMusicParser implements MusicParser {
   }
 
   buildSearchQuery(metadata: TrackMetadata): string {
-    const title = metadata.title;
+    const title = metadata.cleanTitle || normalizeSongTitle(metadata.title).cleanTitle;
     const artist = metadata.artist;
     const raw = artist ? `${title} ${artist}` : title;
     return cleanSearchQuery(raw);
   }
 }
+
