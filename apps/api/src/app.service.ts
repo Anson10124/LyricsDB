@@ -9,9 +9,11 @@ export class AppService {
       status: 'operational',
       endpoints: {
         health: 'GET /health',
-        resolveQuery: 'GET /api/resolve?url={streaming_link}',
-        resolveBody: 'POST /api/resolve (Body: { url: "..." })',
-        sample: 'GET /api/sample (Resolves sample Rick Astley track across Spotify, Apple Music, Deezer, NetEase, QQ Music)',
+        tracksGet: 'GET /api/tracks?platform={spotify|apple|deezer|netease|qq}&id={id} (or ?url={link})',
+        tracksSearch: 'GET /api/tracks/search?q={search_term}',
+        trackById: 'GET /api/tracks/{uuid}',
+        resolveTest: 'GET /api/resolve?url={streaming_link}',
+        sampleTest: 'GET /api/sample',
       },
     };
   }

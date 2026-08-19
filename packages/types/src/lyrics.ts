@@ -11,11 +11,11 @@ export interface LyricLine {
   words?: WordSync[];
 }
 
-export type SyncType = 'UNSYNCED' | 'LINE_SYNCED' | 'WORD_SYNCED';
+export type LyricsType = 'word' | 'line' | 'plain';
 
 export interface SyncedLyricsPayload {
-  formatVersion: number;
-  syncType: SyncType;
+  formatVersion?: number;
+  type: LyricsType;
   lines: LyricLine[];
 }
 
@@ -27,16 +27,14 @@ export interface TrackMetadata {
   deezerId?: string | null;
   neteaseId?: string | null;
   qqMusicId?: string | null;
-  youtubeId?: string | null;
   title: string;
-  artistName: string;
-  albumName?: string | null;
+  artists: string[];
+  album?: string | null;
   durationMs: number;
-  hasPlainLyrics: boolean;
-  hasLineSynced: boolean;
-  hasWordSynced: boolean;
-  plainLyrics?: string | null;
-  syncedLyrics?: SyncedLyricsPayload | null;
+  artworkUrl?: string | null;
+  lyricsType?: LyricsType | null;
+  lyrics?: SyncedLyricsPayload | string | null;
+  isVerified: boolean;
   createdAt: string;
   updatedAt: string;
 }
