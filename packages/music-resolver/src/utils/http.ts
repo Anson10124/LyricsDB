@@ -106,14 +106,17 @@ export class HttpClient {
         }
 
         const text = await response.text();
+        const trimmed = text.trim();
         const contentType = response.headers.get('content-type') ?? '';
         if (
           contentType.includes('application/json') ||
-          (text.startsWith('{') && text.endsWith('}')) ||
-          (text.startsWith('[') && text.endsWith(']'))
+          contentType.includes('text/javascript') ||
+          contentType.includes('application/javascript') ||
+          (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))
         ) {
           try {
-            return JSON.parse(text) as T;
+            return JSON.parse(trimmed) as T;
           } catch {
             return text as unknown as T;
           }

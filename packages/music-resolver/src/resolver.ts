@@ -1,6 +1,8 @@
+import { AppleMusicAdapter } from './adapters/apple-music.js';
 import { DeezerAdapter } from './adapters/deezer.js';
 import { NeteaseAdapter } from './adapters/netease.js';
 import { SpotifyAdapter } from './adapters/spotify.js';
+import { AppleMusicParser } from './parsers/apple-music.js';
 import { DeezerParser } from './parsers/deezer.js';
 import { NeteaseParser } from './parsers/netease.js';
 import { SpotifyParser } from './parsers/spotify.js';
@@ -20,11 +22,23 @@ export class MusicResolver {
 
   constructor(config?: ResolverConfig) {
     // Register built-in default parsers
+    this.registerParser(
+      new AppleMusicParser({
+        lookupUrl: config?.appleMusic?.lookupUrl,
+        country: config?.appleMusic?.country,
+      })
+    );
     this.registerParser(new SpotifyParser());
     this.registerParser(new DeezerParser());
     this.registerParser(new NeteaseParser());
 
     // Register built-in default adapters
+    this.registerAdapter(
+      new AppleMusicAdapter({
+        apiUrl: config?.appleMusic?.apiUrl,
+        country: config?.appleMusic?.country,
+      })
+    );
     this.registerAdapter(
       new SpotifyAdapter({
         apiUrl: config?.spotify?.apiUrl,

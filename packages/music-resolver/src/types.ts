@@ -71,4 +71,9 @@ export interface ResolverConfig {
   netease?: {
     apiUrl?: string;
   };
+  appleMusic?: {
+    apiUrl?: string;
+    lookupUrl?: string;
+    country?: string;
+  };
 }
