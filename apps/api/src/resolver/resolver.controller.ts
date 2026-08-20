@@ -29,7 +29,7 @@ export class ResolveDto {
 }
 
 @ApiTags('Resolver')
-@Controller('api/resolver')
+@Controller(['api/resolver', 'resolver'])
 export class ResolverController {
   constructor(private readonly resolverService: ResolverService) {}
 

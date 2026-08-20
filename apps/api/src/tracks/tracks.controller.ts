@@ -70,7 +70,7 @@ const SUPPORTED_FORMATS = [
 ] as const;
 
 @ApiTags('Tracks')
-@Controller('api')
+@Controller(['api', ''])
 export class TracksController {
   constructor(private readonly tracksService: TracksService) {}
 
