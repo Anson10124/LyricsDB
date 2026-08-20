@@ -1,0 +1,208 @@
+---
+title: Lyric Formats
+description: Comprehensive reference for all synchronized lyric formats supported by LyricsDB, ranging from compact syllable JSON tuples to Apple Music TTML, LRC, YRC, and QRC.
+---
+
+LyricsDB provides real-time conversion between multiple synchronized lyric standards. Request any format by supplying the `format` query parameter (e.g., `?format=json`, `?format=ttml`, `?format=lrc`, etc.).
+
+---
+
+## 1. Compact Structured JSON (`format=json`)
+
+The default JSON format is an ultra-compact, bandwidth-efficient tuple array designed for high-performance frontend playback engines (like AMLL Canvas / WebGL renderers).
+
+### TypeScript Schema
+
+```typescript
+// 1 = Main Lead
+// 2 = Main Background
+// 3 = Secondary Lead (Duet)
+// 4 = Secondary Background (Duet Background)
+export type VocalType = 1 | 2 | 3 | 4;
+
+// Word / Syllable Token: [vocalType, startMs, lengthMs, text]
+export type CompactLyricWord = [
+  type: VocalType,
+  startMs: number,
+  lengthMs: number,
+  text: string,
+];
+
+// A line containing one or more word/syllable tokens
+export type CompactLyricLine = CompactLyricWord[];
+
+// Array of lines representing the complete synchronized lyric payload
+export type SyncedLyricsPayload = CompactLyricLine[];
+```
+
+### Example Synchronized JSON Response
+
+```json
+[
+  [
+    [1, 18500, 380, "Never "],
+    [1, 18900, 390, "gonna "],
+    [1, 19300, 480, "give "],
+    [1, 19800, 580, "you "],
+    [1, 20400, 1100, "up "]
+  ],
+  [
+    [1, 22400, 370, "Never "],
+    [1, 22800, 380, "gonna "],
+    [1, 23200, 490, "let "],
+    [1, 23700, 570, "you "],
+    [1, 24300, 980, "down "]
+  ],
+  [
+    [2, 26100, 400, "(Give "],
+    [2, 26500, 450, "you "],
+    [2, 26950, 600, "up) "]
+  ]
+]
+```
+
+### Token Semantics & Conventions
+
+- **`vocalType` (`1 | 2 | 3 | 4`)**:
+  - `1`: **Main Lead** vocalist.
+  - `2`: **Main Background** vocals (e.g. ad-libs, chorus echoes).
+  - `3`: **Secondary Lead** (duet singer / alternate lead).
+  - `4`: **Secondary Background** (duet background vocals).
+- **`startMs`**: Start offset from song playback start in milliseconds.
+- **`lengthMs`**: Duration of the syllable or word in milliseconds.
+- **`text`**: Syllable or word text:
+  - If `text` ends with a space (e.g. `"Never "`), it represents a complete word boundary.
+  - If `text` does not have a trailing space (e.g. `"Ne"` followed by `"ver "`), it represents a syllable within a single word.
+
+### Plain Text JSON Fallback
+
+If a track only has unsynchronized plain text lyrics, `format=json` returns an object containing the plain string:
+
+```json
+{
+  "plain": "Never gonna give you up\nNever gonna let you down\nNever gonna run around and desert you"
+}
+```
+
+---
+
+## 2. Apple Music TTML (`format=ttml`)
+
+**Timed Text Markup Language (TTML)** is the XML standard used by Apple Music and karaoke software. It encodes syllable-level `<span begin="..." end="...">` timestamps, duet singer roles, and background vocals.
+
+- **Content-Type**: `application/xml; charset=utf-8`
+
+```xml
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+  <body>
+    <div>
+      <p begin="00:00:18.500" end="00:00:21.500">
+        <span begin="00:00:18.500" end="00:00:18.880">Never </span>
+        <span begin="00:00:18.900" end="00:00:19.290">gonna </span>
+        <span begin="00:00:19.300" end="00:00:19.780">give </span>
+        <span begin="00:00:19.800" end="00:00:20.380">you </span>
+        <span begin="00:00:20.400" end="00:00:21.500">up</span>
+      </p>
+    </div>
+  </body>
+</tt>
+```
+
+```bash
+curl "http://localhost:4000/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=ttml"
+```
+
+---
+
+## 3. Standard LRC (`format=lrc`)
+
+**LRC** is the universal line-by-line format compatible with almost all media players (AIMP, Foobar2000, VLC, automobile head units).
+
+- **Content-Type**: `text/plain; charset=utf-8`
+
+```text
+[00:18.50]Never gonna give you up
+[00:22.40]Never gonna let you down
+[00:26.10]Never gonna run around and desert you
+```
+
+```bash
+curl "http://localhost:4000/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=lrc"
+```
+
+---
+
+## 4. NetEase YRC (`format=yrc`)
+
+**YRC** is NetEase Cloud Music's proprietary syllable-timing format containing line brackets followed by millisecond offsets per syllable.
+
+- **Content-Type**: `text/plain; charset=utf-8`
+
+```text
+[18500,3000](18500,380,0)Never (18900,390,0)gonna (19300,480,0)give (19800,580,0)you (20400,1100,0)up
+```
+
+```bash
+curl "http://localhost:4000/api/lyrics?platform=netease&id=2755500197&format=yrc"
+```
+
+---
+
+## 5. QQ Music QRC (`format=qrc`)
+
+**QRC** is QQ Music's syllable-synchronized timed lyric format.
+
+- **Content-Type**: `text/plain; charset=utf-8`
+
+```text
+[18500,3000]Never(18500,380) gonna(18900,390) give(19300,480) you(19800,580) up(20400,1100)
+```
+
+```bash
+curl "http://localhost:4000/api/lyrics?platform=qq&id=000f1Vqw2ACkez&format=qrc"
+```
+
+---
+
+## 6. Advanced SubStation Alpha ASS (`format=ass`)
+
+**ASS** karaoke subtitle format compatible with video rendering tools, Aegisub, FFmpeg, and media players.
+
+- **Content-Type**: `text/plain; charset=utf-8`
+
+```text
+[Script Info]
+Title: LyricsDB Generated ASS
+ScriptType: v4.00+
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:18.50,0:00:21.50,Default,,0,0,0,,{\k38}Never {\k39}gonna {\k48}give {\k58}you {\k110}up
+```
+
+---
+
+## 7. Additional Formats
+
+| Format Identifier | Specification | Primary Use Case |
+| :--- | :--- | :--- |
+| `lrca2` | Enhanced LRC A2 | Extended syllable-annotated LRC players |
+| `eslrc` | Extended Synced LRC | Syllable-level enhanced karaoke tags |
+| `lyl` | LYL Lyric File | Specialized audio players |
+| `lys` | LYS Lyric File | Chinese multimedia software |
+| `lqe` | LQE Lyric File | Custom embedded hardware players |
+
+---
+
+## Summary Matrix
+
+| Format | Parameter | Content-Type | Syllable / Word Sync | Duet & Roles | Best For |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **JSON** | `format=json` | `application/json` | Yes | Yes | Custom web apps, Canvas/WebGL engines |
+| **TTML** | `format=ttml` | `application/xml` | Yes | Yes | Apple Music-style UI, Apple ecosystems |
+| **LRC** | `format=lrc` | `text/plain` | No (Line) | No | Legacy media players, car dashboards |
+| **YRC** | `format=yrc` | `text/plain` | Yes | Yes | NetEase ecosystem integrations |
+| **QRC** | `format=qrc` | `text/plain` | Yes | Yes | QQ Music tools & converters |
+| **ASS** | `format=ass` | `text/plain` | Yes | Yes | Video rendering, Aegisub, FFmpeg |
+| **LRCA2** | `format=lrca2` | `text/plain` | Yes | Yes | Syllable-enabled LRC software |
+

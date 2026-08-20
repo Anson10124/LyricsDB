@@ -1,0 +1,1427 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Returns metadata, versioning information, and available endpoint directory.",
+        "operationId": "AppController_getRoot",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "API operational info and service metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "example": "LyricsDB API"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "operational"
+                    },
+                    "endpoints": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "API Service Information & Endpoints",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Returns current server health status and timestamp.",
+        "operationId": "AppController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Health check response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "LyricsDB API is running"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "example": "2026-08-20T22:31:20.790Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Health Check",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/api/resolver": {
+      "get": {
+        "description": "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music.",
+        "operationId": "ResolverController_resolveByQuery",
+        "parameters": [
+          {
+            "name": "url",
+            "required": true,
+            "in": "query",
+            "description": "Source song URL from Spotify, Apple Music, Deezer, NetEase, or QQ Music",
+            "schema": {
+              "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical song metadata and verified platform links",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid streaming URL parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve track metadata and links by URL query",
+        "tags": [
+          "Resolver"
+        ]
+      },
+      "post": {
+        "description": "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links.",
+        "operationId": "ResolverController_resolveByBody",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resolved metadata and matched platform links",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or unsupported URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve track metadata and links via JSON body",
+        "tags": [
+          "Resolver"
+        ]
+      }
+    },
+    "/api/resolver/sample": {
+      "get": {
+        "description": "Returns pre-resolved sample metadata and links for Rick Astley - Never Gonna Give You Up.",
+        "operationId": "ResolverController_getSample",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sample resolution result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a sample cross-platform resolution result",
+        "tags": [
+          "Resolver"
+        ]
+      }
+    },
+    "/api/lyrics/stream": {
+      "get": {
+        "description": "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress.",
+        "operationId": "TracksController_streamLyrics",
+        "parameters": [
+          {
+            "name": "platform",
+            "required": false,
+            "in": "query",
+            "description": "Platform identifier (spotify, apple, deezer, netease, qq, isrc)",
+            "schema": {
+              "example": "spotify",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": false,
+            "in": "query",
+            "description": "Platform-specific track ID",
+            "schema": {
+              "example": "4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "url",
+            "required": false,
+            "in": "query",
+            "description": "Direct song/track URL from any streaming platform",
+            "schema": {
+              "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "Output lyric format (default: json)",
+            "schema": {
+              "enum": [
+                "ttml",
+                "lrc",
+                "lrca2",
+                "yrc",
+                "qrc",
+                "eslrc",
+                "ass",
+                "lyl",
+                "lys",
+                "lqe",
+                "json"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "forceRefresh",
+            "required": false,
+            "in": "query",
+            "description": "Bypass cached database results and force live re-fetching",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream emitting lifecycle events: init, cache_hit, cache_miss, resolving, platform_matched, lyrics_searching, lyrics_found, saving, done, error",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "enum": [
+                        "init",
+                        "cache_hit",
+                        "cache_miss",
+                        "resolving",
+                        "platform_matched",
+                        "lyrics_searching",
+                        "lyrics_found",
+                        "saving",
+                        "done",
+                        "error"
+                      ],
+                      "example": "done"
+                    },
+                    "data": {
+                      "type": "object",
+                      "example": {
+                        "track": {
+                          "id": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+                          "isrc": "GBARL8700014",
+                          "spotifyId": "4cOdK2wGLETKBW3PvgPWqT",
+                          "appleMusicId": "1559523359",
+                          "deezerId": "3537337561",
+                          "neteaseId": "2755500197",
+                          "qqMusicId": "000f1Vqw2ACkez",
+                          "title": "Never Gonna Give You Up",
+                          "artists": [
+                            "Rick Astley"
+                          ],
+                          "album": "Whenever You Need Somebody",
+                          "durationMs": 213573,
+                          "artworkUrl": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
+                          "lyricsType": "word",
+                          "lyricsProvider": "qqmusic",
+                          "isVerified": true,
+                          "hasLyrics": true
+                        },
+                        "lyrics": [
+                          [
+                            [
+                              1,
+                              18500,
+                              380,
+                              "Never "
+                            ],
+                            [
+                              1,
+                              18900,
+                              390,
+                              "gonna "
+                            ],
+                            [
+                              1,
+                              19300,
+                              480,
+                              "give "
+                            ],
+                            [
+                              1,
+                              19800,
+                              580,
+                              "you "
+                            ],
+                            [
+                              1,
+                              20400,
+                              1100,
+                              "up "
+                            ]
+                          ]
+                        ],
+                        "format": "json",
+                        "contentType": "application/json"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "example": 1787262680794
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream lyrics resolution progress via SSE",
+        "tags": [
+          "Tracks",
+          "Lyrics"
+        ]
+      }
+    },
+    "/api/tracks/stream": {
+      "get": {
+        "description": "Alias for /api/lyrics/stream",
+        "operationId": "TracksController_streamTracks",
+        "parameters": [
+          {
+            "name": "platform",
+            "required": false,
+            "in": "query",
+            "description": "Platform identifier (spotify, apple, deezer, netease, qq, isrc)",
+            "schema": {
+              "example": "spotify",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": false,
+            "in": "query",
+            "description": "Platform-specific track ID",
+            "schema": {
+              "example": "4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "url",
+            "required": false,
+            "in": "query",
+            "description": "Direct song/track URL",
+            "schema": {
+              "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "Output lyric format (default: json)",
+            "schema": {
+              "enum": [
+                "ttml",
+                "lrc",
+                "lrca2",
+                "yrc",
+                "qrc",
+                "eslrc",
+                "ass",
+                "lyl",
+                "lys",
+                "lqe",
+                "json"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "forceRefresh",
+            "required": false,
+            "in": "query",
+            "description": "Bypass cached results and force live re-fetching",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream emitting real-time progress events",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "example": "done"
+                    },
+                    "data": {
+                      "type": "object"
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "example": 1787262680794
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream track resolution progress via SSE",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/api/tracks": {
+      "get": {
+        "description": "Looks up a track in the database cache (~2ms) or fetches, resolves cross-platform links, and caches metadata in PostgreSQL.",
+        "operationId": "TracksController_getTrack",
+        "parameters": [
+          {
+            "name": "platform",
+            "required": false,
+            "in": "query",
+            "description": "Platform identifier (spotify, apple, deezer, netease, qq, isrc)",
+            "schema": {
+              "example": "spotify",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": false,
+            "in": "query",
+            "description": "Platform-specific track ID",
+            "schema": {
+              "example": "4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "url",
+            "required": false,
+            "in": "query",
+            "description": "Direct song/track URL from Spotify, Apple Music, Deezer, NetEase, or QQ Music",
+            "schema": {
+              "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitized track metadata with cross-platform IDs and lyric availability flag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing url or platform + id parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track could not be resolved from upstream platforms",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get or synchronize a track by platform, ID, or URL",
+        "tags": [
+          "Tracks"
+        ]
+      },
+      "post": {
+        "description": "Alternative JSON body endpoint to look up or synchronize track metadata.",
+        "operationId": "TracksController_postTrack",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sanitized track metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lookup/sync a track via POST body",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/api/tracks/search": {
+      "get": {
+        "description": "Search indexed tracks in PostgreSQL database by title, artist, or album keyword.",
+        "operationId": "TracksController_search",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Search query keyword (song title, artist name, or album)",
+            "schema": {
+              "example": "Rick Astley Never Gonna Give You Up",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of results to return (default: 20)",
+            "schema": {
+              "example": "20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of matching tracks ordered by relevance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SanitizedTrackDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search tracks by keyword",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/api/tracks/{id}": {
+      "get": {
+        "description": "Retrieves sanitized track metadata by its internal PostgreSQL UUID.",
+        "operationId": "TracksController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Track details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get track details by internal database ID",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/api/tracks/{id}/lyrics": {
+      "get": {
+        "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID.",
+        "operationId": "TracksController_getLyricsById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "Output lyric format (default: json)",
+            "schema": {
+              "enum": [
+                "ttml",
+                "lrc",
+                "lrca2",
+                "yrc",
+                "qrc",
+                "eslrc",
+                "ass",
+                "lyl",
+                "lys",
+                "lqe",
+                "json"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Formatted synchronized lyrics output in requested format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "description": "Array of lines, each containing syllable/word token tuples [vocalType, startMs, lengthMs, text]",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "description": "Word token: [vocalType (1=Lead, 2=BG, 3=Duet Lead, 4=Duet BG), startMs, lengthMs, text]"
+                    }
+                  },
+                  "example": [
+                    [
+                      [
+                        1,
+                        18500,
+                        380,
+                        "Never "
+                      ],
+                      [
+                        1,
+                        18900,
+                        390,
+                        "gonna "
+                      ],
+                      [
+                        1,
+                        19300,
+                        480,
+                        "give "
+                      ],
+                      [
+                        1,
+                        19800,
+                        580,
+                        "you "
+                      ],
+                      [
+                        1,
+                        20400,
+                        1100,
+                        "up "
+                      ]
+                    ],
+                    [
+                      [
+                        1,
+                        22400,
+                        370,
+                        "Never "
+                      ],
+                      [
+                        1,
+                        22800,
+                        380,
+                        "gonna "
+                      ],
+                      [
+                        1,
+                        23200,
+                        490,
+                        "let "
+                      ],
+                      [
+                        1,
+                        23700,
+                        570,
+                        "you "
+                      ],
+                      [
+                        1,
+                        24300,
+                        980,
+                        "down "
+                      ]
+                    ]
+                  ]
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "<tt xmlns=\"http://www.w3.org/ns/ttml\"><body><div><p begin=\"00:00:18.500\" end=\"00:00:21.500\"><span begin=\"00:00:18.500\" end=\"00:00:18.880\">Never </span><span begin=\"00:00:18.900\" end=\"00:00:19.290\">gonna </span><span begin=\"00:00:19.300\" end=\"00:00:19.780\">give </span><span begin=\"00:00:19.800\" end=\"00:00:20.380\">you </span><span begin=\"00:00:20.400\" end=\"00:00:21.500\">up</span></p></div></body></tt>"
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "[00:18.50]Never gonna give you up\n[00:22.40]Never gonna let you down\n[00:26.10]Never gonna run around and desert you"
+              }
+            }
+          },
+          "404": {
+            "description": "Track not found or lyrics unavailable for this track",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get synchronized lyrics for a track ID",
+        "tags": [
+          "Tracks",
+          "Lyrics"
+        ]
+      }
+    },
+    "/api/lyrics": {
+      "get": {
+        "description": "Fetches or synchronizes lyrics on-the-fly from upstream sources and converts them to the requested format.",
+        "operationId": "TracksController_getLyrics",
+        "parameters": [
+          {
+            "name": "platform",
+            "required": false,
+            "in": "query",
+            "description": "Platform identifier (spotify, apple, deezer, netease, qq, isrc)",
+            "schema": {
+              "example": "spotify",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": false,
+            "in": "query",
+            "description": "Platform-specific track ID",
+            "schema": {
+              "example": "4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "url",
+            "required": false,
+            "in": "query",
+            "description": "Direct song/track URL",
+            "schema": {
+              "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "Output lyric format (default: json)",
+            "schema": {
+              "enum": [
+                "ttml",
+                "lrc",
+                "lrca2",
+                "yrc",
+                "qrc",
+                "eslrc",
+                "ass",
+                "lyl",
+                "lys",
+                "lqe",
+                "json"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Formatted synchronized lyrics payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "description": "Array of lines, each containing syllable/word token tuples [vocalType, startMs, lengthMs, text]",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "array"
+                    }
+                  },
+                  "example": [
+                    [
+                      [
+                        1,
+                        18500,
+                        380,
+                        "Never "
+                      ],
+                      [
+                        1,
+                        18900,
+                        390,
+                        "gonna "
+                      ],
+                      [
+                        1,
+                        19300,
+                        480,
+                        "give "
+                      ],
+                      [
+                        1,
+                        19800,
+                        580,
+                        "you "
+                      ],
+                      [
+                        1,
+                        20400,
+                        1100,
+                        "up "
+                      ]
+                    ],
+                    [
+                      [
+                        1,
+                        22400,
+                        370,
+                        "Never "
+                      ],
+                      [
+                        1,
+                        22800,
+                        380,
+                        "gonna "
+                      ],
+                      [
+                        1,
+                        23200,
+                        490,
+                        "let "
+                      ],
+                      [
+                        1,
+                        23700,
+                        570,
+                        "you "
+                      ],
+                      [
+                        1,
+                        24300,
+                        980,
+                        "down "
+                      ]
+                    ]
+                  ]
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "<tt xmlns=\"http://www.w3.org/ns/ttml\"><body><div><p begin=\"00:00:18.500\" end=\"00:00:21.500\"><span begin=\"00:00:18.500\" end=\"00:00:18.880\">Never </span><span begin=\"00:00:18.900\" end=\"00:00:19.290\">gonna </span><span begin=\"00:00:19.300\" end=\"00:00:19.780\">give </span><span begin=\"00:00:19.800\" end=\"00:00:20.380\">you </span><span begin=\"00:00:20.400\" end=\"00:00:21.500\">up</span></p></div></body></tt>"
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "[00:18.50]Never gonna give you up\n[00:22.40]Never gonna let you down\n[00:26.10]Never gonna run around and desert you"
+              }
+            }
+          },
+          "400": {
+            "description": "Missing url or platform + id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lyrics not available for this track",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get synchronized lyrics by platform ID or URL",
+        "tags": [
+          "Tracks",
+          "Lyrics"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "LyricsDB API",
+    "description": "LyricsDB is a high-performance open-source lyrics indexing and synchronization platform.\n\n### Features\n* **Multi-Platform Resolution**: Cross-references Spotify, Apple Music, Deezer, NetEase Cloud Music, QQ Music, and ISRC.\n* **Precision Timed Lyrics**: Word-by-word and syllable-level sync with background vocals and duet roles.\n* **Format Engine**: Real-time conversion to TTML, LRC, LRCA2, YRC, QRC, ESLRC, ASS, LYL, LYS, LQE, and compact JSON.\n* **Real-Time Streaming**: Server-Sent Events (SSE) tracking extraction lifecycle and timing progress.\n* **PostgreSQL Fast Cache**: Sub-millisecond indexed read-through caching with thundering-herd deduplication.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "LyricsDB Support",
+      "url": "https://github.com/Anson10124/LyricsDB",
+      "email": "support@lyricsdb.org"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "tags": [
+    {
+      "name": "Tracks",
+      "description": "Track lookup, database synchronization, and search operations"
+    },
+    {
+      "name": "Lyrics",
+      "description": "Synchronized multi-format lyrics extraction and real-time SSE streaming"
+    },
+    {
+      "name": "Resolver",
+      "description": "Cross-platform track link resolution and matching"
+    },
+    {
+      "name": "System",
+      "description": "Server health and system status endpoints"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "https://lyricsdb.kollod.dev",
+      "description": "Production API Server"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "ResolverTrackMetadataDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "4cOdK2wGLETKBW3PvgPWqT",
+            "description": "Source platform resource ID"
+          },
+          "title": {
+            "type": "string",
+            "example": "Never Gonna Give You Up",
+            "description": "Canonical song title"
+          },
+          "cleanTitle": {
+            "type": "string",
+            "example": "Never Gonna Give You Up",
+            "description": "Cleaned song title without parenthetical suffixes"
+          },
+          "artist": {
+            "type": "string",
+            "example": "Rick Astley",
+            "description": "Primary artist name"
+          },
+          "artists": {
+            "example": [
+              "Rick Astley"
+            ],
+            "description": "List of all performing artists",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "album": {
+            "type": "string",
+            "example": "Whenever You Need Somebody",
+            "description": "Album or EP title"
+          },
+          "type": {
+            "type": "string",
+            "example": "song",
+            "enum": [
+              "song",
+              "album",
+              "playlist",
+              "artist",
+              "podcast",
+              "show"
+            ],
+            "description": "Resolved media resource type"
+          },
+          "image": {
+            "type": "string",
+            "example": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
+            "description": "Public URL to album artwork image"
+          },
+          "durationMs": {
+            "type": "number",
+            "example": 213573,
+            "description": "Track duration in milliseconds"
+          },
+          "isrc": {
+            "type": "string",
+            "example": "GBARL8700014",
+            "description": "International Standard Recording Code (ISRC)"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "type"
+        ]
+      },
+      "ResolveResultDto": {
+        "type": "object",
+        "properties": {
+          "sourceUrl": {
+            "type": "string",
+            "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+            "description": "Original input streaming URL"
+          },
+          "sourcePlatform": {
+            "type": "string",
+            "example": "spotify",
+            "description": "Platform of the source URL"
+          },
+          "sourceId": {
+            "type": "string",
+            "example": "4cOdK2wGLETKBW3PvgPWqT",
+            "description": "Resource ID extracted from the source URL"
+          },
+          "metadata": {
+            "description": "Canonical track metadata extracted from the source platform",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResolverTrackMetadataDto"
+              }
+            ]
+          },
+          "query": {
+            "type": "string",
+            "example": "Rick Astley Never Gonna Give You Up",
+            "description": "Normalized query string used for cross-platform matching"
+          },
+          "links": {
+            "type": "object",
+            "description": "Cross-platform links matched by the resolver engine",
+            "example": {
+              "spotify": {
+                "platform": "spotify",
+                "url": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+                "id": "4cOdK2wGLETKBW3PvgPWqT",
+                "isVerified": true,
+                "score": 1,
+                "matchReason": "direct"
+              },
+              "appleMusic": {
+                "platform": "appleMusic",
+                "url": "https://music.apple.com/us/album/never-gonna-give-you-up/1559523357?i=1559523359",
+                "id": "1559523359",
+                "isVerified": true,
+                "score": 0.98,
+                "matchReason": "isrc"
+              },
+              "deezer": {
+                "platform": "deezer",
+                "url": "https://www.deezer.com/track/3537337561",
+                "id": "3537337561",
+                "isVerified": true,
+                "score": 0.95,
+                "matchReason": "isrc"
+              },
+              "netease": {
+                "platform": "netease",
+                "url": "https://music.163.com/#/song?id=2755500197",
+                "id": "2755500197",
+                "isVerified": true,
+                "score": 0.92,
+                "matchReason": "fuzzy"
+              },
+              "qqMusic": {
+                "platform": "qqMusic",
+                "url": "https://y.qq.com/n/ryqq/songDetail/000f1Vqw2ACkez",
+                "id": "000f1Vqw2ACkez",
+                "isVerified": true,
+                "score": 0.94,
+                "matchReason": "fuzzy"
+              }
+            }
+          }
+        },
+        "required": [
+          "sourceUrl",
+          "sourcePlatform",
+          "sourceId",
+          "metadata",
+          "query",
+          "links"
+        ]
+      },
+      "ErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 400,
+            "description": "HTTP response status code"
+          },
+          "message": {
+            "type": "string",
+            "example": "Please provide either \"url\" or both \"platform\" and \"id\".",
+            "description": "Detailed explanation of the error"
+          },
+          "error": {
+            "type": "string",
+            "example": "Bad Request",
+            "description": "HTTP error title / type name"
+          }
+        },
+        "required": [
+          "statusCode",
+          "message"
+        ]
+      },
+      "ResolveDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Source song URL from any supported streaming platform",
+            "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
+          },
+          "targetPlatforms": {
+            "description": "Optional list of target platforms to restrict resolution",
+            "example": [
+              "spotify",
+              "deezer",
+              "netease",
+              "apple",
+              "qq"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "SanitizedTrackDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+            "description": "Unique database identifier (UUID v4)"
+          },
+          "isrc": {
+            "type": "object",
+            "example": "USQX92504224",
+            "description": "International Standard Recording Code (ISRC)",
+            "nullable": true
+          },
+          "spotifyId": {
+            "type": "object",
+            "example": "4cOdK2wGLETKBW3PvgPWqT",
+            "description": "Spotify track identifier",
+            "nullable": true
+          },
+          "appleMusicId": {
+            "type": "object",
+            "example": "1559523359",
+            "description": "Apple Music song identifier",
+            "nullable": true
+          },
+          "deezerId": {
+            "type": "object",
+            "example": "3537337561",
+            "description": "Deezer track identifier",
+            "nullable": true
+          },
+          "neteaseId": {
+            "type": "object",
+            "example": "2755500197",
+            "description": "NetEase Cloud Music song identifier",
+            "nullable": true
+          },
+          "qqMusicId": {
+            "type": "object",
+            "example": "000f1Vqw2ACkez",
+            "description": "QQ Music song mid/identifier",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "example": "Never Gonna Give You Up",
+            "description": "Track song title"
+          },
+          "artists": {
+            "example": [
+              "Rick Astley"
+            ],
+            "description": "List of primary and featured artist names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "album": {
+            "type": "object",
+            "example": "Whenever You Need Somebody",
+            "description": "Album or release name",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "number",
+            "example": 213573,
+            "description": "Track duration in milliseconds"
+          },
+          "artworkUrl": {
+            "type": "object",
+            "example": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
+            "description": "Public URL to high-resolution album cover art",
+            "nullable": true
+          },
+          "lyricsType": {
+            "type": "string",
+            "example": "word",
+            "enum": [
+              "word",
+              "line",
+              "plain",
+              null
+            ],
+            "description": "Precision level of available synchronized lyrics",
+            "nullable": true
+          },
+          "lyricsProvider": {
+            "type": "object",
+            "example": "qqmusic",
+            "description": "Upstream lyrics provider source (qqmusic, deezer, netease, musixmatch, lrclib)",
+            "nullable": true
+          },
+          "isVerified": {
+            "type": "boolean",
+            "example": true,
+            "description": "Indicates whether track metadata and platform links have been manually verified"
+          },
+          "hasLyrics": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether synchronized or plain text lyrics exist in the database for this track"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-08-20T22:31:20.790Z",
+            "description": "Timestamp when this track was first indexed into PostgreSQL"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-08-20T22:31:20.790Z",
+            "description": "Timestamp when this track was last synchronized"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "artists",
+          "durationMs",
+          "isVerified",
+          "hasLyrics",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "TrackQueryDto": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "Platform name (spotify, apple, deezer, netease, qq, isrc)",
+            "example": "spotify"
+          },
+          "id": {
+            "type": "string",
+            "description": "Platform-specific track ID",
+            "example": "4cOdK2wGLETKBW3PvgPWqT"
+          },
+          "url": {
+            "type": "string",
+            "description": "Direct song/track URL from any supported service",
+            "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
+          }
+        }
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "LyricsDB Full Documentation",
+    "url": "http://localhost:3000/docs"
+  }
+}

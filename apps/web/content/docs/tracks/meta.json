@@ -1,0 +1,9 @@
+{
+  "title": "Tracks",
+  "pages": [
+    "getTrack",
+    "postTrack",
+    "getTrackById",
+    "searchTracks"
+  ]
+}

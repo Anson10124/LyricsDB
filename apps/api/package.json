@@ -16,6 +16,7 @@
     "@nestjs/common": "^11.0.11",
     "@nestjs/core": "^11.0.11",
     "@nestjs/platform-express": "^11.0.11",
+    "@nestjs/swagger": "^11.4.7",
     "@repo/database": "workspace:*",
     "@repo/lyrics": "workspace:*",
     "@repo/music-resolver": "workspace:*",

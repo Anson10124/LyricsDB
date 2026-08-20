@@ -1,0 +1,74 @@
+---
+title: API Overview
+description: The LyricsDB API exposes REST and Server-Sent Events endpoints for track lookup, cross-platform resolution, keyword search, and multi-format lyrics extraction.
+---
+
+## Base URLs
+
+- **API Base URL**: `http://localhost:4000/api`
+- **Swagger Interactive OpenAPI Explorer**: `http://localhost:4000/api/docs`
+
+---
+
+## Endpoint Directory
+
+### Tracks
+
+| Method & Path | Documentation | Description |
+| :--- | :--- | :--- |
+| `GET /api/tracks` | [Read Track](/docs/tracks/getTrack) | Look up or synchronize track metadata by URL or Platform ID. |
+| `POST /api/tracks` | [Sync Track via Body](/docs/tracks/postTrack) | Synchronize track via JSON payload (`url` or `platform` + `id`). |
+| `GET /api/tracks/search` | [Search Tracks](/docs/tracks/searchTracks) | Search cached database tracks by keyword query (`q`). |
+| `GET /api/tracks/:id` | [Get Track by ID](/docs/tracks/getTrackById) | Retrieve track metadata by internal PostgreSQL database UUID. |
+
+### Lyrics
+
+| Method & Path | Documentation | Description |
+| :--- | :--- | :--- |
+| `GET /api/lyrics` | [Get Lyrics](/docs/lyrics/getLyrics) | Fetch synchronized lyrics by URL or Platform ID in any format. |
+| `GET /api/tracks/:id/lyrics` | [Get Lyrics by ID](/docs/lyrics/getLyricsById) | Fetch lyrics for an existing database track ID. |
+| `GET /api/lyrics/stream` | [Stream Lyrics](/docs/lyrics/streamLyrics) | Stream live resolution and extraction events over SSE. |
+| `GET /api/tracks/stream` | [Stream Tracks](/docs/lyrics/streamLyrics) | SSE streaming alias for `/api/lyrics/stream`. |
+
+---
+
+## Standard Track Object Schema
+
+All `/api/tracks` endpoints return a sanitized track record:
+
+```json
+{
+  "id": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  "isrc": "USQX92504224",
+  "spotifyId": "7bxaFZ1O3cHkgLKMsdC3xR",
+  "appleMusicId": "1842957386",
+  "deezerId": "3537337561",
+  "neteaseId": "2755500197",
+  "qqMusicId": "000f1Vqw2ACkez",
+  "title": "Loser",
+  "artists": [
+    "Tame Impala"
+  ],
+  "album": "Deadbeat",
+  "durationMs": 223069,
+  "artworkUrl": "https://image-cdn-fa.spotifycdn.com/image/ab67616d00001e02208500450dcd0fd294d7bd3b",
+  "lyricsType": "word",
+  "lyricsProvider": "qqmusic",
+  "isVerified": false,
+  "hasLyrics": true,
+  "createdAt": "2026-08-20T22:31:20.790Z",
+  "updatedAt": "2026-08-20T22:31:20.790Z"
+}
+```
+
+---
+
+## HTTP Status Codes
+
+| Status Code | Reason | Resolution / Meaning |
+| :--- | :--- | :--- |
+| `200 OK` | Success | The track metadata or lyrics were retrieved successfully. |
+| `400 Bad Request` | Invalid Input | Missing both `url` and `platform` + `id`, or invalid format/parameters. |
+| `404 Not Found` | Not Found | The track was not found or no lyrics exist for the given song. |
+| `500 Server Error` | Internal Error | Upstream provider outage or database failure. |
+

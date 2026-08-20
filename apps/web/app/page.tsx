@@ -8,6 +8,8 @@ import { InputBar } from "@/components/input-bar";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import { LyricsView } from "@/components/lyrics-view";
 
+import Link from "next/link";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 const initialProgress: TaskProgressState = {
@@ -335,6 +337,12 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <div className="fixed top-4 right-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+        <Link href="/docs" className="text-sm text-muted-foreground">
+          Docs
+        </Link>
+      </div>
     </main>
   );
 }

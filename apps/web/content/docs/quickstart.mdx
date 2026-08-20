@@ -1,0 +1,88 @@
+---
+title: Quick Start
+description: Get started with LyricsDB by fetching synced lyrics and track metadata for any song using the REST API.
+---
+
+## 1. Fetch Lyrics by Streaming URL
+
+You can pass a track link directly from Spotify, Apple Music, Deezer, NetEase, or QQ Music to retrieve synchronized lyrics:
+
+```bash
+# Fetch Apple Music-style TTML XML lyrics
+curl -X GET "http://localhost:4000/api/lyrics?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=ttml"
+```
+
+## 2. Fetch Lyrics by Platform & ID
+
+You can also target a platform explicitly using `platform` and `id`:
+
+```bash
+# Fetch structured compact JSON lyrics via Spotify Track ID
+curl -X GET "http://localhost:4000/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=json"
+
+# Fetch line-by-line LRC lyrics via NetEase Song ID
+curl -X GET "http://localhost:4000/api/lyrics?platform=netease&id=2755500197&format=lrc"
+```
+
+## 3. Look Up or Synchronize Track Metadata
+
+To retrieve track metadata (such as ISRC, matched platform IDs, album art, and duration) without raw lyrics payloads:
+
+```bash
+curl -X GET "http://localhost:4000/api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT"
+```
+
+Example response:
+
+```json
+{
+  "id": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  "isrc": "USQX92504224",
+  "spotifyId": "7bxaFZ1O3cHkgLKMsdC3xR",
+  "appleMusicId": "1842957386",
+  "deezerId": "3537337561",
+  "neteaseId": "2755500197",
+  "qqMusicId": "000f1Vqw2ACkez",
+  "title": "Loser",
+  "artists": ["Tame Impala"],
+  "album": "Deadbeat",
+  "durationMs": 223069,
+  "artworkUrl": "https://image-cdn-fa.spotifycdn.com/image/ab67616d00001e02208500450dcd0fd294d7bd3b",
+  "lyricsType": "word",
+  "lyricsProvider": "qqmusic",
+  "isVerified": false,
+  "hasLyrics": true
+}
+```
+
+## 4. Real-Time Streaming (SSE)
+
+For uncached or newly indexed tracks, you can monitor the live resolution lifecycle over Server-Sent Events:
+
+```bash
+curl -N "http://localhost:4000/api/lyrics/stream?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=json"
+```
+
+---
+
+## Supported Formats
+
+LyricsDB dynamically converts stored synchronized lyrics into any requested format:
+
+| Format | Query Param | Content-Type | Precision | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **JSON** | `format=json` *(default)* | `application/json` | Syllable / Word / Plain | Compact token array `[vocalType, startMs, lengthMs, text]` |
+| **TTML** | `format=ttml` | `application/xml` | Syllable / Word | Timed Text XML with word spans, background roles & duets |
+| **LRC** | `format=lrc` | `text/plain` | Line-by-Line | Standard timestamped `[mm:ss.xx]` lyric lines |
+| **LRCA2** | `format=lrca2` | `text/plain` | Syllable | Enhanced A2 LRC with syllable timing annotations |
+| **YRC** | `format=yrc` | `text/plain` | Syllable | NetEase Cloud Music syllable timing format |
+| **QRC** | `format=qrc` | `text/plain` | Syllable | QQ Music syllable timing lyric format |
+| **ESLRC** | `format=eslrc` | `text/plain` | Syllable | Extended Synced LRC format |
+| **ASS** | `format=ass` | `text/plain` | Syllable / Karaoke | Advanced SubStation Alpha karaoke subtitle format |
+| **LYL / LYS / LQE** | `format=lyl`, `lys`, `lqe` | `text/plain` | Line / Syllable | Specialized karaoke & player formats |
+
+## Next Steps
+
+- Explore the [Lyric Formats Documentation](/docs/formats) for full JSON schema details and format specifications.
+- Check the [Supported Platforms Guide](/docs/supported-platforms) to see how multi-source resolvers and scoring tiers operate.
+- Head over to the [API Overview](/docs/api-overview) for the interactive OpenAPI explorer.

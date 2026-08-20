@@ -1,0 +1,115 @@
+---
+title: Streaming
+description: When searching for rare or uncached tracks, fetching lyrics across multiple platforms can take a few seconds. LyricsDB offers real-time streaming over Server-Sent Events (SSE) at `/api/lyrics/stream`.
+---
+
+## Endpoint Specification
+
+- **URL**: `GET /api/lyrics/stream` (or alias `GET /api/tracks/stream`)
+- **Headers**: `Accept: text/event-stream`
+- **Parameters**:
+  - `url`: Direct song/track URL from any streaming platform.
+  - `platform` + `id`: Target platform identifier (`spotify`, `apple`, `deezer`, `netease`, `qq`, `isrc`) and ID.
+  - `format`: Output format (default: `json`, supports `ttml`, `lrc`, `lrca2`, `yrc`, `qrc`, `eslrc`, `ass`, `lyl`, `lys`, `lqe`).
+  - `forceRefresh`: Set to `true` to bypass cached database entries and force a live re-fetch.
+
+---
+
+## Event Lifecycle & Stages
+
+The stream emits real-time events typed by `stage`:
+
+| Stage | Description | Key Payload Data |
+| :--- | :--- | :--- |
+| `init` | Stream connection established | `platform`, `id`, `url`, `format` |
+| `cache_hit` | Track found in PostgreSQL | `id`, `title`, `artists`, `lyricsType`, `lyricsProvider` |
+| `cache_miss` | Track not in database; starting live resolution | `platform`, `id`, `url` |
+| `resolving` | Platform adapter queries & metadata extraction | `step` (`extracting_metadata`, `parsed_metadata`, `searching_adapter`), metadata |
+| `platform_matched` | Cross-platform track match verified | `platform`, `id`, `score` |
+| `lyrics_searching` | Provider being queried for timed lyrics | `provider`, `lyricsType`, `status: "searching"` |
+| `lyrics_found` | Synced lyrics found and validated | `provider`, `lyricsType`, `status: "found"` |
+| `saving` | Ingesting track metadata and lyrics into database | `status: "saving"` |
+| `done` | Final payload with sanitized track and formatted lyrics | `track`, `lyrics`, `format`, `contentType` |
+| `error` | Resolution or network failure | `error` (error message) |
+
+---
+
+## Event Lifecycle
+
+As the server processes the request, it streams structured JSON progress events. A typical uncached Spotify request looks like this:
+
+```
+id: 1
+data: {"stage":"cache_miss","data":{"platform":"spotify","id":"7bxaFZ1O3cHkgLKMsdC3xR","url":"https://open.spotify.com/track/7bxaFZ1O3cHkgLKMsdC3xR?si=d83d33f7b7664d34"},"timestamp":1787262677187}
+
+id: 2
+data: {"stage":"resolving","data":{"step":"extracting_metadata","platform":"spotify","id":"7bxaFZ1O3cHkgLKMsdC3xR"},"timestamp":1787262677190}
+
+id: 3
+data: {"stage":"resolving","data":{"step":"parsed_metadata","title":"Loser","artist":"Tame Impala","artists":["Tame Impala"],"durationMs":223069,"artworkUrl":"https://image-cdn-fa.spotifycdn.com/image/ab67616d00001e02208500450dcd0fd294d7bd3b"},"timestamp":1787262677616}
+
+id: 4
+data: {"stage":"platform_matched","data":{"platform":"spotify","id":"7bxaFZ1O3cHkgLKMsdC3xR","score":1},"timestamp":1787262677776}
+
+id: 5
+data: {"stage":"resolving","data":{"step":"searching_adapter","platform":"appleMusic"},"timestamp":1787262677777}
+
+id: 6
+data: {"stage":"platform_matched","data":{"platform":"deezer","id":"3537337561","score":1},"timestamp":1787262677877}
+
+id: 7
+data: {"stage":"lyrics_searching","data":{"provider":"qqmusic","lyricsType":"word","status":"searching"},"timestamp":1787262679440}
+
+id: 8
+data: {"stage":"lyrics_found","data":{"provider":"qqmusic","lyricsType":"word","status":"found"},"timestamp":1787262680786}
+
+id: 9
+data: {"stage":"saving","data":{"status":"saving"},"timestamp":1787262680786}
+
+id: 10
+data: {"stage":"done","data":{"track":{"id":"791f8b9b-9593-46ce-9852-b1801d88a5d1","isrc":"USQX92504224","spotifyId":"7bxaFZ1O3cHkgLKMsdC3xR","appleMusicId":"1842957386","deezerId":"3537337561","neteaseId":"2755500197","qqMusicId":"000f1Vqw2ACkez","title":"Loser","artists":["Tame Impala"],"album":"Deadbeat","durationMs":223069,"artworkUrl":"https://image-cdn-fa.spotifycdn.com/image/ab67616d00001e02208500450dcd0fd294d7bd3b","lyricsType":"word","lyricsProvider":"qqmusic","isVerified":false,"hasLyrics":true},"lyrics":[[[1,339,160,"Loser ("],[1,499,151,"Explicit) - "],[1,650,153,"Tame "],[1,803,216,"Impala "]]],"format":"json","contentType":"application/json"},"timestamp":1787262680794}
+```
+
+---
+
+## Frontend Integration Example (JavaScript / TypeScript)
+
+```ts
+const eventSource = new EventSource(
+  "/api/lyrics/stream?url=" + encodeURIComponent(songUrl) + "&format=ttml",
+);
+
+eventSource.onmessage = (event) => {
+  const payload = JSON.parse(event.data);
+
+  switch (payload.stage) {
+    case "cache_miss":
+      console.log("Cache miss:", payload.data);
+      break;
+    case "resolving":
+      console.log("Resolving:", payload.data);
+      break;
+    case "platform_matched":
+      console.log("Platform matched:", payload.data);
+      break;
+    case "lyrics_searching":
+      console.log("Searching lyrics:", payload.data);
+      break;
+    case "lyrics_found":
+      console.log("Lyrics found:", payload.data);
+      break;
+    case "saving":
+      console.log("Saving:", payload.data);
+      break;
+    case "done":
+      console.log("Completed track:", payload.data.track);
+      console.log("Word-synced lyrics:", payload.data.lyrics);
+      eventSource.close();
+      break;
+    case "error":
+      console.error("Resolution error:", payload.data.error);
+      eventSource.close();
+      break;
+  }
+};
+```

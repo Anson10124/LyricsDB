@@ -1,0 +1,61 @@
+import { source } from '@/lib/source';
+import { openapi } from '@/lib/openapi';
+import { OpenAPIPage } from '@/components/api-page';
+import { Mermaid } from '@/components/mdx/mermaid';
+import {
+  DocsPage,
+  DocsBody,
+  DocsDescription,
+  DocsTitle,
+} from 'fumadocs-ui/page';
+import { notFound } from 'next/navigation';
+import defaultMdxComponents from 'fumadocs-ui/mdx';
+
+export default async function Page(props: {
+  params: Promise<{ slug?: string[] }>;
+}) {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  const MDX = page.data.body;
+
+  return (
+    <DocsPage toc={page.data.toc} full={page.data.full}>
+      <DocsTitle>{page.data.title}</DocsTitle>
+      <DocsDescription>{page.data.description}</DocsDescription>
+      <DocsBody>
+        <MDX
+          components={{
+            ...defaultMdxComponents,
+            Mermaid,
+            mermaid: Mermaid,
+            OpenAPIPage: async (compProps: any) => (
+              <OpenAPIPage {...(await openapi.preloadOpenAPIPage(page))} {...compProps} />
+            ),
+            APIPage: async (compProps: any) => (
+              <OpenAPIPage {...(await openapi.preloadOpenAPIPage(page))} {...compProps} />
+            ),
+          }}
+        />
+      </DocsBody>
+    </DocsPage>
+  );
+}
+
+export async function generateStaticParams() {
+  return source.generateParams();
+}
+
+export async function generateMetadata(props: {
+  params: Promise<{ slug?: string[] }>;
+}) {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  return {
+    title: page.data.title,
+    description: page.data.description,
+  };
+}

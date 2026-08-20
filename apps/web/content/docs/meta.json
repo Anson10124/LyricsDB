@@ -1,0 +1,14 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "quickstart",
+    "supported-platforms",
+    "formats",
+    "streaming",
+    "---API Reference---",
+    "api-overview",
+    "tracks",
+    "lyrics"
+  ]
+}
