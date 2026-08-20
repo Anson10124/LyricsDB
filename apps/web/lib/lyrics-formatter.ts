@@ -1,6 +1,7 @@
 import { TTMLGenerator } from "@applemusic-like-lyrics/ttml";
 import {
   stringifyLrc,
+  stringifyEslrc,
   stringifyYrc,
   stringifyQrc,
   stringifyAss,
@@ -9,7 +10,7 @@ import {
 } from "@applemusic-like-lyrics/lyric";
 import type { CompactLyricWord, SyncedLyricsPayload } from "@repo/types";
 
-export type LyricsViewFormat = "synced" | "ttml" | "lrc" | "yrc" | "qrc" | "ass" | "json";
+export type LyricsViewFormat = "synced" | "ttml" | "lrc" | "eslrc" | "yrc" | "qrc" | "ass" | "json";
 
 export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLine[] {
   if (!payload || !Array.isArray(payload)) {
@@ -56,6 +57,66 @@ export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLi
   return amllLines;
 }
 
+export function formatXml(xml: string, indent = "  "): string {
+  if (!xml || typeof xml !== "string") return "";
+
+  // Normalize XML
+  const cleanXml = xml
+    .replace(/>\s*</g, "><")
+    .replace(/\r\n|\r/g, "\n")
+    .trim();
+
+  let formatted = "";
+  let pad = 0;
+
+  // Match tags, comments, declarations, and text nodes
+  const tokens = cleanXml.match(/(<[^>]+>|[^<]+)/g) || [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!.trim();
+    if (!token) continue;
+
+    // Check if it's an opening tag followed by text and its closing tag
+    if (
+      token.startsWith("<") &&
+      !token.startsWith("</") &&
+      !token.endsWith("/>") &&
+      !token.startsWith("<?") &&
+      !token.startsWith("<!--")
+    ) {
+      const match = token.match(/^<([a-zA-Z0-9_:-]+)/);
+      const tagName = match ? match[1] : null;
+
+      if (tagName && i + 2 < tokens.length) {
+        const nextToken = tokens[i + 1]!;
+        const nextNextToken = tokens[i + 2]!.trim();
+
+        if (!nextToken.startsWith("<") && nextNextToken === `</${tagName}>`) {
+          formatted += `${indent.repeat(pad)}${token}${nextToken}${nextNextToken}\n`;
+          i += 2;
+          continue;
+        }
+      }
+    }
+
+    if (token.startsWith("<?") || token.startsWith("<!") || token.startsWith("<!--")) {
+      formatted += `${indent.repeat(pad)}${token}\n`;
+    } else if (token.startsWith("</")) {
+      pad = Math.max(0, pad - 1);
+      formatted += `${indent.repeat(pad)}${token}\n`;
+    } else if (token.startsWith("<") && (token.endsWith("/>") || token.endsWith("/ >"))) {
+      formatted += `${indent.repeat(pad)}${token}\n`;
+    } else if (token.startsWith("<")) {
+      formatted += `${indent.repeat(pad)}${token}\n`;
+      pad += 1;
+    } else {
+      formatted += `${indent.repeat(pad)}${token}\n`;
+    }
+  }
+
+  return formatted.trim();
+}
+
 export function formatLyricsOnClient(
   payload: SyncedLyricsPayload | null | undefined,
   format: LyricsViewFormat,
@@ -83,7 +144,7 @@ export function formatLyricsOnClient(
             endTime: w.endTime,
           })),
         }));
-        return generator.generate({
+        const rawXml = generator.generate({
           lines: ttmlLines as unknown as Parameters<typeof generator.generate>[0]["lines"],
           metadata: {
             title: metadata.title ? [metadata.title] : undefined,
@@ -91,9 +152,12 @@ export function formatLyricsOnClient(
             album: metadata.album ? [metadata.album] : undefined,
           },
         });
+        return formatXml(rawXml);
       }
       case "lrc":
         return stringifyLrc(amllLines);
+      case "eslrc":
+        return stringifyEslrc(amllLines);
       case "yrc":
         return stringifyYrc(amllLines);
       case "qrc":

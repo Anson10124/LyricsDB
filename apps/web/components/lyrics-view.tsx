@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Copy, Download, ExternalLink, Music2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Music2 } from "lucide-react";
 import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
 import {
   formatLyricsOnClient,
+  formatXml,
   type LyricsViewFormat,
 } from "@/lib/lyrics-formatter";
 import { AmllPlayer } from "@/components/amll-player";
+import { LyricsCodeViewer } from "@/components/lyrics-code-viewer";
 
 interface LyricsViewProps {
   track: SanitizedTrack<TrackRecord>;
@@ -26,13 +28,17 @@ function formatDuration(ms?: number): string {
 
 export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
   const [selectedFormat, setSelectedFormat] = useState<LyricsViewFormat>("synced");
-  const [copied, setCopied] = useState(false);
 
   const isSyncedPayload = Array.isArray(rawLyrics);
 
   const formattedText = useMemo(() => {
     if (!rawLyrics) return "";
-    if (typeof rawLyrics === "string") return rawLyrics;
+    if (typeof rawLyrics === "string") {
+      if (rawLyrics.trim().startsWith("<") || selectedFormat === "ttml") {
+        return formatXml(rawLyrics);
+      }
+      return rawLyrics;
+    }
     if (selectedFormat === "synced") return "";
 
     return formatLyricsOnClient(rawLyrics as SyncedLyricsPayload, selectedFormat, {
@@ -41,53 +47,6 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       album: track.album || undefined,
     });
   }, [rawLyrics, selectedFormat, track]);
-
-  const handleCopy = async () => {
-    let contentToCopy = "";
-    if (selectedFormat === "synced" && isSyncedPayload) {
-      // Copy plain lyrics text
-      contentToCopy = (rawLyrics as SyncedLyricsPayload)
-        .map((line) => line.map((w) => w[3]).join(""))
-        .join("\n");
-    } else {
-      contentToCopy = formattedText;
-    }
-
-    try {
-      await navigator.clipboard.writeText(contentToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard write error
-    }
-  };
-
-  const handleDownload = () => {
-    let content = "";
-    let extension = "txt";
-
-    if (selectedFormat === "synced" || selectedFormat === "ttml") {
-      content = isSyncedPayload
-        ? formatLyricsOnClient(rawLyrics as SyncedLyricsPayload, "ttml", {
-            title: track.title,
-            artist: track.artists?.join(", "),
-            album: track.album || undefined,
-          })
-        : (rawLyrics as string);
-      extension = "ttml";
-    } else {
-      content = formattedText;
-      extension = selectedFormat;
-    }
-
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${track.title} - ${track.artists?.join(", ")}.${extension}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div className="w-full max-w-3xl flex flex-col gap-6 py-6 px-4">
@@ -111,28 +70,6 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             <span>Search another song</span>
           </Link>
         )}
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={!rawLyrics}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-            <span>{copied ? "Copied" : "Copy"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={!rawLyrics}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download className="size-3.5" />
-            <span>Download</span>
-          </button>
-        </div>
       </div>
 
       {/* Track Header Card */}
@@ -208,8 +145,8 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       </div>
 
       {/* Format Selector Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto">
-        {(["synced", "ttml", "lrc", "yrc", "json"] as LyricsViewFormat[]).map((fmt) => (
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5">
+        {(["synced", "ttml", "lrc", "eslrc", "ass", "json"] as LyricsViewFormat[]).map((fmt) => (
           <button
             key={fmt}
             type="button"
@@ -221,7 +158,7 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
                 : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            {fmt === "synced" ? "Interactive" : fmt}
+            {fmt === "synced" ? "Interactive" : fmt === "eslrc" ? "ESLRC" : fmt}
           </button>
         ))}
       </div>
@@ -235,11 +172,7 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       ) : selectedFormat === "synced" && isSyncedPayload ? (
         <AmllPlayer track={track} rawLyrics={rawLyrics as SyncedLyricsPayload} />
       ) : (
-        <div className="rounded-2xl h-[520px] border border-border/70 bg-card/80 p-5 shadow-xs overflow-hidden min-h-[300px] max-h-[600px] overflow-y-auto">
-          <pre className="text-xs font-mono text-foreground/90 whitespace-pre-wrap break-all leading-relaxed">
-            {formattedText}
-          </pre>
-        </div>
+        <LyricsCodeViewer format={selectedFormat} code={formattedText} track={track} />
       )}
     </div>
   );
