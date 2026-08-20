@@ -260,3 +260,124 @@ export async function refreshSpotifyToken(
 
   return newToken;
 }
+
+const MUSIXMATCH_PROVIDER = 'musixmatch';
+const MUSIXMATCH_TOKEN_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+function generateMusixmatchRandomId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+}
+
+export async function fetchAnonymousMusixmatchToken(options?: {
+  timeout?: number;
+  maxRetries?: number;
+}): Promise<string> {
+  const timeout = options?.timeout ?? 8000;
+  const maxRetries = options?.maxRetries ?? 8;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const t = generateMusixmatchRandomId();
+    const url = `https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0&t=${t}`;
+
+    try {
+      const res = await fetch(url, {
+        headers: {
+          authority: 'apic-desktop.musixmatch.com',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as {
+          message?: {
+            header?: { status_code?: number; hint?: string };
+            body?: { user_token?: string };
+          };
+        };
+
+        const token = data.message?.body?.user_token;
+        if (token && token !== 'Upgrade. Paid script.') {
+          return token;
+        }
+
+        const hint = data.message?.header?.hint;
+        if (hint === 'captcha' || data.message?.header?.status_code === 401) {
+          // Wait briefly before next attempt
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          continue;
+        }
+      }
+    } catch {
+      // Retry on network/timeout error
+    }
+
+    if (attempt < maxRetries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+  }
+
+  throw new Error('Failed to acquire Musixmatch user token after multiple attempts');
+}
+
+export async function getMusixmatchToken(
+  dbClient?: DatabaseClient,
+  options?: { timeout?: number }
+): Promise<string> {
+  const client = dbClient || defaultDb;
+
+  try {
+    const existing = await client
+      .select()
+      .from(jwts)
+      .where(eq(jwts.provider, MUSIXMATCH_PROVIDER))
+      .limit(1);
+
+    const record = existing[0];
+    if (record?.token && record?.expireAt) {
+      if (new Date(record.expireAt) > new Date()) {
+        return record.token;
+      }
+    }
+  } catch {
+    // If DB read fails, fallback to direct fetch
+  }
+
+  return refreshMusixmatchToken(client, options);
+}
+
+export async function refreshMusixmatchToken(
+  dbClient?: DatabaseClient,
+  options?: { timeout?: number }
+): Promise<string> {
+  const client = dbClient || defaultDb;
+  const newToken = await fetchAnonymousMusixmatchToken(options);
+  const expireAt = new Date(Date.now() + MUSIXMATCH_TOKEN_CACHE_TTL_MS);
+
+  try {
+    await client
+      .insert(jwts)
+      .values({
+        provider: MUSIXMATCH_PROVIDER,
+        token: newToken,
+        expireAt,
+      })
+      .onConflictDoUpdate({
+        target: jwts.provider,
+        set: {
+          token: newToken,
+          expireAt,
+        },
+      });
+  } catch {
+    // Graceful fallback if DB write fails
+  }
+
+  return newToken;
+}

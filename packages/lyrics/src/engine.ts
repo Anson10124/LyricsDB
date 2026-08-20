@@ -1,10 +1,12 @@
 import type { LyricsType, SyncedLyricsPayload } from '@repo/types';
 import { fetchDeezerLyrics } from './fetchers/deezer.js';
 import { fetchLrclibLyrics } from './fetchers/lrclib.js';
+import { fetchMusixmatchLyrics } from './fetchers/musixmatch.js';
 import { fetchNeteaseLyrics } from './fetchers/netease.js';
 import { fetchQQMusicLyrics } from './fetchers/qq-music.js';
 import { parseDeezerSyncedLines, parseDeezerWordLyrics } from './parsers/deezer.js';
 import { parseLrc } from './parsers/lrc.js';
+import { parseMusixmatchRichSync, parseMusixmatchSubtitles } from './parsers/musixmatch.js';
 import { parseQrc } from './parsers/qrc.js';
 import { parseYrc } from './parsers/yrc.js';
 import { formatLyricsPayload } from './utils/converter.js';
@@ -22,6 +24,7 @@ export interface ResolveLyricsContext {
   qqMusicId?: string;
   appleMusicId?: string;
   spotifyId?: string;
+  musixmatchId?: string;
 }
 
 export interface ResolvedLyricsResult {
@@ -33,9 +36,9 @@ export interface ResolvedLyricsResult {
 
 export class LyricsEngine {
   // Automatically resolves lyrics following priority order:
-  // Tier 1: Word-by-Word (QQ Music QRC -> Deezer Word-by-Word -> NetEase YRC)
-  // Tier 2: Line-by-Line (QQ Music LRC -> Deezer Synced LRC -> NetEase LRC -> LRCLIB Synced LRC)
-  // Tier 3: Plain text (Deezer Plain -> LRCLIB Plain)
+  // Tier 1: Word-by-Word (QQ Music QRC -> Deezer Word-by-Word -> NetEase YRC -> Musixmatch RichSync)
+  // Tier 2: Line-by-Line (QQ Music LRC -> Deezer Synced LRC -> NetEase LRC -> Musixmatch Subtitles -> LRCLIB Synced LRC)
+  // Tier 3: Plain text (Deezer Plain -> Musixmatch Plain -> LRCLIB Plain)
   async resolveLyrics(context: ResolveLyricsContext): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
     const metadata = { title: context.title, artist };
@@ -43,7 +46,9 @@ export class LyricsEngine {
     let qqLineCandidate: ResolvedLyricsResult | null = null;
     let deezerLineCandidate: ResolvedLyricsResult | null = null;
     let neteaseLineCandidate: ResolvedLyricsResult | null = null;
+    let musixmatchLineCandidate: ResolvedLyricsResult | null = null;
     let deezerPlainCandidate: ResolvedLyricsResult | null = null;
+    let musixmatchPlainCandidate: ResolvedLyricsResult | null = null;
 
     // Step 1: Try QQ Music for Word-by-Word (QRC), or stash Line-by-Line (LRC) candidate
     if (context.qqMusicId) {
@@ -162,7 +167,68 @@ export class LyricsEngine {
       }
     }
 
-    // Step 4: If no Word-by-Word lyrics were found, fall back to Line-by-Line synced lyrics
+    // Step 4: Try Musixmatch (using Spotify ID, ISRC, Apple Music ID, or Title/Artist)
+    if (
+      context.spotifyId ||
+      context.isrc ||
+      context.appleMusicId ||
+      context.musixmatchId ||
+      context.title
+    ) {
+      try {
+        const mxmData = await fetchMusixmatchLyrics({
+          spotifyId: context.spotifyId,
+          isrc: context.isrc,
+          appleMusicId: context.appleMusicId,
+          musixmatchId: context.musixmatchId,
+          title: context.title,
+          artist,
+          artists: context.artists,
+          durationMs: context.durationMs,
+        });
+
+        if (mxmData?.richsync) {
+          const parsed = parseMusixmatchRichSync(mxmData.richsync, metadata);
+          if (parsed.length > 0) {
+            return {
+              lyricsType: 'word',
+              lyrics: parsed,
+              source: 'musixmatch-richsync',
+              provider: 'musixmatch',
+            };
+          }
+        }
+
+        if (mxmData?.subtitles) {
+          const parsed = parseMusixmatchSubtitles(mxmData.subtitles, metadata);
+          if (parsed.length > 0) {
+            musixmatchLineCandidate = {
+              lyricsType: 'line',
+              lyrics: parsed,
+              source: 'musixmatch-subtitles',
+              provider: 'musixmatch',
+            };
+          }
+        }
+
+        if (
+          mxmData?.plainLyrics &&
+          !mxmData.track?.instrumental &&
+          !isPlaceholderLyricText(mxmData.plainLyrics, metadata)
+        ) {
+          musixmatchPlainCandidate = {
+            lyricsType: 'plain',
+            lyrics: mxmData.plainLyrics,
+            source: 'musixmatch-plain',
+            provider: 'musixmatch',
+          };
+        }
+      } catch {
+        // Fallthrough
+      }
+    }
+
+    // Step 5: If no Word-by-Word lyrics were found, fall back to Line-by-Line synced lyrics
     if (qqLineCandidate) {
       return qqLineCandidate;
     }
@@ -175,7 +241,11 @@ export class LyricsEngine {
       return neteaseLineCandidate;
     }
 
-    // Step 5: Fallback to LRCLIB (Line-by-Line Synced & Plain)
+    if (musixmatchLineCandidate) {
+      return musixmatchLineCandidate;
+    }
+
+    // Step 6: Fallback to LRCLIB (Line-by-Line Synced & Plain)
     if (context.title) {
       try {
         const lrclibData = await fetchLrclibLyrics({
@@ -198,7 +268,11 @@ export class LyricsEngine {
           }
         }
 
-        if (lrclibData?.plainLyrics && !lrclibData.instrumental && !isPlaceholderLyricText(lrclibData.plainLyrics, metadata)) {
+        if (
+          lrclibData?.plainLyrics &&
+          !lrclibData.instrumental &&
+          !isPlaceholderLyricText(lrclibData.plainLyrics, metadata)
+        ) {
           return {
             lyricsType: 'plain',
             lyrics: lrclibData.plainLyrics,
@@ -211,9 +285,13 @@ export class LyricsEngine {
       }
     }
 
-    // Step 6: Fallback to Deezer Plain text if LRCLIB had nothing
+    // Step 7: Fallback to Deezer Plain or Musixmatch Plain text if LRCLIB had nothing
     if (deezerPlainCandidate) {
       return deezerPlainCandidate;
+    }
+
+    if (musixmatchPlainCandidate) {
+      return musixmatchPlainCandidate;
     }
 
     return null;
