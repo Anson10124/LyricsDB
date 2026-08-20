@@ -1,20 +1,26 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Outfit, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
-import { Outfit } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider";
 
-const outfit = Outfit({subsets:['latin'],variable:'--font-sans'});
-
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
   variable: "--font-geist-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -28,8 +34,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", outfit.variable)} suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html
+      lang="en"
+      className={cn("font-sans", outfit.variable, inter.variable, geistMono.variable)}
+      suppressHydrationWarning
+    >
+      <body className="antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

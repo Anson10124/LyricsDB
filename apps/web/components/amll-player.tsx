@@ -88,7 +88,7 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   }
 
   return (
-    <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none">
+    <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none font-[family-name:var(--font-inter)]">
       {track.artworkUrl && (
         <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
           <BackgroundRender
