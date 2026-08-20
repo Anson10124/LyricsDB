@@ -8,12 +8,23 @@ export class AppService {
       version: '0.0.1',
       status: 'operational',
       endpoints: {
-        health: 'GET /health',
-        tracksGet: 'GET /api/tracks?platform={spotify|apple|deezer|netease|qq}&id={id} (or ?url={link})',
-        tracksSearch: 'GET /api/tracks/search?q={search_term}',
-        trackById: 'GET /api/tracks/{uuid}',
-        resolveTest: 'GET /api/resolve?url={streaming_link}',
-        sampleTest: 'GET /api/sample',
+        system: {
+          server: 'GET /',
+          health: 'GET /health',
+        },
+        tracks: {
+          getOrSync: 'GET /api/tracks?platform={spotify|apple|deezer|netease|qq}&id={id} (or ?url={link})',
+          search: 'GET /api/tracks/search?q={search_term}&limit={limit}',
+          getById: 'GET /api/tracks/{id}',
+        },
+        lyrics: {
+          getByTrackId: 'GET /api/tracks/{id}/lyrics?format={json|ttml|lrc|...}',
+          getOrSyncLyrics: 'GET /api/lyrics?platform={platform}&id={id}&format={format} (or ?url={link}&format={format})',
+        },
+        resolver: {
+          resolve: 'GET /api/resolver?url={streaming_link}',
+          sample: 'GET /api/resolver/sample',
+        },
       },
     };
   }
