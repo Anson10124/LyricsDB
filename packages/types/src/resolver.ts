@@ -72,6 +72,14 @@ export interface ResolveOptions {
   minInclusionThreshold?: number;
   preferredCountry?: string;
   customHeaders?: Record<string, string>;
+  onProgress?: (event: {
+    stage: string;
+    step?: string;
+    platform?: string;
+    id?: string;
+    score?: number;
+    data?: Record<string, unknown>;
+  }) => void;
 }
 
 export interface MusicAdapter {

@@ -25,6 +25,12 @@ export interface ResolveLyricsContext {
   appleMusicId?: string;
   spotifyId?: string;
   musixmatchId?: string;
+  onProgress?: (event: {
+    stage: 'lyrics_searching' | 'lyrics_found';
+    provider: string;
+    lyricsType?: LyricsType;
+    status?: 'searching' | 'found' | 'miss' | 'fallback';
+  }) => void;
 }
 
 export interface ResolvedLyricsResult {
@@ -52,6 +58,11 @@ export class LyricsEngine {
 
     // Step 1: Try QQ Music for Word-by-Word (QRC), or stash Line-by-Line (LRC) candidate
     if (context.qqMusicId) {
+      context.onProgress?.({
+        stage: 'lyrics_searching',
+        provider: 'qqmusic',
+        status: 'searching',
+      });
       try {
         const qqData = await fetchQQMusicLyrics({
           qqMusicId: context.qqMusicId,
@@ -60,6 +71,12 @@ export class LyricsEngine {
         if (qqData?.qrc) {
           const parsed = parseQrc(qqData.qrc, metadata);
           if (parsed.length > 0) {
+            context.onProgress?.({
+              stage: 'lyrics_found',
+              provider: 'qqmusic',
+              lyricsType: 'word',
+              status: 'found',
+            });
             return {
               lyricsType: 'word',
               lyrics: parsed,
@@ -78,6 +95,12 @@ export class LyricsEngine {
               source: 'qq-lrc',
               provider: 'qqmusic',
             };
+            context.onProgress?.({
+              stage: 'lyrics_searching',
+              provider: 'qqmusic',
+              lyricsType: 'line',
+              status: 'fallback',
+            });
           }
         }
       } catch {
@@ -87,6 +110,11 @@ export class LyricsEngine {
 
     // Step 2: Try Deezer for Word-by-Word, or stash Line-by-Line / Plain text candidates
     if (context.deezerId) {
+      context.onProgress?.({
+        stage: 'lyrics_searching',
+        provider: 'deezer',
+        status: 'searching',
+      });
       try {
         const deezerData = await fetchDeezerLyrics({
           deezerId: context.deezerId,
@@ -95,6 +123,12 @@ export class LyricsEngine {
         if (deezerData?.synchronizedWordByWordLines && deezerData.synchronizedWordByWordLines.length > 0) {
           const parsed = parseDeezerWordLyrics(deezerData.synchronizedWordByWordLines, metadata);
           if (parsed.length > 0) {
+            context.onProgress?.({
+              stage: 'lyrics_found',
+              provider: 'deezer',
+              lyricsType: 'word',
+              status: 'found',
+            });
             return {
               lyricsType: 'word',
               lyrics: parsed,
@@ -113,6 +147,12 @@ export class LyricsEngine {
               source: 'deezer-synced',
               provider: 'deezer',
             };
+            context.onProgress?.({
+              stage: 'lyrics_searching',
+              provider: 'deezer',
+              lyricsType: 'line',
+              status: 'fallback',
+            });
           }
         }
 
@@ -131,6 +171,11 @@ export class LyricsEngine {
 
     // Step 3: Try NetEase Cloud Music for Word-by-Word (YRC), or stash Line-by-Line (LRC) candidate
     if (context.neteaseId) {
+      context.onProgress?.({
+        stage: 'lyrics_searching',
+        provider: 'netease',
+        status: 'searching',
+      });
       try {
         const neteaseData = await fetchNeteaseLyrics({
           neteaseId: context.neteaseId,
@@ -141,6 +186,12 @@ export class LyricsEngine {
         if (neteaseData?.yrc?.lyric) {
           const parsed = parseYrc(neteaseData.yrc.lyric, metadata);
           if (parsed.length > 0) {
+            context.onProgress?.({
+              stage: 'lyrics_found',
+              provider: 'netease',
+              lyricsType: 'word',
+              status: 'found',
+            });
             return {
               lyricsType: 'word',
               lyrics: parsed,
@@ -160,6 +211,12 @@ export class LyricsEngine {
               source: 'netease-lrc',
               provider: 'netease',
             };
+            context.onProgress?.({
+              stage: 'lyrics_searching',
+              provider: 'netease',
+              lyricsType: 'line',
+              status: 'fallback',
+            });
           }
         }
       } catch {
@@ -175,6 +232,11 @@ export class LyricsEngine {
       context.musixmatchId ||
       context.title
     ) {
+      context.onProgress?.({
+        stage: 'lyrics_searching',
+        provider: 'musixmatch',
+        status: 'searching',
+      });
       try {
         const mxmData = await fetchMusixmatchLyrics({
           spotifyId: context.spotifyId,
@@ -190,6 +252,12 @@ export class LyricsEngine {
         if (mxmData?.richsync) {
           const parsed = parseMusixmatchRichSync(mxmData.richsync, metadata);
           if (parsed.length > 0) {
+            context.onProgress?.({
+              stage: 'lyrics_found',
+              provider: 'musixmatch',
+              lyricsType: 'word',
+              status: 'found',
+            });
             return {
               lyricsType: 'word',
               lyrics: parsed,
@@ -208,6 +276,12 @@ export class LyricsEngine {
               source: 'musixmatch-subtitles',
               provider: 'musixmatch',
             };
+            context.onProgress?.({
+              stage: 'lyrics_searching',
+              provider: 'musixmatch',
+              lyricsType: 'line',
+              status: 'fallback',
+            });
           }
         }
 
@@ -230,23 +304,52 @@ export class LyricsEngine {
 
     // Step 5: If no Word-by-Word lyrics were found, fall back to Line-by-Line synced lyrics
     if (qqLineCandidate) {
+      context.onProgress?.({
+        stage: 'lyrics_found',
+        provider: 'qqmusic',
+        lyricsType: 'line',
+        status: 'found',
+      });
       return qqLineCandidate;
     }
 
     if (deezerLineCandidate) {
+      context.onProgress?.({
+        stage: 'lyrics_found',
+        provider: 'deezer',
+        lyricsType: 'line',
+        status: 'found',
+      });
       return deezerLineCandidate;
     }
 
     if (neteaseLineCandidate) {
+      context.onProgress?.({
+        stage: 'lyrics_found',
+        provider: 'netease',
+        lyricsType: 'line',
+        status: 'found',
+      });
       return neteaseLineCandidate;
     }
 
     if (musixmatchLineCandidate) {
+      context.onProgress?.({
+        stage: 'lyrics_found',
+        provider: 'musixmatch',
+        lyricsType: 'line',
+        status: 'found',
+      });
       return musixmatchLineCandidate;
     }
 
     // Step 6: Fallback to LRCLIB (Line-by-Line Synced & Plain)
     if (context.title) {
+      context.onProgress?.({
+        stage: 'lyrics_searching',
+        provider: 'lrclib',
+        status: 'searching',
+      });
       try {
         const lrclibData = await fetchLrclibLyrics({
           title: context.title,
@@ -259,6 +362,12 @@ export class LyricsEngine {
         if (lrclibData?.syncedLyrics) {
           const parsed = parseLrc(lrclibData.syncedLyrics, metadata);
           if (parsed.length > 0) {
+            context.onProgress?.({
+              stage: 'lyrics_found',
+              provider: 'lrclib',
+              lyricsType: 'line',
+              status: 'found',
+            });
             return {
               lyricsType: 'line',
               lyrics: parsed,
@@ -273,6 +382,12 @@ export class LyricsEngine {
           !lrclibData.instrumental &&
           !isPlaceholderLyricText(lrclibData.plainLyrics, metadata)
         ) {
+          context.onProgress?.({
+            stage: 'lyrics_found',
+            provider: 'lrclib',
+            lyricsType: 'plain',
+            status: 'found',
+          });
           return {
             lyricsType: 'plain',
             lyrics: lrclibData.plainLyrics,
@@ -287,10 +402,22 @@ export class LyricsEngine {
 
     // Step 7: Fallback to Deezer Plain or Musixmatch Plain text if LRCLIB had nothing
     if (deezerPlainCandidate) {
+      context.onProgress?.({
+        stage: 'lyrics_found',
+        provider: 'deezer',
+        lyricsType: 'plain',
+        status: 'found',
+      });
       return deezerPlainCandidate;
     }
 
     if (musixmatchPlainCandidate) {
+      context.onProgress?.({
+        stage: 'lyrics_found',
+        provider: 'musixmatch',
+        lyricsType: 'plain',
+        status: 'found',
+      });
       return musixmatchPlainCandidate;
     }
 

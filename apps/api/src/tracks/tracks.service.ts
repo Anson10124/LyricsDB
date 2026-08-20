@@ -26,12 +26,15 @@ import type {
   FormattedLyricsResult,
   GetLyricsOptions,
   GetOrSyncTrackOptions,
+  ProgressLogEvent,
   SanitizedTrack,
+  StreamEventStage,
+  StreamLyricsOptions,
 } from '@repo/types';
 import { DATABASE_CONNECTION } from '../database/database.constants';
 import { ResolverService } from '../resolver/resolver.service';
 
-export type { GetOrSyncTrackOptions, GetLyricsOptions };
+export type { GetOrSyncTrackOptions, GetLyricsOptions, StreamLyricsOptions, ProgressLogEvent };
 
 @Injectable()
 export class TracksService {
@@ -307,5 +310,271 @@ export class TracksService {
       .returning();
 
     return saved[0]!;
+  }
+
+  // Real-time EventStream (SSE) live track and lyrics resolution
+  async streamLyrics(
+    options: StreamLyricsOptions,
+    emitEvent: (event: ProgressLogEvent) => void
+  ): Promise<void> {
+    const format = options.format || 'json';
+    const { platform, id, url, forceRefresh } = options;
+
+    let targetPlatform = platform ? normalizePlatform(platform) : undefined;
+    let targetId = id?.trim();
+    let targetUrl = url?.trim();
+
+    emitEvent({
+      stage: 'init',
+      data: { platform: targetPlatform, id: targetId, url: targetUrl, format },
+      timestamp: Date.now(),
+    });
+
+    // Step 1: Derive platform and id if needed
+    if (targetUrl && (!targetPlatform || !targetId)) {
+      const derived = derivePlatformAndIdFromUrl(targetUrl);
+      if (derived) {
+        targetPlatform = derived.platform;
+        targetId = derived.id;
+      }
+    }
+
+    // Step 2: Check Database Cache (unless forceRefresh)
+    let cachedTrack: Track | null = null;
+    if (!forceRefresh && targetPlatform && targetId) {
+      cachedTrack = await this.findByPlatformId(targetPlatform, targetId);
+    }
+
+    if (cachedTrack) {
+      const sanitized = this.sanitizeTrack(cachedTrack);
+      let formattedLyrics: FormattedLyricsResult | undefined;
+      if (cachedTrack.lyrics) {
+        formattedLyrics = this.lyricsEngine.formatLyrics(cachedTrack.lyrics, format);
+      }
+
+      emitEvent({
+        stage: 'cache_hit',
+        data: {
+          id: cachedTrack.id,
+          title: cachedTrack.title,
+          artists: cachedTrack.artists,
+          isrc: cachedTrack.isrc,
+          spotifyId: cachedTrack.spotifyId,
+          appleMusicId: cachedTrack.appleMusicId,
+          deezerId: cachedTrack.deezerId,
+          neteaseId: cachedTrack.neteaseId,
+          qqMusicId: cachedTrack.qqMusicId,
+          lyricsType: cachedTrack.lyricsType,
+          lyricsProvider: cachedTrack.lyricsProvider,
+        },
+        timestamp: Date.now(),
+      });
+
+      emitEvent({
+        stage: 'done',
+        data: {
+          track: sanitized,
+          lyrics: formattedLyrics?.content,
+          format,
+          contentType: formattedLyrics?.contentType,
+        },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    if (!forceRefresh) {
+      emitEvent({
+        stage: 'cache_miss',
+        data: { platform: targetPlatform, id: targetId, url: targetUrl },
+        timestamp: Date.now(),
+      });
+    }
+
+    // Step 3: Build target URL if not provided
+    if (!targetUrl && targetPlatform && targetId) {
+      try {
+        targetUrl = buildPlatformUrl(targetPlatform, targetId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid platform/id';
+        emitEvent({
+          stage: 'error',
+          data: { error: message },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+    }
+
+    if (!targetUrl) {
+      emitEvent({
+        stage: 'error',
+        data: { error: 'Could not determine streaming URL to resolve. Please provide "url" or both "platform" and "id".' },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    // Step 4: Live Resolution with onProgress
+    try {
+      const resolved: ResolveResult = await this.resolverService.resolveUrl(targetUrl, undefined, {
+        onProgress: (pEvent) => {
+          emitEvent({
+            stage: pEvent.stage as StreamEventStage,
+            data: {
+              step: pEvent.step,
+              platform: pEvent.platform,
+              id: pEvent.id,
+              score: pEvent.score,
+              ...pEvent.data,
+            },
+            timestamp: Date.now(),
+          });
+        },
+      });
+
+      const meta = resolved.metadata;
+      const spotifyLink = resolved.links['spotify'];
+      const deezerLink = resolved.links['deezer'];
+      const neteaseLink = resolved.links['netease'];
+      const appleLink = resolved.links['appleMusic'] || resolved.links['applemusic'];
+      const qqLink = resolved.links['qqMusic'] || resolved.links['qqmusic'];
+
+      const platformLinks: Array<[string, ResolvedLink | null | undefined]> = [
+        ['spotify', spotifyLink],
+        ['deezer', deezerLink],
+        ['netease', neteaseLink],
+        ['apple', appleLink],
+        ['qq', qqLink],
+      ];
+
+      let existingTrack: Track | null = null;
+      for (const [platformName, link] of platformLinks) {
+        const platformId = this.getHighConfidencePlatformId(link);
+        if (platformId) {
+          existingTrack = await this.findByPlatformId(platformName, platformId);
+          if (existingTrack) break;
+        }
+      }
+
+      const validSpotifyId = this.getHighConfidencePlatformId(spotifyLink);
+      const validDeezerId = this.getHighConfidencePlatformId(deezerLink);
+      const validNeteaseId = this.getHighConfidencePlatformId(neteaseLink);
+      const validAppleId = this.getHighConfidencePlatformId(appleLink);
+      const validQqId = this.getHighConfidencePlatformId(qqLink);
+
+      // Step 5: Live Lyrics Fetching with onProgress
+      let lyricsType = existingTrack?.lyricsType ?? null;
+      let lyrics = existingTrack?.lyrics ?? null;
+      let lyricsProvider = existingTrack?.lyricsProvider ?? null;
+
+      if (!lyrics) {
+        const resolvedLyrics = await this.lyricsEngine.resolveLyrics({
+          title: meta.title,
+          artist: meta.artist,
+          artists: meta.artists,
+          album: meta.album,
+          durationMs: meta.durationMs,
+          isrc: meta.isrc || existingTrack?.isrc || undefined,
+          deezerId: validDeezerId || existingTrack?.deezerId || undefined,
+          neteaseId: validNeteaseId || existingTrack?.neteaseId || undefined,
+          qqMusicId: validQqId || existingTrack?.qqMusicId || undefined,
+          appleMusicId: validAppleId || existingTrack?.appleMusicId || undefined,
+          spotifyId: validSpotifyId || existingTrack?.spotifyId || undefined,
+          onProgress: (lEvent) => {
+            emitEvent({
+              stage: lEvent.stage,
+              data: {
+                provider: lEvent.provider,
+                lyricsType: lEvent.lyricsType,
+                status: lEvent.status,
+              },
+              timestamp: Date.now(),
+            });
+          },
+        });
+
+        if (resolvedLyrics) {
+          lyricsType = resolvedLyrics.lyricsType;
+          lyrics = resolvedLyrics.lyrics;
+          lyricsProvider = resolvedLyrics.provider;
+        } else {
+          emitEvent({
+            stage: 'lyrics_searching',
+            data: { status: 'not_found' },
+            timestamp: Date.now(),
+          });
+        }
+      } else {
+        emitEvent({
+          stage: 'lyrics_found',
+          data: { lyricsType, lyricsProvider, status: 'cached' },
+          timestamp: Date.now(),
+        });
+      }
+
+      // Step 6: Ingest / Update PostgreSQL
+      emitEvent({
+        stage: 'saving',
+        data: { status: 'saving' },
+        timestamp: Date.now(),
+      });
+
+      const newTrackData: NewTrack = {
+        ...(existingTrack?.id ? { id: existingTrack.id } : {}),
+        title: meta.title,
+        artists: meta.artists?.length ? meta.artists : (meta.artist ? [meta.artist] : []),
+        album: meta.album,
+        durationMs: meta.durationMs || 0,
+        artworkUrl: meta.image,
+        isrc: meta.isrc || existingTrack?.isrc,
+        spotifyId: validSpotifyId || existingTrack?.spotifyId,
+        deezerId: validDeezerId || existingTrack?.deezerId,
+        neteaseId: validNeteaseId || existingTrack?.neteaseId,
+        appleMusicId: validAppleId || existingTrack?.appleMusicId,
+        qqMusicId: validQqId || existingTrack?.qqMusicId,
+        lyricsType,
+        lyrics,
+        lyricsProvider,
+        isVerified: existingTrack?.isVerified ?? false,
+      };
+
+      const saved = await this.db
+        .insert(tracks)
+        .values(newTrackData)
+        .onConflictDoUpdate({
+          target: tracks.id,
+          set: {
+            ...newTrackData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      const finalTrack = saved[0]!;
+      const sanitized = this.sanitizeTrack(finalTrack);
+      let formattedLyrics: FormattedLyricsResult | undefined;
+      if (finalTrack.lyrics) {
+        formattedLyrics = this.lyricsEngine.formatLyrics(finalTrack.lyrics, format);
+      }
+
+      emitEvent({
+        stage: 'done',
+        data: {
+          track: sanitized,
+          lyrics: formattedLyrics?.content,
+          format,
+          contentType: formattedLyrics?.contentType,
+        },
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An error occurred during resolution';
+      emitEvent({
+        stage: 'error',
+        data: { error: message },
+        timestamp: Date.now(),
+      });
+    }
   }
 }

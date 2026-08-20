@@ -34,13 +34,17 @@ export class ResolverService {
     });
   }
 
-  async resolveUrl(url: string, targetPlatforms?: string[]): Promise<ResolveResult> {
+  async resolveUrl(
+    url: string,
+    targetPlatforms?: string[],
+    options?: Parameters<MusicResolver['resolve']>[2]
+  ): Promise<ResolveResult> {
     if (!url || typeof url !== 'string') {
       throw new BadRequestException('Query parameter "url" is required.');
     }
 
     try {
-      const result = await this.resolver.resolve(url.trim(), targetPlatforms);
+      const result = await this.resolver.resolve(url.trim(), targetPlatforms, options);
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to resolve streaming link';

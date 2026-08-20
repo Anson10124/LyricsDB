@@ -211,11 +211,41 @@ export class MusicResolver {
       preferredCountry: options?.preferredCountry || (parsedInfo as { storefront?: string }).storefront,
     };
 
+    options?.onProgress?.({
+      stage: 'resolving',
+      step: 'extracting_metadata',
+      platform: parser.id,
+      id: sourceId,
+    });
+
     const rawMetadata = await parser.fetchMetadata(sourceId, url, resolveOpts);
     const metadata = this.normalizeMetadata(rawMetadata);
 
+    options?.onProgress?.({
+      stage: 'resolving',
+      step: 'parsed_metadata',
+      data: {
+        title: metadata.title,
+        artist: metadata.artist,
+        artists: metadata.artists,
+        album: metadata.album,
+        isrc: metadata.isrc,
+        durationMs: metadata.durationMs,
+        artworkUrl: metadata.image,
+      },
+    });
+
     // Cross-platform metadata enrichment via Musixmatch (fills ISRC and Album if missing)
     const enriched = await this.enrichMetadata(metadata, parser.id, sourceId, resolveOpts);
+    if (enriched?.isrc && !rawMetadata.isrc) {
+      options?.onProgress?.({
+        stage: 'resolving',
+        step: 'enriched_isrc',
+        data: {
+          isrc: enriched.isrc,
+        },
+      });
+    }
 
     const query = parser.buildSearchQuery(metadata);
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
@@ -231,12 +261,35 @@ export class MusicResolver {
       matchReason: 'direct',
     };
 
+    options?.onProgress?.({
+      stage: 'platform_matched',
+      platform: parser.id,
+      id: sourceId,
+      score: 1,
+    });
+
     // Query all other requested adapters concurrently
     const adapterPromises = platformKeys
       .filter((platformId) => platformId !== parser.id && this.adapters.has(platformId))
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
-        links[platformId] = await this.queryAdapterWithFallback(adapter, query, metadata, resolveOpts);
+        options?.onProgress?.({
+          stage: 'resolving',
+          step: 'searching_adapter',
+          platform: platformId,
+        });
+
+        const res = await this.queryAdapterWithFallback(adapter, query, metadata, resolveOpts);
+        links[platformId] = res;
+
+        if (res?.isVerified || (res?.score || 0) >= 0.8) {
+          options?.onProgress?.({
+            stage: 'platform_matched',
+            platform: platformId,
+            id: res?.id,
+            score: res?.score,
+          });
+        }
       });
 
     await Promise.all(adapterPromises);

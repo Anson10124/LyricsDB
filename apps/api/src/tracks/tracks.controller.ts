@@ -1,6 +1,21 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  MessageEvent,
+  Param,
+  Post,
+  Query,
+  Res,
+  Sse,
+} from '@nestjs/common';
 import type { Response } from 'express';
-import type { FormattedLyricsResult, GetOrSyncTrackOptions } from '@repo/types';
+import { Observable, Subject } from 'rxjs';
+import type {
+  FormattedLyricsResult,
+  GetOrSyncTrackOptions,
+  ProgressLogEvent,
+} from '@repo/types';
 import { TracksService } from './tracks.service';
 
 export class TrackQueryDto implements GetOrSyncTrackOptions {
@@ -12,6 +27,78 @@ export class TrackQueryDto implements GetOrSyncTrackOptions {
 @Controller('api')
 export class TracksController {
   constructor(private readonly tracksService: TracksService) {}
+
+  // ==========================================
+  // Real-time EventStream (SSE) Endpoint
+  // ==========================================
+
+  // GET /api/lyrics/stream?platform=spotify&id=...&format=ttml (or ?url=...)
+  @Sse('lyrics/stream')
+  streamLyrics(
+    @Query('platform') platform?: string,
+    @Query('id') id?: string,
+    @Query('url') url?: string,
+    @Query('format') format?: string,
+    @Query('forceRefresh') forceRefresh?: string
+  ): Observable<MessageEvent> {
+    return this.handleLyricsStream({ platform, id, url, format, forceRefresh });
+  }
+
+  // GET /api/tracks/stream?platform=spotify&id=...&format=ttml (or ?url=...)
+  @Sse('tracks/stream')
+  streamTracks(
+    @Query('platform') platform?: string,
+    @Query('id') id?: string,
+    @Query('url') url?: string,
+    @Query('format') format?: string,
+    @Query('forceRefresh') forceRefresh?: string
+  ): Observable<MessageEvent> {
+    return this.handleLyricsStream({ platform, id, url, format, forceRefresh });
+  }
+
+  private handleLyricsStream(query: {
+    platform?: string;
+    id?: string;
+    url?: string;
+    format?: string;
+    forceRefresh?: string;
+  }): Observable<MessageEvent> {
+    const subject = new Subject<MessageEvent>();
+    const shouldForceRefresh = query.forceRefresh === 'true' || query.forceRefresh === '1';
+
+    // Execute background resolution while streaming progress events
+    this.tracksService
+      .streamLyrics(
+        {
+          platform: query.platform,
+          id: query.id,
+          url: query.url,
+          format: query.format || 'json',
+          forceRefresh: shouldForceRefresh,
+        },
+        (event: ProgressLogEvent) => {
+          subject.next({
+            data: event,
+          });
+        }
+      )
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Unknown error during stream';
+        subject.next({
+          data: {
+            stage: 'error',
+            data: { error: message },
+            timestamp: Date.now(),
+          },
+        });
+      })
+      .finally(() => {
+        // Complete the SSE stream once done
+        subject.complete();
+      });
+
+    return subject.asObservable();
+  }
 
   // ==========================================
   // Tracks Endpoints

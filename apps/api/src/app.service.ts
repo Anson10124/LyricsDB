@@ -20,6 +20,7 @@ export class AppService {
         lyrics: {
           getByTrackId: 'GET /api/tracks/{id}/lyrics?format={json|ttml|lrc|...}',
           getOrSyncLyrics: 'GET /api/lyrics?platform={platform}&id={id}&format={format} (or ?url={link}&format={format})',
+          streamLogs: 'GET /api/lyrics/stream?url={link}&format={format} (Server-Sent Events)',
         },
         resolver: {
           resolve: 'GET /api/resolver?url={streaming_link}',
