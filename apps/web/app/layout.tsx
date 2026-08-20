@@ -4,6 +4,8 @@ import "./globals.css";
 import { Outfit } from "next/font/google";
 import { cn } from "@/lib/utils";
 
+import { ThemeProvider } from "@/components/theme-provider"
+
 const outfit = Outfit({subsets:['latin'],variable:'--font-sans'});
 
 const geistSans = localFont({
@@ -26,9 +28,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", outfit.variable)}>
+    <html lang="en" className={cn("font-sans", outfit.variable)} suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
