@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, Check, Copy, Download, ExternalLink, Music2 } from "lucide-react";
 import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
 import {
@@ -11,7 +12,7 @@ import {
 interface LyricsViewProps {
   track: SanitizedTrack<TrackRecord>;
   rawLyrics?: SyncedLyricsPayload | string | null;
-  onReset: () => void;
+  onReset?: () => void;
 }
 
 function formatDuration(ms?: number): string {
@@ -91,14 +92,24 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
     <div className="w-full max-w-3xl flex flex-col gap-6 py-6 px-4">
       {/* Top action bar */}
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="size-3.5" />
-          <span>Search another song</span>
-        </button>
+        {onReset ? (
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Search another song</span>
+          </button>
+        ) : (
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Search another song</span>
+          </Link>
+        )}
 
         <div className="flex items-center gap-2">
           <button

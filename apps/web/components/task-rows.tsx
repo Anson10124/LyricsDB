@@ -84,6 +84,25 @@ const RetryIcon = (
   </svg>
 );
 
+export const PROVIDER_NAMES: Record<string, string> = {
+  qqmusic: "QQ Music",
+  qq: "QQ Music",
+  deezer: "Deezer",
+  netease: "NetEase",
+  musixmatch: "Musixmatch",
+  lrclib: "LRCLIB",
+  spotify: "Spotify",
+  apple: "Apple Music",
+  applemusic: "Apple Music",
+  appleMusic: "Apple Music",
+};
+
+export function formatProviderName(key?: string): string {
+  if (!key) return "";
+  const lower = key.toLowerCase();
+  return PROVIDER_NAMES[lower] || key.charAt(0).toUpperCase() + key.slice(1);
+}
+
 function formatDuration(ms?: number): string {
   if (!ms) return "";
   const totalSeconds = Math.floor(ms / 1000);
@@ -97,7 +116,7 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
 
   // Format platform details
   const platformDetails = progress.matchedPlatforms.map((p) => ({
-    label: p.platform.charAt(0).toUpperCase() + p.platform.slice(1),
+    label: formatProviderName(p.platform),
     meta: `ID: ${p.id.slice(0, 10)}${p.id.length > 10 ? "..." : ""}`,
   }));
 
@@ -105,18 +124,40 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
     progress.searchingPlatforms.forEach((p) => {
       if (!progress.matchedPlatforms.some((m) => m.platform === p)) {
         platformDetails.push({
-          label: p.charAt(0).toUpperCase() + p.slice(1),
+          label: formatProviderName(p),
           meta: "searching...",
         });
       }
     });
   }
 
-  // Format lyrics details
-  const lyricsDetails = progress.lyricsSearchingProviders.map((p) => ({
-    label: p.provider.toUpperCase(),
-    meta: p.status === "found" ? "matched ✓" : p.status === "searching" ? "checking..." : "not found",
-  }));
+  // Format lyrics details across all queried providers
+  const isLyricsDone = progress.lyricsStatus === "done";
+  const winningProvider = progress.lyricsResult?.provider?.toLowerCase();
+
+  const lyricsDetails = progress.lyricsSearchingProviders.map((p) => {
+    const isWinner = winningProvider === p.provider.toLowerCase();
+    let metaText = "checking...";
+
+    if (isWinner || p.status === "found") {
+      const typeStr =
+        progress.lyricsResult?.lyricsType === "word"
+          ? "word-sync"
+          : progress.lyricsResult?.lyricsType === "line"
+            ? "line-sync"
+            : "matched";
+      metaText = `selected (${typeStr}) ✓`;
+    } else if (isLyricsDone) {
+      metaText = "not selected";
+    } else if (p.status === "not_found") {
+      metaText = "not found";
+    }
+
+    return {
+      label: formatProviderName(p.provider),
+      meta: metaText,
+    };
+  });
 
   const rows = [
     {
@@ -191,7 +232,7 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
           <SpinnerRing active={progress.lyricsStatus === "running"}>3</SpinnerRing>
         ),
       label: "Discover synced lyrics",
-      amount: progress.lyricsResult?.provider ? progress.lyricsResult.provider.toUpperCase() : "",
+      amount: progress.lyricsResult?.provider ? formatProviderName(progress.lyricsResult.provider) : "",
       pill:
         progress.lyricsStatus === "done" ? (
           <span className="inline-flex h-5.5 items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
@@ -203,11 +244,15 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
           </span>
         ) : progress.lyricsStatus === "running" ? (
           <span className="inline-flex h-5.5 items-center rounded-full bg-primary/10 px-2 text-[11.5px] font-medium text-primary">
-            Searching
+            {progress.lyricsSearchingProviders.length > 1
+              ? `Checking ${progress.lyricsSearchingProviders.length} sources`
+              : "Searching"}
           </span>
         ) : null,
       details:
-        lyricsDetails.length > 0 ? lyricsDetails : [{ label: "Providers (QQ, Deezer, NetEase, Musixmatch, LRCLIB)", meta: "Pending..." }],
+        lyricsDetails.length > 0
+          ? lyricsDetails
+          : [{ label: "Providers (QQ Music, Deezer, NetEase, Musixmatch, LRCLIB)", meta: "Pending..." }],
     },
     {
       key: "save",
@@ -230,6 +275,7 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
       details: [{ label: "Database status", meta: progress.saveStatus === "done" ? "Saved to Postgres" : "Pending..." }],
     },
   ];
+
 
   return (
     <div className="flex w-full max-w-lg flex-col gap-2 min-h-[220px]">

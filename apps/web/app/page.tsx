@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
 import { InputBar } from "@/components/input-bar";
@@ -20,6 +21,7 @@ const initialProgress: TaskProgressState = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [viewState, setViewState] = useState<"search" | "progress" | "lyrics">("search");
   const [progress, setProgress] = useState<TaskProgressState>(initialProgress);
   const [result, setResult] = useState<{
@@ -137,7 +139,7 @@ export default function Home() {
               const updatedProviders = [...prev.lyricsSearchingProviders];
               if (data?.provider) {
                 const existingIdx = updatedProviders.findIndex(
-                  (p) => p.provider === data.provider
+                  (p) => p.provider.toLowerCase() === data.provider.toLowerCase()
                 );
                 if (existingIdx >= 0) {
                   updatedProviders[existingIdx] = {
@@ -163,15 +165,36 @@ export default function Home() {
           }
 
           case "lyrics_found": {
-            setProgress((prev) => ({
-              ...prev,
-              lyricsStatus: "done",
-              lyricsResult: {
-                provider: data?.provider,
-                lyricsType: data?.lyricsType,
-                hasLyrics: true,
-              },
-            }));
+            setProgress((prev) => {
+              const winningProvider = data?.provider?.toLowerCase();
+              const updatedProviders = prev.lyricsSearchingProviders.map((p) => {
+                if (p.provider.toLowerCase() === winningProvider) {
+                  return { ...p, status: "found" as const };
+                }
+                return {
+                  ...p,
+                  status: p.status === "searching" ? ("not_found" as const) : p.status,
+                };
+              });
+
+              if (
+                winningProvider &&
+                !updatedProviders.some((p) => p.provider.toLowerCase() === winningProvider)
+              ) {
+                updatedProviders.push({ provider: data.provider, status: "found" });
+              }
+
+              return {
+                ...prev,
+                lyricsStatus: "done",
+                lyricsSearchingProviders: updatedProviders,
+                lyricsResult: {
+                  provider: data?.provider,
+                  lyricsType: data?.lyricsType,
+                  hasLyrics: true,
+                },
+              };
+            });
             break;
           }
 
@@ -192,7 +215,11 @@ export default function Home() {
             setResult({ track, lyrics });
 
             if (isCacheHitRef.current) {
-              setViewState("lyrics");
+              if (track?.id) {
+                router.push(`/track/${track.id}`);
+              } else {
+                setViewState("lyrics");
+              }
             } else {
               setProgress((prev) => ({
                 ...prev,
@@ -204,7 +231,11 @@ export default function Home() {
 
               // Grace period to let the user see the completed tasks
               doneTimeoutRef.current = setTimeout(() => {
-                setViewState("lyrics");
+                if (track?.id) {
+                  router.push(`/track/${track.id}`);
+                } else {
+                  setViewState("lyrics");
+                }
               }, 700);
             }
             break;
