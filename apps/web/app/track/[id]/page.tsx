@@ -80,7 +80,7 @@ export default function TrackPage({ params }: TrackPageProps) {
   }, [id]);
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground px-4 py-12 transition-colors">
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors">
       {loading && (
         <motion.div
           key="loading"

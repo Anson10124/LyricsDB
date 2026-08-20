@@ -8,6 +8,7 @@ import {
   formatLyricsOnClient,
   type LyricsViewFormat,
 } from "@/lib/lyrics-formatter";
+import { AmllPlayer } from "@/components/amll-player";
 
 interface LyricsViewProps {
   track: SanitizedTrack<TrackRecord>;
@@ -235,39 +236,20 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       </div>
 
       {/* Lyrics Container */}
-      <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs overflow-hidden min-h-[300px] max-h-[600px] overflow-y-auto">
-        {!rawLyrics ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2">
-            <Music2 className="size-10 stroke-1 text-muted-foreground/60" />
-            <p className="text-sm font-medium">No synchronized lyrics available for this track.</p>
-          </div>
-        ) : selectedFormat === "synced" && isSyncedPayload ? (
-          <div className="flex flex-col gap-3 py-2">
-            {(rawLyrics as SyncedLyricsPayload).map((line, lineIdx) => (
-              <div key={lineIdx} className="group flex items-baseline gap-3">
-                <span className="text-[10.5px] font-mono text-muted-foreground/50 select-none w-10 text-right shrink-0">
-                  {line[0] ? formatDuration(line[0][1]) : ""}
-                </span>
-                <p className="text-base sm:text-lg font-medium text-foreground/90 tracking-wide leading-relaxed">
-                  {line.map((word, wordIdx) => (
-                    <span
-                      key={wordIdx}
-                      className="hover:text-primary transition-colors cursor-default"
-                      title={`${formatDuration(word[1])} (${word[2]}ms)`}
-                    >
-                      {word[3]}
-                    </span>
-                  ))}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
+      {!rawLyrics ? (
+        <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2 min-h-[300px]">
+          <Music2 className="size-10 stroke-1 text-muted-foreground/60" />
+          <p className="text-sm font-medium">No synchronized lyrics available for this track.</p>
+        </div>
+      ) : selectedFormat === "synced" && isSyncedPayload ? (
+        <AmllPlayer track={track} rawLyrics={rawLyrics as SyncedLyricsPayload} />
+      ) : (
+        <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs overflow-hidden min-h-[300px] max-h-[600px] overflow-y-auto">
           <pre className="text-xs font-mono text-foreground/90 whitespace-pre-wrap break-all leading-relaxed">
             {formattedText}
           </pre>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
