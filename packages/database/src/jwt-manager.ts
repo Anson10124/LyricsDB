@@ -83,12 +83,8 @@ export async function getDeezerJwt(
       .limit(1);
 
     const record = existing[0];
-    if (record?.token && record?.created) {
-      const createdTime = new Date(record.created).getTime();
-      const age = Date.now() - createdTime;
-
-      // If token is less than 5 minutes old, reuse it
-      if (age < DEEZER_JWT_CACHE_TTL_MS) {
+    if (record?.token && record?.expireAt) {
+      if (new Date(record.expireAt) > new Date()) {
         return record.token;
       }
     }
@@ -106,7 +102,7 @@ export async function refreshDeezerJwt(
 ): Promise<string> {
   const client = dbClient || defaultDb;
   const newToken = await fetchAnonymousDeezerJwt(options);
-  const now = new Date();
+  const expireAt = new Date(Date.now() + DEEZER_JWT_CACHE_TTL_MS);
 
   try {
     await client
@@ -114,15 +110,13 @@ export async function refreshDeezerJwt(
       .values({
         provider: DEEZER_PROVIDER,
         token: newToken,
-        created: now,
-        updatedAt: now,
+        expireAt,
       })
       .onConflictDoUpdate({
         target: jwts.provider,
         set: {
           token: newToken,
-          created: now,
-          updatedAt: now,
+          expireAt,
         },
       });
   } catch {
@@ -225,12 +219,8 @@ export async function getSpotifyToken(
       .limit(1);
 
     const record = existing[0];
-    if (record?.token && record?.created) {
-      const createdTime = new Date(record.created).getTime();
-      const age = Date.now() - createdTime;
-
-      // If token is less than 50 minutes old, reuse it
-      if (age < SPOTIFY_TOKEN_CACHE_TTL_MS) {
+    if (record?.token && record?.expireAt) {
+      if (new Date(record.expireAt) > new Date()) {
         return record.token;
       }
     }
@@ -247,7 +237,7 @@ export async function refreshSpotifyToken(
 ): Promise<string> {
   const client = dbClient || defaultDb;
   const newToken = await fetchAnonymousSpotifyToken(options);
-  const now = new Date();
+  const expireAt = new Date(Date.now() + SPOTIFY_TOKEN_CACHE_TTL_MS);
 
   try {
     await client
@@ -255,15 +245,13 @@ export async function refreshSpotifyToken(
       .values({
         provider: SPOTIFY_PROVIDER,
         token: newToken,
-        created: now,
-        updatedAt: now,
+        expireAt,
       })
       .onConflictDoUpdate({
         target: jwts.provider,
         set: {
           token: newToken,
-          created: now,
-          updatedAt: now,
+          expireAt,
         },
       });
   } catch {
