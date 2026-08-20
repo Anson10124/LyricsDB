@@ -82,19 +82,24 @@ export async function fetchNeteaseLyrics(
       return null;
     }
 
-    if (json.yrc?.lyric && isPlaceholderLyricText(json.yrc.lyric)) {
+    const metadata =
+      typeof idOrParams === 'object'
+        ? { title: idOrParams.title, artist: idOrParams.artist || idOrParams.artists?.[0] }
+        : undefined;
+
+    if (json.yrc?.lyric && isPlaceholderLyricText(json.yrc.lyric, metadata)) {
       json.yrc = undefined;
     }
 
-    if (json.lrc?.lyric && isPlaceholderLyricText(json.lrc.lyric)) {
+    if (json.lrc?.lyric && isPlaceholderLyricText(json.lrc.lyric, metadata)) {
       json.lrc = undefined;
     }
 
-    if (json.tlyric?.lyric && isPlaceholderLyricText(json.tlyric.lyric)) {
+    if (json.tlyric?.lyric && isPlaceholderLyricText(json.tlyric.lyric, metadata)) {
       json.tlyric = undefined;
     }
 
-    if (json.romalrc?.lyric && isPlaceholderLyricText(json.romalrc.lyric)) {
+    if (json.romalrc?.lyric && isPlaceholderLyricText(json.romalrc.lyric, metadata)) {
       json.romalrc = undefined;
     }
 

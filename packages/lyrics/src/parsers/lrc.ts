@@ -4,14 +4,17 @@ import { convertAmllLinesToCompact } from '../utils/converter.js';
 import { isPlaceholderLyricText } from '../utils/info-lines.js';
 
 // Parses standard and enhanced LRC using @applemusic-like-lyrics/lyric into line-grouped compact tuple format.
-export function parseLrc(lrcText: string): SyncedLyricsPayload {
-  if (!lrcText || typeof lrcText !== 'string' || isPlaceholderLyricText(lrcText)) {
+export function parseLrc(
+  lrcText: string,
+  metadata?: { title?: string; artist?: string }
+): SyncedLyricsPayload {
+  if (!lrcText || typeof lrcText !== 'string' || isPlaceholderLyricText(lrcText, metadata)) {
     return [];
   }
 
   try {
     const rawLines = parseAmllLrc(lrcText);
-    return convertAmllLinesToCompact(rawLines);
+    return convertAmllLinesToCompact(rawLines, metadata);
   } catch {
     return [];
   }

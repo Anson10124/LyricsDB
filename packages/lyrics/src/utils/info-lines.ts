@@ -3,23 +3,54 @@ import type { CompactLyricLine, SyncedLyricsPayload } from '@repo/types';
 // Dictionary of keywords commonly found in credit / metadata lines at the start/end of lyrics
 const CREDIT_KEYWORDS = [
   '作词',
+  '作词人',
+  '填词',
+  '词作者',
   '作曲',
+  '作曲人',
+  '曲作者',
   '编曲',
+  '编曲人',
+  '歌名',
+  '歌曲',
+  '歌曲名',
+  '曲名',
+  '歌手',
+  '演唱者',
+  '原唱',
+  '配唱',
+  '伴唱',
+  '演唱',
+  '主唱',
+  '合唱',
+  '专辑',
+  '专集',
+  '唱片',
   '吉他',
   '贝斯',
   '鼓',
   '缩混',
   '录音',
+  '录音室',
+  '录音棚',
   '弦乐',
   '键盘',
   '钢琴',
   '出品',
+  '出品人',
   '和声',
   '和音',
   '混音',
+  '混音室',
+  '混音棚',
+  '混音师',
+  '母带棚',
+  '母带师',
   '封面',
   '发行',
+  '发行人',
   '制作',
+  '制作人',
   '监制',
   '策划',
   '企划',
@@ -34,18 +65,12 @@ const CREDIT_KEYWORDS = [
   '设计',
   '视觉',
   '工程',
-  '原唱',
-  '配唱',
-  '伴唱',
-  '演唱',
   '乐队',
   '调校',
   '伴奏',
-  '主唱',
   '校对',
   '商务',
   '合作',
-  '合唱',
   '指挥',
   '经纪',
   '团队',
@@ -53,36 +78,62 @@ const CREDIT_KEYWORDS = [
   '翻译',
   '厂牌',
   '分轨',
+  '版权',
+  '提供',
+  '上传',
+  '打字',
+  '动态歌词',
+  '滚动歌词',
+  '歌词制作',
+  '歌词编辑',
   'ISRC',
+  'Title',
+  'Artist',
+  'Artists',
+  'Album',
+  'Singer',
+  'Singers',
+  'Lyricist',
+  'Composer',
+  'Arranger',
+  'Producer',
+  'Recorded',
+  'Recording',
+  'Mixed',
+  'Mixer',
+  'Mixing',
+  'Mastered',
+  'Mastering',
+  'Master',
+  'Label',
+  'Publisher',
+  'Copyright',
+  'Studio',
+  'Vocal',
+  'Vocals',
+  'Guitar',
   'Bass',
   'Drum',
+  'Drums',
   'Pads',
   'Brass',
   'Cello',
   'Choir',
   'Horns',
-  'Mixed',
-  'Mixer',
   'Piano',
   'Synth',
   'Viola',
-  'Vocal',
   'Violin',
-  'Mixing',
   'String',
-  'Guitar',
-  'Master',
+  'Strings',
   'Chorus',
   'Record',
   'Arrange',
   'Conduct',
   'Editing',
   'Produce',
-  'Strings',
   'Engineer',
   'Keyboard',
-  'Mastering',
-  'Recording',
   'Percussion',
   'Production',
   'Programming',
@@ -117,7 +168,10 @@ export function isPlaceholderText(str: string): boolean {
   return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(norm));
 }
 
-export function isPlaceholderLyricText(rawText: string): boolean {
+export function isPlaceholderLyricText(
+  rawText: string,
+  metadata?: { title?: string; artist?: string }
+): boolean {
   if (!rawText || typeof rawText !== 'string') return true;
 
   const trimmed = rawText.trim();
@@ -126,13 +180,17 @@ export function isPlaceholderLyricText(rawText: string): boolean {
   if (isPlaceholderText(trimmed)) return true;
 
   // Remove LRC timestamp tags: [00:00.00], [00:00.000], [00:00], etc.
-  // Remove YRC timestamp tags: [0,0], (0,0,0), [0,0,0]
+  // Remove LRC word timestamp tags: <00:00.00>, <00:00.000>, <00:00>
+  // Remove QRC/YRC timestamp tags: [0,0], [0,0,0], [0, 4689]
+  // Remove QRC/YRC word timestamp tags: (0,0), (0,0,0), (0, 1042), (0, 1042, 0)
   // Remove standard LRC metadata tags: [ti:...], [ar:...], [al:...], [by:...], [offset:...], etc.
   // Remove YRC JSON structures: {"t":0,"c":[{"tx":"..."}]}
   const withoutTags = trimmed
     .replace(/\[\d+:\d+(?:\.\d+)?\]/g, '')
-    .replace(/\[\d+,\d+(?:,\d+)?\]/g, '')
-    .replace(/\(\d+,\d+,\d+\)/g, '')
+    .replace(/<\d+:\d+(?:\.\d+)?>/g, '')
+    .replace(/\[\d+,\s*\d+(?:,\s*\d+)?\]/g, '')
+    .replace(/\(\d+,\s*\d+(?:,\s*\d+)?\)/g, '')
+    .replace(/<\d+,\s*\d+(?:,\s*\d+)?>/g, '')
     .replace(/\[[a-zA-Z]+:[^\]]*\]/g, '')
     .replace(/\{"t":\d+,"c":\[\{"tx":"([^"]+)"\}\]\}/g, '$1')
     .replace(/[\r\n]+/g, '\n')
@@ -147,12 +205,21 @@ export function isPlaceholderLyricText(rawText: string): boolean {
 
   if (lines.length === 0) return true;
 
-  return lines.every((line) => isPlaceholderText(line) || isCreditOrInfoLine(line));
+  return lines.every((line) =>
+    isPlaceholderText(line) || isCreditOrInfoLine(line, metadata?.title, metadata?.artist)
+  );
 }
 
 function getLineText(line: CompactLyricLine): string {
   if (!Array.isArray(line)) return '';
   return line.map((w) => w[3] || '').join('').trim();
+}
+
+function normalizeStringForMatch(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .trim();
 }
 
 export function isCreditOrInfoLine(text: string, title?: string, artist?: string): boolean {
@@ -166,18 +233,17 @@ export function isCreditOrInfoLine(text: string, title?: string, artist?: string
     return true;
   }
 
-  // Check copyright claiming sentences
+  // Check copyright / platform claiming sentences
   if (
     (lowerStr.includes('未经') || lowerStr.includes('未经许可')) &&
-    (lowerStr.includes('不得') || lowerStr.includes('请勿') || lowerStr.includes('使用') || lowerStr.includes('授权'))
+    (lowerStr.includes('不得') || lowerStr.includes('请勿') || lowerStr.includes('使用') || lowerStr.includes('授权') || lowerStr.includes('翻唱'))
   ) {
     return true;
   }
 
   if (
-    (lowerStr.includes('腾讯') || lowerStr.includes('tme')) &&
-    lowerStr.includes('享有') &&
-    lowerStr.includes('权')
+    (lowerStr.includes('腾讯') || lowerStr.includes('tme') || lowerStr.includes('qq音乐') || lowerStr.includes('网易云') || lowerStr.includes('网易音乐') || lowerStr.includes('酷狗')) &&
+    (lowerStr.includes('享有') || lowerStr.includes('权') || lowerStr.includes('独家') || lowerStr.includes('出品') || lowerStr.includes('提供') || lowerStr.includes('制作'))
   ) {
     return true;
   }
@@ -186,29 +252,52 @@ export function isCreditOrInfoLine(text: string, title?: string, artist?: string
     lowerStr.startsWith('lyrics by:') ||
     lowerStr.startsWith('written by:') ||
     lowerStr.startsWith('composed by:') ||
-    lowerStr.startsWith('produced by:')
+    lowerStr.startsWith('produced by:') ||
+    lowerStr.startsWith('arranged by:') ||
+    lowerStr.startsWith('performed by:') ||
+    lowerStr.startsWith('artist:') ||
+    lowerStr.startsWith('album:') ||
+    lowerStr.startsWith('title:') ||
+    lowerStr.startsWith('track:') ||
+    lowerStr.startsWith('singer:') ||
+    lowerStr.startsWith('by:')
   ) {
     return true;
   }
 
   const hasColon = str.includes(':');
-  const hitKeyword = CREDIT_KEYWORDS.some((kw) => str.includes(kw));
+  const hitKeyword = CREDIT_KEYWORDS.some((kw) => {
+    const lkw = kw.toLowerCase();
+    return lowerStr.includes(lkw);
+  });
 
   if (hitKeyword && hasColon) {
-    // Make sure it's not speaker label (e.g. "Artist:")
+    // Make sure it's not speaker label in duet lyrics (e.g. "Artist:")
     if (artist && lowerStr.startsWith(`${artist.toLowerCase()}:`)) {
       return false;
     }
     return true;
   }
 
-  // Exact Title + Artist line check (e.g. "Title - Artist" at line 1)
-  if (title && artist) {
-    const cleanTitle = title.toLowerCase().trim();
-    const cleanArtist = artist.toLowerCase().trim();
-    if (lowerStr.includes(cleanTitle) && lowerStr.includes(cleanArtist)) {
+  // Title and Artist header checks
+  const normLine = normalizeStringForMatch(str);
+  const normTitle = title ? normalizeStringForMatch(title) : '';
+  const normArtist = artist ? normalizeStringForMatch(artist) : '';
+
+  if (normTitle && normArtist) {
+    // Matches e.g. "Title - Artist", "Artist - Title", "Title / Artist", "Artist - Title (feat. ...)"
+    if (normLine.includes(normTitle) && normLine.includes(normArtist)) {
       return true;
     }
+  }
+
+  // Line exactly matches title or artist (e.g. header line with only title or only artist)
+  if (normTitle && normLine === normTitle) {
+    return true;
+  }
+
+  if (normArtist && normLine === normArtist) {
+    return true;
   }
 
   return false;
@@ -252,10 +341,10 @@ export function stripInfoLines(
 
   const sliced = payload.slice(startIdx, endIdx);
 
-  // Filter out any standalone placeholder lines in the remaining body
+  // Filter out any standalone placeholder or credit lines in the remaining body
   const filtered = sliced.filter((line) => {
     const text = getLineText(line);
-    return !isPlaceholderText(text);
+    return !isPlaceholderText(text) && !isCreditOrInfoLine(text, title, artist);
   });
 
   return filtered;

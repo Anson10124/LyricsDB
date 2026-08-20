@@ -38,6 +38,7 @@ export class LyricsEngine {
   // Tier 3: Plain text (Deezer Plain -> LRCLIB Plain)
   async resolveLyrics(context: ResolveLyricsContext): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
+    const metadata = { title: context.title, artist };
 
     let qqLineCandidate: ResolvedLyricsResult | null = null;
     let deezerLineCandidate: ResolvedLyricsResult | null = null;
@@ -52,7 +53,7 @@ export class LyricsEngine {
         });
 
         if (qqData?.qrc) {
-          const parsed = parseQrc(qqData.qrc);
+          const parsed = parseQrc(qqData.qrc, metadata);
           if (parsed.length > 0) {
             return {
               lyricsType: 'word',
@@ -64,7 +65,7 @@ export class LyricsEngine {
         }
 
         if (qqData?.lrc) {
-          const parsed = parseLrc(qqData.lrc);
+          const parsed = parseLrc(qqData.lrc, metadata);
           if (parsed.length > 0) {
             qqLineCandidate = {
               lyricsType: 'line',
@@ -87,10 +88,7 @@ export class LyricsEngine {
         });
 
         if (deezerData?.synchronizedWordByWordLines && deezerData.synchronizedWordByWordLines.length > 0) {
-          const parsed = parseDeezerWordLyrics(deezerData.synchronizedWordByWordLines, {
-            title: context.title,
-            artist,
-          });
+          const parsed = parseDeezerWordLyrics(deezerData.synchronizedWordByWordLines, metadata);
           if (parsed.length > 0) {
             return {
               lyricsType: 'word',
@@ -102,10 +100,7 @@ export class LyricsEngine {
         }
 
         if (deezerData?.synchronizedLines && deezerData.synchronizedLines.length > 0) {
-          const parsed = parseDeezerSyncedLines(deezerData.synchronizedLines, {
-            title: context.title,
-            artist,
-          });
+          const parsed = parseDeezerSyncedLines(deezerData.synchronizedLines, metadata);
           if (parsed.length > 0) {
             deezerLineCandidate = {
               lyricsType: 'line',
@@ -116,7 +111,7 @@ export class LyricsEngine {
           }
         }
 
-        if (deezerData?.text && !isPlaceholderLyricText(deezerData.text)) {
+        if (deezerData?.text && !isPlaceholderLyricText(deezerData.text, metadata)) {
           deezerPlainCandidate = {
             lyricsType: 'plain',
             lyrics: deezerData.text,
@@ -134,10 +129,12 @@ export class LyricsEngine {
       try {
         const neteaseData = await fetchNeteaseLyrics({
           neteaseId: context.neteaseId,
+          title: context.title,
+          artist,
         });
 
         if (neteaseData?.yrc?.lyric) {
-          const parsed = parseYrc(neteaseData.yrc.lyric);
+          const parsed = parseYrc(neteaseData.yrc.lyric, metadata);
           if (parsed.length > 0) {
             return {
               lyricsType: 'word',
@@ -150,7 +147,7 @@ export class LyricsEngine {
 
         // Stash NetEase standard LRC candidate
         if (neteaseData?.lrc?.lyric) {
-          const parsed = parseLrc(neteaseData.lrc.lyric);
+          const parsed = parseLrc(neteaseData.lrc.lyric, metadata);
           if (parsed.length > 0) {
             neteaseLineCandidate = {
               lyricsType: 'line',
@@ -190,7 +187,7 @@ export class LyricsEngine {
         });
 
         if (lrclibData?.syncedLyrics) {
-          const parsed = parseLrc(lrclibData.syncedLyrics);
+          const parsed = parseLrc(lrclibData.syncedLyrics, metadata);
           if (parsed.length > 0) {
             return {
               lyricsType: 'line',
@@ -201,7 +198,7 @@ export class LyricsEngine {
           }
         }
 
-        if (lrclibData?.plainLyrics && !lrclibData.instrumental && !isPlaceholderLyricText(lrclibData.plainLyrics)) {
+        if (lrclibData?.plainLyrics && !lrclibData.instrumental && !isPlaceholderLyricText(lrclibData.plainLyrics, metadata)) {
           return {
             lyricsType: 'plain',
             lyrics: lrclibData.plainLyrics,
