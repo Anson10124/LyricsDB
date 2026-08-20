@@ -8,6 +8,7 @@ import { parseLrc } from './parsers/lrc.js';
 import { parseQrc } from './parsers/qrc.js';
 import { parseYrc } from './parsers/yrc.js';
 import { formatLyricsPayload } from './utils/converter.js';
+import { isPlaceholderLyricText } from './utils/info-lines.js';
 
 export interface ResolveLyricsContext {
   title: string;
@@ -115,7 +116,7 @@ export class LyricsEngine {
           }
         }
 
-        if (deezerData?.text) {
+        if (deezerData?.text && !isPlaceholderLyricText(deezerData.text)) {
           deezerPlainCandidate = {
             lyricsType: 'plain',
             lyrics: deezerData.text,
@@ -200,7 +201,7 @@ export class LyricsEngine {
           }
         }
 
-        if (lrclibData?.plainLyrics) {
+        if (lrclibData?.plainLyrics && !lrclibData.instrumental && !isPlaceholderLyricText(lrclibData.plainLyrics)) {
           return {
             lyricsType: 'plain',
             lyrics: lrclibData.plainLyrics,

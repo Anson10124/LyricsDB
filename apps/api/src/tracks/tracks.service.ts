@@ -150,9 +150,17 @@ export class TracksService {
   // Strip raw lyrics from track object for API responses
   public sanitizeTrack<T extends Track>(track: T): Omit<T, 'lyrics'> & { hasLyrics: boolean } {
     const { lyrics, ...rest } = track;
+    const hasLyrics = Boolean(
+      lyrics &&
+        (Array.isArray(lyrics)
+          ? lyrics.length > 0
+          : typeof lyrics === 'string'
+            ? lyrics.trim().length > 0
+            : true)
+    );
     return {
       ...rest,
-      hasLyrics: Boolean(lyrics),
+      hasLyrics,
     };
   }
 
@@ -168,7 +176,12 @@ export class TracksService {
       track = await this.getOrSyncTrack(options);
     }
 
-    if (!track || !track.lyrics) {
+    if (
+      !track ||
+      !track.lyrics ||
+      (Array.isArray(track.lyrics) && track.lyrics.length === 0) ||
+      (typeof track.lyrics === 'string' && !track.lyrics.trim())
+    ) {
       throw new NotFoundException('Lyrics not available for this track.');
     }
 

@@ -88,6 +88,68 @@ const CREDIT_KEYWORDS = [
   'Programming',
 ];
 
+export const PLACEHOLDER_PATTERNS: RegExp[] = [
+  /^暂无(歌词|滚动歌词|翻译|音译|lrc歌词)?([，,\s]*欢迎补充)?$/i,
+  /^未收录歌词$/i,
+  /^暂未收录歌词$/i,
+  /^没有(歌词|填词)$/i,
+  /^无歌词$/i,
+  /^暂无$/i,
+  /^(此歌曲|该歌曲)?为?(没有填词的)?纯音乐([，,\s]*请(您)?欣赏)?$/i,
+  /^请欣赏纯音乐$/i,
+  /^instrumental(\s*track)?$/i,
+  /^pure\s*music$/i,
+  /^no\s*lyrics(\s*available)?$/i,
+  /^no\s*synced\s*lyrics$/i,
+];
+
+export function isPlaceholderText(str: string): boolean {
+  if (!str || typeof str !== 'string') return true;
+  const trimmed = str.trim();
+  if (!trimmed) return true;
+
+  const norm = trimmed
+    .replace(/^[\s[\]()（）"'【】「」]+|[\s[\]()（）"'【】「」]+$/g, '')
+    .trim();
+
+  if (!norm) return true;
+
+  return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(norm));
+}
+
+export function isPlaceholderLyricText(rawText: string): boolean {
+  if (!rawText || typeof rawText !== 'string') return true;
+
+  const trimmed = rawText.trim();
+  if (!trimmed) return true;
+
+  if (isPlaceholderText(trimmed)) return true;
+
+  // Remove LRC timestamp tags: [00:00.00], [00:00.000], [00:00], etc.
+  // Remove YRC timestamp tags: [0,0], (0,0,0), [0,0,0]
+  // Remove standard LRC metadata tags: [ti:...], [ar:...], [al:...], [by:...], [offset:...], etc.
+  // Remove YRC JSON structures: {"t":0,"c":[{"tx":"..."}]}
+  const withoutTags = trimmed
+    .replace(/\[\d+:\d+(?:\.\d+)?\]/g, '')
+    .replace(/\[\d+,\d+(?:,\d+)?\]/g, '')
+    .replace(/\(\d+,\d+,\d+\)/g, '')
+    .replace(/\[[a-zA-Z]+:[^\]]*\]/g, '')
+    .replace(/\{"t":\d+,"c":\[\{"tx":"([^"]+)"\}\]\}/g, '$1')
+    .replace(/[\r\n]+/g, '\n')
+    .trim();
+
+  if (!withoutTags) return true;
+
+  const lines = withoutTags
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return true;
+
+  return lines.every((line) => isPlaceholderText(line) || isCreditOrInfoLine(line));
+}
+
 function getLineText(line: CompactLyricLine): string {
   if (!Array.isArray(line)) return '';
   return line.map((w) => w[3] || '').join('').trim();
@@ -98,6 +160,11 @@ export function isCreditOrInfoLine(text: string, title?: string, artist?: string
 
   const str = text.replace(/：/g, ': ').trim();
   const lowerStr = str.toLowerCase();
+
+  // Check placeholder texts (e.g. "暂无歌词", "纯音乐，请欣赏", "Instrumental")
+  if (isPlaceholderText(str)) {
+    return true;
+  }
 
   // Check copyright claiming sentences
   if (
@@ -180,8 +247,16 @@ export function stripInfoLines(
   }
 
   if (startIdx >= endIdx) {
-    return payload; // Fallback: don't wipe out entire song if wrongly flagged
+    return [];
   }
 
-  return payload.slice(startIdx, endIdx);
+  const sliced = payload.slice(startIdx, endIdx);
+
+  // Filter out any standalone placeholder lines in the remaining body
+  const filtered = sliced.filter((line) => {
+    const text = getLineText(line);
+    return !isPlaceholderText(text);
+  });
+
+  return filtered;
 }

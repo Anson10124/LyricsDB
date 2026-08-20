@@ -1,4 +1,5 @@
 import { weapiEncrypt } from '@repo/music-resolver';
+import { isPlaceholderLyricText } from '../utils/info-lines.js';
 
 export interface NeteaseLyricsQueryParams {
   neteaseId?: string;
@@ -10,6 +11,10 @@ export interface NeteaseLyricsQueryParams {
 
 export interface NeteaseLyricsResponse {
   code: number;
+  nolyric?: boolean;
+  uncollected?: boolean;
+  pureMusic?: boolean;
+  needDesc?: boolean;
   yrc?: { lyric?: string; version?: number };
   lrc?: { lyric?: string; version?: number };
   tlyric?: { lyric?: string; version?: number };
@@ -72,6 +77,30 @@ export async function fetchNeteaseLyrics(
     if (!res.ok) return null;
     const json = (await res.json()) as NeteaseLyricsResponse;
     if (json.code !== 200) return null;
+
+    if (json.nolyric || json.uncollected || json.pureMusic) {
+      return null;
+    }
+
+    if (json.yrc?.lyric && isPlaceholderLyricText(json.yrc.lyric)) {
+      json.yrc = undefined;
+    }
+
+    if (json.lrc?.lyric && isPlaceholderLyricText(json.lrc.lyric)) {
+      json.lrc = undefined;
+    }
+
+    if (json.tlyric?.lyric && isPlaceholderLyricText(json.tlyric.lyric)) {
+      json.tlyric = undefined;
+    }
+
+    if (json.romalrc?.lyric && isPlaceholderLyricText(json.romalrc.lyric)) {
+      json.romalrc = undefined;
+    }
+
+    if (!json.yrc?.lyric && !json.lrc?.lyric) {
+      return null;
+    }
 
     return json;
   } catch {
