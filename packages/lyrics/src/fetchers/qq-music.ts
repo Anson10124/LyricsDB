@@ -175,3 +175,41 @@ export async function fetchQQMusicLyrics(
     return null;
   }
 }
+
+export async function fetchQQMusicFullLrc(
+  songmidOrId: string,
+  options?: { timeout?: number }
+): Promise<string | null> {
+  const trimmed = songmidOrId?.trim();
+  if (!trimmed) return null;
+
+  try {
+    const isNumeric = /^\d+$/.test(trimmed);
+    const paramKey = isNumeric ? 'musicid' : 'songmid';
+    const url = `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?${paramKey}=${encodeURIComponent(trimmed)}&format=json&nobase64=1`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options?.timeout ?? 8000);
+
+    const res = await fetch(url, {
+      headers: {
+        Referer: 'https://y.qq.com',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const json = (await res.json()) as { lyric?: string };
+    if (json.lyric && json.lyric.trim()) {
+      return json.lyric.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
