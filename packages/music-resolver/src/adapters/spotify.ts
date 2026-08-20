@@ -216,6 +216,7 @@ export class SpotifyAdapter implements MusicAdapter {
             durationMs: track.duration?.totalMilliseconds,
             url: trackUrl,
             id,
+            raw: { album: track.album?.name },
           });
         }
 
@@ -236,6 +237,7 @@ export class SpotifyAdapter implements MusicAdapter {
               durationMs: item.duration?.totalMilliseconds,
               url: trackUrl,
               id,
+              raw: { album: item.album?.name },
             });
           }
         }

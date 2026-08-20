@@ -68,6 +68,7 @@ export class DeezerAdapter implements MusicAdapter {
               isVerified: true,
               score: 1.0,
               matchReason: 'isrc',
+              raw: { album: isrcRes.album?.title, isrc: isrcRes.isrc },
             };
           }
         } catch {
@@ -100,6 +101,7 @@ export class DeezerAdapter implements MusicAdapter {
         isrc: item.isrc,
         url: item.link,
         id: String(item.id),
+        raw: { album: item.album?.title, isrc: item.isrc },
       }));
 
       const { bestMatch } = findBestMatch(candidates, metadata, this.id);

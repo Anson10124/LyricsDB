@@ -152,6 +152,10 @@ export class MusicResolver {
         if (!metadata.isrc && enriched.isrc) {
           metadata.isrc = enriched.isrc;
         }
+        // Fill missing Album in metadata
+        if (!metadata.album && enriched.album) {
+          metadata.album = enriched.album;
+        }
       }
 
       return enriched;
@@ -210,7 +214,7 @@ export class MusicResolver {
     const rawMetadata = await parser.fetchMetadata(sourceId, url, resolveOpts);
     const metadata = this.normalizeMetadata(rawMetadata);
 
-    // Cross-platform metadata enrichment via Musixmatch
+    // Cross-platform metadata enrichment via Musixmatch (fills ISRC and Album if missing)
     const enriched = await this.enrichMetadata(metadata, parser.id, sourceId, resolveOpts);
 
     const query = parser.buildSearchQuery(metadata);
@@ -271,6 +275,17 @@ export class MusicResolver {
           score: 0.95,
           matchReason: 'isrc',
         };
+      }
+    }
+
+    // If metadata.album is still missing, backfill from verified adapter candidates
+    if (!metadata.album) {
+      for (const link of Object.values(links)) {
+        const rawAlbum = (link?.raw as { album?: string })?.album;
+        if (link?.isVerified && rawAlbum && typeof rawAlbum === 'string' && rawAlbum.trim()) {
+          metadata.album = rawAlbum.trim();
+          break;
+        }
       }
     }
 

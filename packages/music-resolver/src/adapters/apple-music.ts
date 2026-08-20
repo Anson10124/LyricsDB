@@ -154,6 +154,7 @@ export class AppleMusicAdapter implements MusicAdapter {
               isrc: item.isrc,
               url: itemUrl,
               id: itemId,
+              raw: { album: item.collectionName, isrc: item.isrc },
             });
           }
         }
