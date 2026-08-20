@@ -14,16 +14,24 @@ import {
   tracks,
   type NewTrack,
 } from '@repo/database';
-import { type ResolvedLink, type ResolveResult } from '@repo/music-resolver';
+import {
+  buildPlatformUrl,
+  derivePlatformAndIdFromUrl,
+  normalizePlatform,
+  type ResolvedLink,
+  type ResolveResult,
+} from '@repo/music-resolver';
 import { LyricsEngine } from '@repo/lyrics';
+import type {
+  FormattedLyricsResult,
+  GetLyricsOptions,
+  GetOrSyncTrackOptions,
+  SanitizedTrack,
+} from '@repo/types';
 import { DATABASE_CONNECTION } from '../database/database.constants';
 import { ResolverService } from '../resolver/resolver.service';
 
-export interface GetOrSyncTrackOptions {
-  platform?: string;
-  id?: string;
-  url?: string;
-}
+export type { GetOrSyncTrackOptions, GetLyricsOptions };
 
 @Injectable()
 export class TracksService {
@@ -42,7 +50,7 @@ export class TracksService {
   async getOrSyncTrack(options: GetOrSyncTrackOptions): Promise<Track> {
     const { platform, id, url } = options;
 
-    let targetPlatform = platform ? this.normalizePlatform(platform) : undefined;
+    let targetPlatform = platform ? normalizePlatform(platform) : undefined;
     let targetId = id?.trim();
     let targetUrl = url?.trim();
 
@@ -54,7 +62,7 @@ export class TracksService {
 
     // If URL is provided without platform/id, derive them
     if (targetUrl && (!targetPlatform || !targetId)) {
-      const derived = this.derivePlatformAndIdFromUrl(targetUrl);
+      const derived = derivePlatformAndIdFromUrl(targetUrl);
       if (derived) {
         targetPlatform = derived.platform;
         targetId = derived.id;
@@ -71,7 +79,12 @@ export class TracksService {
 
     // Step 2: Build target URL if not provided
     if (!targetUrl && targetPlatform && targetId) {
-      targetUrl = this.buildPlatformUrl(targetPlatform, targetId);
+      try {
+        targetUrl = buildPlatformUrl(targetPlatform, targetId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid platform/id';
+        throw new BadRequestException(message);
+      }
     }
 
     if (!targetUrl) {
@@ -99,15 +112,6 @@ export class TracksService {
     return syncPromise;
   }
 
-  // Normalizes platform identifiers across inputs
-  private normalizePlatform(platform: string): string {
-    const p = platform.toLowerCase().replace(/[-_]/g, '');
-    if (p === 'applemusic' || p === 'apple') return 'apple';
-    if (p === '163' || p === 'netease') return 'netease';
-    if (p === 'qqmusic' || p === 'qq') return 'qq';
-    return p;
-  }
-
   private getHighConfidencePlatformId(link?: ResolvedLink | null): string | undefined {
     return link?.isVerified || (link?.score ?? 0) >= 0.8 ? link?.id : undefined;
   }
@@ -129,9 +133,9 @@ export class TracksService {
 
   // Fast O(1) indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC)
   async findByPlatformId(platform: string, id: string): Promise<Track | null> {
-    const normalizedPlatform = this.normalizePlatform(platform);
+    const norm = normalizePlatform(platform);
 
-    const columnMap: Record<string, any> = {
+    const columnMap: Record<string, typeof tracks.spotifyId | typeof tracks.appleMusicId | typeof tracks.deezerId | typeof tracks.neteaseId | typeof tracks.qqMusicId | typeof tracks.isrc> = {
       spotify: tracks.spotifyId,
       apple: tracks.appleMusicId,
       deezer: tracks.deezerId,
@@ -140,7 +144,7 @@ export class TracksService {
       isrc: tracks.isrc,
     };
 
-    const col = columnMap[normalizedPlatform];
+    const col = columnMap[norm];
     if (!col) return null;
 
     const result = await this.db.select().from(tracks).where(eq(col, id)).limit(1);
@@ -148,7 +152,7 @@ export class TracksService {
   }
 
   // Strip raw lyrics from track object for API responses
-  public sanitizeTrack<T extends Track>(track: T): Omit<T, 'lyrics'> & { hasLyrics: boolean } {
+  public sanitizeTrack<T extends Track>(track: T): SanitizedTrack<T> {
     const { lyrics, ...rest } = track;
     const hasLyrics = Boolean(
       lyrics &&
@@ -165,9 +169,7 @@ export class TracksService {
   }
 
   // Get formatted lyrics for a track
-  async getLyrics(
-    options: GetOrSyncTrackOptions & { trackId?: string; format?: string }
-  ): Promise<{ content: any; contentType: string }> {
+  async getLyrics(options: GetLyricsOptions): Promise<FormattedLyricsResult> {
     let track: Track | null = null;
 
     if (options.trackId) {
@@ -189,7 +191,7 @@ export class TracksService {
   }
 
   // Search tracks by title or artist in database
-  async search(query: string, limit = 20): Promise<Array<Omit<Track, 'lyrics'> & { hasLyrics: boolean }>> {
+  async search(query: string, limit = 20): Promise<Array<SanitizedTrack<Track>>> {
     if (!query || query.trim().length === 0) {
       return [];
     }
@@ -305,55 +307,5 @@ export class TracksService {
       .returning();
 
     return saved[0]!;
-  }
-
-  private buildPlatformUrl(platform: string, id: string): string {
-    const norm = this.normalizePlatform(platform);
-    switch (norm) {
-      case 'spotify':
-        return `https://open.spotify.com/track/${id}`;
-      case 'deezer':
-        return `https://www.deezer.com/track/${id}`;
-      case 'netease':
-        return `https://music.163.com/#/song?id=${id}`;
-      case 'apple':
-        return `https://music.apple.com/song/${id}`;
-      case 'qq':
-        return `https://y.qq.com/n/ryqq/songDetail/${id}`;
-      default:
-        throw new BadRequestException(`Cannot build URL for platform: ${platform}`);
-    }
-  }
-
-  private derivePlatformAndIdFromUrl(url: string): { platform: string; id: string } | null {
-    if (url.startsWith('spotify:track:')) {
-      const id = url.split(':')[2]?.split('?')[0];
-      if (id) return { platform: 'spotify', id };
-    }
-    if (url.includes('spotify.com')) {
-      const match = url.match(/track\/([a-zA-Z0-9]+)/);
-      if (match?.[1]) return { platform: 'spotify', id: match[1] };
-    }
-    if (url.includes('spotify.link') || url.includes('spotify.app.link') || url.includes('spoti.fi')) {
-      const id = url.split('/').pop()?.split('?')[0];
-      if (id) return { platform: 'spotify', id };
-    }
-    if (url.includes('deezer.com')) {
-      const match = url.match(/track\/(\d+)/);
-      if (match?.[1]) return { platform: 'deezer', id: match[1] };
-    }
-    if (url.includes('163.com') || url.includes('163cn.tv')) {
-      const match = url.match(/id=(\d+)/);
-      if (match?.[1]) return { platform: 'netease', id: match[1] };
-    }
-    if (url.includes('music.apple.com')) {
-      const match = url.match(/i=(\d+)/) || url.match(/\/(\d+)(?:\?|$)/);
-      if (match?.[1]) return { platform: 'apple', id: match[1] };
-    }
-    if (url.includes('qq.com')) {
-      const match = url.match(/songDetail\/([a-zA-Z0-9]+)/) || url.match(/song\/([a-zA-Z0-9]+)/);
-      if (match?.[1]) return { platform: 'qq', id: match[1] };
-    }
-    return null;
   }
 }

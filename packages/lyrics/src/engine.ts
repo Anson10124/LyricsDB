@@ -1,4 +1,4 @@
-import type { LyricsType, SyncedLyricsPayload } from '@repo/types';
+import type { FormattedLyricsResult, LyricsType, SyncedLyricsPayload } from '@repo/types';
 import { fetchDeezerLyrics } from './fetchers/deezer.js';
 import { fetchLrclibLyrics } from './fetchers/lrclib.js';
 import { fetchMusixmatchLyrics } from './fetchers/musixmatch.js';
@@ -300,7 +300,7 @@ export class LyricsEngine {
   formatLyrics(
     lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null | undefined,
     format: string = 'json'
-  ) {
+  ): FormattedLyricsResult {
     return formatLyricsPayload(lyrics, format);
   }
 }

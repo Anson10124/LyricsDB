@@ -57,7 +57,6 @@ export async function fetchMusixmatchLyrics(
   const musixmatchId = params.musixmatchId?.trim();
   const title = params.title?.trim();
   const artist = params.artist?.trim() || params.artists?.[0]?.trim();
-  const durationMs = params.durationMs;
 
   // Must have at least one exact platform ID or title
   if (!spotifyId && !isrc && !appleMusicId && !musixmatchId && !title) {

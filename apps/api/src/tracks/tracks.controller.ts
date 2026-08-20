@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Header, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
+import type { FormattedLyricsResult, GetOrSyncTrackOptions } from '@repo/types';
 import { TracksService } from './tracks.service';
 
-class TrackQueryDto {
+export class TrackQueryDto implements GetOrSyncTrackOptions {
   platform?: string;
   id?: string;
   url?: string;
@@ -72,7 +73,7 @@ export class TracksController {
     return this.sendLyricsResponse(result, res);
   }
 
-  private sendLyricsResponse(result: { content: any; contentType: string }, res?: Response) {
+  private sendLyricsResponse(result: FormattedLyricsResult, res?: Response) {
     if (res) {
       res.setHeader('Content-Type', result.contentType);
       return res.send(result.content);

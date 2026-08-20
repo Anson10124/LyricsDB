@@ -1,7 +1,12 @@
 import type { MatchCandidate, MusicAdapter, ResolveOptions, ResolvedLink, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
 import { findBestMatch } from '../utils/string-similarity.js';
-import { DEFAULT_SPOTIFY_SECRET, DEFAULT_SPOTIFY_VERSION, generateSpotifyTotp } from '../utils/totp.js';
+import {
+  DEFAULT_SPOTIFY_SECRET,
+  DEFAULT_SPOTIFY_VERSION,
+  requestSpotifyTokenWithSecret,
+  scrapeSpotifySecrets,
+} from '../utils/totp.js';
 
 interface SpotifyArtistProfile {
   name: string;
@@ -72,8 +77,6 @@ interface SpotifySearchResponse {
 }
 
 const SEARCH_DESKTOP_HASH = '75bbf6bfcfdf85b8fc828417bfad92b7cd66bf7f556d85670f4da8292373ebec';
-const PLAYER_JS_REGEX = /"(https:\/\/[^" ]+\/(?:mobile-)?web-player\.[0-9a-f]+\.js)"/;
-const SECRETS_REGEX = /\{\s*secret\s*:\s*["']([^"']+)["']\s*,\s*version\s*:\s*(\d+)\s*\}/g;
 
 function uriToUrl(uri: string): { url: string; id: string } {
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
@@ -322,95 +325,33 @@ export class SpotifyAdapter implements MusicAdapter {
 
     // Stage 1: Try fast-path with cached secret & version
     try {
-      const token = await this.requestTokenWithSecret(this.cachedSecret, this.cachedVersion, timeout);
-      if (token) return token;
+      const result = await requestSpotifyTokenWithSecret(
+        this.baseUrl,
+        this.cachedSecret,
+        this.cachedVersion,
+        timeout
+      );
+      if (result?.accessToken) {
+        this.cachedToken = result.accessToken;
+        this.tokenExpiresAt = result.expiresAt;
+        return result.accessToken;
+      }
     } catch {
       // Fallback to Stage 2
     }
 
     // Stage 2: Scrape web-player JS bundle to extract latest secret and version
-    const { secret, version } = await this.scrapeLatestSecrets(timeout);
+    const { secret, version } = await scrapeSpotifySecrets(this.baseUrl, timeout);
     this.cachedSecret = secret;
     this.cachedVersion = version;
 
-    const token = await this.requestTokenWithSecret(secret, version, timeout);
-    if (!token) {
+    const result = await requestSpotifyTokenWithSecret(this.baseUrl, secret, version, timeout);
+    if (!result?.accessToken) {
       throw new Error('Failed to obtain Spotify anonymous token');
     }
 
-    return token;
-  }
-
-  private async requestTokenWithSecret(
-    secret: string,
-    version: number,
-    timeout: number
-  ): Promise<string | null> {
-    const { serverTime } = await HttpClient.get<{ serverTime: number }>(
-      `${this.baseUrl}/api/server-time`,
-      { timeout }
-    );
-
-    const totp = generateSpotifyTotp(serverTime, secret);
-
-    const tokenUrl = new URL(`${this.baseUrl}/api/token`);
-    tokenUrl.searchParams.set('reason', 'init');
-    tokenUrl.searchParams.set('productType', 'web-player');
-    tokenUrl.searchParams.set('totp', totp);
-    tokenUrl.searchParams.set('totpServer', totp);
-    tokenUrl.searchParams.set('totpVer', version.toString());
-    tokenUrl.searchParams.set('ts', serverTime.toString());
-
-    const tokenData = await HttpClient.get<{
-      accessToken?: string;
-      accessTokenExpirationTimestampMs?: number;
-    }>(tokenUrl.toString(), {
-      headers: {
-        Accept: 'application/json',
-        Referer: `${this.baseUrl}/`,
-        Origin: this.baseUrl,
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-      },
-      timeout,
-    });
-
-    if (tokenData?.accessToken) {
-      this.cachedToken = tokenData.accessToken;
-      this.tokenExpiresAt = Math.floor(
-        (tokenData.accessTokenExpirationTimestampMs || Date.now() + 3600 * 1000) / 1000
-      );
-      return this.cachedToken;
-    }
-
-    return null;
-  }
-
-  private async scrapeLatestSecrets(timeout: number): Promise<{ secret: string; version: number }> {
-    const html = await HttpClient.get<string>(this.baseUrl, { timeout });
-    const jsMatch = html.match(PLAYER_JS_REGEX);
-    if (!jsMatch || !jsMatch[1]) {
-      throw new Error('Could not find Spotify player JS bundle URL');
-    }
-
-    const js = await HttpClient.get<string>(jsMatch[1], { timeout });
-
-    let latestVersion = 0;
-    let latestSecret = '';
-    let match;
-    while ((match = SECRETS_REGEX.exec(js)) !== null) {
-      const version = parseInt(match[2]!, 10);
-      if (version > latestVersion) {
-        latestVersion = version;
-        latestSecret = match[1]!;
-      }
-    }
-    SECRETS_REGEX.lastIndex = 0;
-
-    if (!latestSecret) {
-      throw new Error('Failed to extract Spotify TOTP secret from bundle');
-    }
-
-    return { secret: latestSecret, version: latestVersion };
+    this.cachedToken = result.accessToken;
+    this.tokenExpiresAt = result.expiresAt;
+    return result.accessToken;
   }
 }

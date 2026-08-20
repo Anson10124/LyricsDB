@@ -12,7 +12,14 @@ import {
   type LyricWord,
 } from '@applemusic-like-lyrics/lyric';
 import { TTMLGenerator } from '@applemusic-like-lyrics/ttml';
-import type { CompactLyricLine, CompactLyricWord, SyncedLyricsPayload, VocalType } from '@repo/types';
+import type {
+  CompactLyricLine,
+  CompactLyricWord,
+  FormattedLyricsResult,
+  SupportedLyricFormat,
+  SyncedLyricsPayload,
+  VocalType,
+} from '@repo/types';
 import { DOMImplementation, XMLSerializer } from '@xmldom/xmldom';
 
 import { stripInfoLines } from './info-lines.js';
@@ -131,23 +138,12 @@ export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLi
   return amllLines;
 }
 
-export type SupportedLyricFormat =
-  | 'ttml'
-  | 'lrc'
-  | 'lrca2'
-  | 'yrc'
-  | 'qrc'
-  | 'eslrc'
-  | 'ass'
-  | 'lyl'
-  | 'lys'
-  | 'lqe'
-  | 'json';
+export type { SupportedLyricFormat, FormattedLyricsResult } from '@repo/types';
 
 export function formatLyricsPayload(
   lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null | undefined,
   format: string = 'json'
-): { content: string | SyncedLyricsPayload | Record<string, unknown>; contentType: string } {
+): FormattedLyricsResult {
   const normFormat = format.toLowerCase().trim().replace(/^\./, '') as SupportedLyricFormat;
 
   if (!lyrics) {

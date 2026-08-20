@@ -12,7 +12,7 @@ export type CompactLyricWord = [
   type: VocalType,
   startMs: number,
   lengthMs: number,
-  text: string
+  text: string,
 ];
 
 // A line of lyrics containing one or more word tokens.
@@ -28,23 +28,20 @@ export type LyricsType = 'word' | 'line' | 'plain';
 // ]
 export type SyncedLyricsPayload = CompactLyricLine[];
 
-export interface TrackMetadata {
-  id: string;
-  isrc?: string | null;
-  spotifyId?: string | null;
-  appleMusicId?: string | null;
-  deezerId?: string | null;
-  neteaseId?: string | null;
-  qqMusicId?: string | null;
-  title: string;
-  artists: string[];
-  album?: string | null;
-  durationMs: number;
-  artworkUrl?: string | null;
-  lyricsType?: LyricsType | null;
-  lyrics?: SyncedLyricsPayload | string | null;
-  lyricsProvider?: string | null;
-  isVerified: boolean;
-  createdAt: string;
-  updatedAt: string;
+export type SupportedLyricFormat =
+  | 'ttml'
+  | 'lrc'
+  | 'lrca2'
+  | 'yrc'
+  | 'qrc'
+  | 'eslrc'
+  | 'ass'
+  | 'lyl'
+  | 'lys'
+  | 'lqe'
+  | 'json';
+
+export interface FormattedLyricsResult {
+  content: string | SyncedLyricsPayload | Record<string, unknown>;
+  contentType: string;
 }
