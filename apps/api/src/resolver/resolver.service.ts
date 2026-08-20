@@ -1,6 +1,12 @@
 import { Injectable, BadRequestException, Inject, Optional } from '@nestjs/common';
 import { MusicResolver, type ResolveResult } from '@repo/music-resolver';
-import { getSpotifyToken, refreshSpotifyToken, type DatabaseClient } from '@repo/database';
+import {
+  getMusixmatchToken,
+  getSpotifyToken,
+  refreshMusixmatchToken,
+  refreshSpotifyToken,
+  type DatabaseClient,
+} from '@repo/database';
 import { DATABASE_CONNECTION } from '../database/database.constants';
 
 @Injectable()
@@ -15,6 +21,14 @@ export class ResolverService {
             return refreshSpotifyToken(this.db, { timeout: options?.timeout });
           }
           return getSpotifyToken(this.db, { timeout: options?.timeout });
+        },
+      },
+      musixmatch: {
+        getToken: async (options, forceRefresh) => {
+          if (forceRefresh) {
+            return refreshMusixmatchToken(this.db, { timeout: options?.timeout });
+          }
+          return getMusixmatchToken(this.db, { timeout: options?.timeout });
         },
       },
     });

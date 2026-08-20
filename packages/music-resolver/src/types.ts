@@ -84,10 +84,27 @@ export interface MusicParser {
   buildSearchQuery(metadata: TrackMetadata): string;
 }
 
+export interface EnrichedMusixmatchMetadata {
+  isrc?: string;
+  spotifyId?: string;
+  spotifyIds?: string[];
+  appleMusicId?: string;
+  appleMusicIds?: string[];
+  musixmatchId?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  raw?: Record<string, unknown>;
+}
+
 export interface ResolverConfig {
   spotify?: {
     apiUrl?: string;
     baseUrl?: string;
+    getToken?: (options?: ResolveOptions, forceRefresh?: boolean) => Promise<string>;
+  };
+  musixmatch?: {
+    apiUrl?: string;
     getToken?: (options?: ResolveOptions, forceRefresh?: boolean) => Promise<string>;
   };
   deezer?: {

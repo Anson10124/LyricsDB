@@ -18,3 +18,4 @@ export * from './utils/string-similarity.js';
 export * from './utils/compare-helper.js';
 export * from './utils/totp.js';
 export * from './utils/netease-crypto.js';
+export * from './utils/musixmatch-matcher.js';

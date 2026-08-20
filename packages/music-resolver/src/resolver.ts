@@ -9,6 +9,7 @@ import { NeteaseParser } from './parsers/netease.js';
 import { QQMusicParser } from './parsers/qq-music.js';
 import { SpotifyParser } from './parsers/spotify.js';
 import type {
+  EnrichedMusixmatchMetadata,
   MusicAdapter,
   MusicParser,
   ResolveOptions,
@@ -17,13 +18,17 @@ import type {
   ResolvedLink,
   TrackMetadata,
 } from './types.js';
+import { matchTrackWithMusixmatch } from './utils/musixmatch-matcher.js';
 import { cleanSearchQuery, normalizeSongTitle, splitArtists } from './utils/query.js';
 
 export class MusicResolver {
   private parsers = new Map<string, MusicParser>();
   private adapters = new Map<string, MusicAdapter>();
+  private musixmatchConfig?: ResolverConfig['musixmatch'];
 
   constructor(config?: ResolverConfig) {
+    this.musixmatchConfig = config?.musixmatch;
+
     // Register built-in default parsers
     this.registerParser(
       new AppleMusicParser({
@@ -113,6 +118,48 @@ export class MusicResolver {
     return metadata;
   }
 
+  // Queries Musixmatch to cross-reference platform IDs and fill in missing fields (ISRC, Spotify, Apple)
+  private async enrichMetadata(
+    metadata: TrackMetadata,
+    sourcePlatform: string,
+    sourceId: string,
+    options?: ResolveOptions
+  ): Promise<EnrichedMusixmatchMetadata | null> {
+    try {
+      const params: Parameters<typeof matchTrackWithMusixmatch>[0] = {};
+
+      const normSource = sourcePlatform.toLowerCase();
+      if (normSource === 'spotify') {
+        params.spotifyId = sourceId;
+      } else if (normSource === 'applemusic' || normSource === 'apple') {
+        params.appleMusicId = sourceId;
+      } else if (metadata.isrc) {
+        params.isrc = metadata.isrc;
+      } else {
+        params.title = metadata.cleanTitle || metadata.title;
+        params.artist = metadata.artist || metadata.artists?.[0];
+        params.durationMs = metadata.durationMs;
+      }
+
+      const enriched = await matchTrackWithMusixmatch(params, {
+        ...options,
+        apiUrl: this.musixmatchConfig?.apiUrl,
+        getToken: this.musixmatchConfig?.getToken,
+      });
+
+      if (enriched) {
+        // Fill missing ISRC in metadata
+        if (!metadata.isrc && enriched.isrc) {
+          metadata.isrc = enriched.isrc;
+        }
+      }
+
+      return enriched;
+    } catch {
+      return null;
+    }
+  }
+
   // Executes primary search and falls back to cleanTitle + primary artist if unverified
   private async queryAdapterWithFallback(
     adapter: MusicAdapter,
@@ -162,8 +209,11 @@ export class MusicResolver {
 
     const rawMetadata = await parser.fetchMetadata(sourceId, url, resolveOpts);
     const metadata = this.normalizeMetadata(rawMetadata);
-    const query = parser.buildSearchQuery(metadata);
 
+    // Cross-platform metadata enrichment via Musixmatch
+    const enriched = await this.enrichMetadata(metadata, parser.id, sourceId, resolveOpts);
+
+    const query = parser.buildSearchQuery(metadata);
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
     const links: Record<string, ResolvedLink | null> = {};
 
@@ -187,6 +237,43 @@ export class MusicResolver {
 
     await Promise.all(adapterPromises);
 
+    // Fill in platform links from Musixmatch cross-platform mapping if adapter search yielded unverified result
+    if (enriched) {
+      if (
+        (!links['spotify'] || !links['spotify'].isVerified) &&
+        enriched.spotifyId &&
+        this.adapters.has('spotify') &&
+        parser.id !== 'spotify'
+      ) {
+        links['spotify'] = {
+          platform: 'spotify',
+          url: `https://open.spotify.com/track/${enriched.spotifyId}`,
+          id: enriched.spotifyId,
+          isVerified: true,
+          score: 0.95,
+          matchReason: 'isrc',
+        };
+      }
+
+      const appleKey = links['appleMusic'] ? 'appleMusic' : 'applemusic';
+      if (
+        (!links[appleKey] || !links[appleKey]?.isVerified) &&
+        enriched.appleMusicId &&
+        this.adapters.has('appleMusic') &&
+        parser.id !== 'appleMusic' &&
+        parser.id !== 'applemusic'
+      ) {
+        links['appleMusic'] = {
+          platform: 'appleMusic',
+          url: `https://music.apple.com/song/${enriched.appleMusicId}`,
+          id: enriched.appleMusicId,
+          isVerified: true,
+          score: 0.95,
+          matchReason: 'isrc',
+        };
+      }
+    }
+
     return {
       sourceUrl: url,
       sourcePlatform: parser.id,
@@ -205,6 +292,10 @@ export class MusicResolver {
     options?: ResolveOptions
   ): Promise<Record<string, ResolvedLink | null>> {
     const normalizedMeta = this.normalizeMetadata(metadata);
+
+    // Enrich metadata if ISRC missing
+    await this.enrichMetadata(normalizedMeta, '', '', options);
+
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
     const links: Record<string, ResolvedLink | null> = {};
 
