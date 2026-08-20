@@ -88,7 +88,7 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   }
 
   return (
-    <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-zinc-950 text-white shadow-xl select-none">
+    <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none">
       {track.artworkUrl && (
         <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
           <BackgroundRender
@@ -123,22 +123,22 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
             setCurrentTime(0);
             lastFrameTimeRef.current = null;
           }}
-          className="flex size-9 items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-md border border-white/15 shadow-md transition-all hover:bg-black/70 hover:text-white hover:scale-105 active:scale-95 cursor-pointer"
+          className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
           title="Restart"
         >
-          <RotateCcw className="size-3.5" />
+          <RotateCcw className="size-4" />
         </button>
 
         <button
           type="button"
           onClick={() => setIsPlaying((p) => !p)}
-          className="flex size-9 items-center justify-center rounded-full bg-white text-black backdrop-blur-md shadow-md transition-all hover:bg-white/90 hover:scale-105 active:scale-95 cursor-pointer"
+          className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
           title={isPlaying ? "Pause" : "Play"}
         >
           {isPlaying ? (
-            <Pause className="size-4 fill-black" />
+            <Pause className="size-4" />
           ) : (
-            <Play className="size-4 fill-black translate-x-0.5" />
+            <Play className="size-4" />
           )}
         </button>
       </div>

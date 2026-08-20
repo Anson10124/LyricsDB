@@ -117,7 +117,7 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             type="button"
             onClick={handleCopy}
             disabled={!rawLyrics}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
             <span>{copied ? "Copied" : "Copy"}</span>
@@ -127,7 +127,7 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             type="button"
             onClick={handleDownload}
             disabled={!rawLyrics}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="size-3.5" />
             <span>Download</span>
@@ -155,16 +155,6 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
               {track.title}
             </h2>
-            {track.hasLyrics && (
-              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                {track.lyricsType ? `${track.lyricsType}-sync` : "Lyrics available"}
-              </span>
-            )}
-            {!track.hasLyrics && (
-              <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                Instrumental / No Lyrics
-              </span>
-            )}
           </div>
 
           <p className="text-sm font-medium text-muted-foreground truncate">
@@ -218,13 +208,14 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       </div>
 
       {/* Format Selector Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto">
         {(["synced", "ttml", "lrc", "yrc", "json"] as LyricsViewFormat[]).map((fmt) => (
           <button
             key={fmt}
             type="button"
+            disabled={!rawLyrics}
             onClick={() => setSelectedFormat(fmt)}
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+            className={`rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               selectedFormat === fmt
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -238,13 +229,13 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       {/* Lyrics Container */}
       {!rawLyrics ? (
         <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2 min-h-[300px]">
-          <Music2 className="size-10 stroke-1 text-muted-foreground/60" />
-          <p className="text-sm font-medium">No synchronized lyrics available for this track.</p>
+          <Music2 className="size-10 stroke-2 text-primary opacity-60" />
+          <p className="text-sm font-medium">We couldn't find lyrics for this track.</p>
         </div>
       ) : selectedFormat === "synced" && isSyncedPayload ? (
         <AmllPlayer track={track} rawLyrics={rawLyrics as SyncedLyricsPayload} />
       ) : (
-        <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs overflow-hidden min-h-[300px] max-h-[600px] overflow-y-auto">
+        <div className="rounded-2xl h-[520px] border border-border/70 bg-card/80 p-5 shadow-xs overflow-hidden min-h-[300px] max-h-[600px] overflow-y-auto">
           <pre className="text-xs font-mono text-foreground/90 whitespace-pre-wrap break-all leading-relaxed">
             {formattedText}
           </pre>
