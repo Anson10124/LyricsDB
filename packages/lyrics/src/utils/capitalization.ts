@@ -28,7 +28,12 @@ function toSentenceCase(text: string): string {
 
   // Preserve standalone 'I' capitalization (e.g. "i'm" -> "I'm")
   let result = chars.join('');
-  result = result.replace(/\bi\b/g, 'I').replace(/\bi'm\b/gi, "I'm").replace(/\bi'll\b/gi, "I'll");
+  result = result
+    .replace(/\bi\b/g, 'I')
+    .replace(/\bi'm\b/gi, "I'm")
+    .replace(/\bi'll\b/gi, "I'll")
+    .replace(/\bi've\b/gi, "I've")
+    .replace(/\bi'd\b/gi, "I'd");
 
   return result;
 }

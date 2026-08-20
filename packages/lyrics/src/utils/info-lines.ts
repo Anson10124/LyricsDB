@@ -104,39 +104,8 @@ const CREDIT_KEYWORDS = [
   'Mixing',
   'Mastered',
   'Mastering',
-  'Master',
-  'Label',
   'Publisher',
   'Copyright',
-  'Studio',
-  'Vocal',
-  'Vocals',
-  'Guitar',
-  'Bass',
-  'Drum',
-  'Drums',
-  'Pads',
-  'Brass',
-  'Cello',
-  'Choir',
-  'Horns',
-  'Piano',
-  'Synth',
-  'Viola',
-  'Violin',
-  'String',
-  'Strings',
-  'Chorus',
-  'Record',
-  'Arrange',
-  'Conduct',
-  'Editing',
-  'Produce',
-  'Engineer',
-  'Keyboard',
-  'Percussion',
-  'Production',
-  'Programming',
 ];
 
 export const PLACEHOLDER_PATTERNS: RegExp[] = [
@@ -222,7 +191,12 @@ function normalizeStringForMatch(str: string): string {
     .trim();
 }
 
-export function isCreditOrInfoLine(text: string, title?: string, artist?: string): boolean {
+export function isCreditOrInfoLine(
+  text: string,
+  title?: string,
+  artist?: string,
+  bodyPass = false
+): boolean {
   if (!text || text.trim().length === 0) return false;
 
   const str = text.replace(/：/g, ': ').trim();
@@ -279,25 +253,25 @@ export function isCreditOrInfoLine(text: string, title?: string, artist?: string
     return true;
   }
 
-  // Title and Artist header checks
-  const normLine = normalizeStringForMatch(str);
-  const normTitle = title ? normalizeStringForMatch(title) : '';
-  const normArtist = artist ? normalizeStringForMatch(artist) : '';
+  // Title / artist header checks.
+  // In bodyPass mode (mid-body lines) we skip these entirely to avoid stripping
+  // genuine lyric lines that happen to share words with the title or artist name.
+  if (!bodyPass) {
+    const normLine = normalizeStringForMatch(str);
+    const normTitle = title ? normalizeStringForMatch(title) : '';
+    const normArtist = artist ? normalizeStringForMatch(artist) : '';
 
-  if (normTitle && normArtist) {
-    // Matches e.g. "Title - Artist", "Artist - Title", "Title / Artist", "Artist - Title (feat. ...)"
-    if (normLine.includes(normTitle) && normLine.includes(normArtist)) {
-      return true;
+    // Exact match: line IS the title or artist
+    if (normTitle && normLine === normTitle) return true;
+    if (normArtist && normLine === normArtist) return true;
+
+    // Exact combined match: "Title - Artist" / "Artist - Title" style header lines
+    // (all non-alphanumeric are stripped by normalizeStringForMatch, so they collapse to a concat)
+    if (normTitle && normArtist) {
+      const combined1 = normTitle + normArtist;
+      const combined2 = normArtist + normTitle;
+      if (normLine === combined1 || normLine === combined2) return true;
     }
-  }
-
-  // Line exactly matches title or artist (e.g. header line with only title or only artist)
-  if (normTitle && normLine === normTitle) {
-    return true;
-  }
-
-  if (normArtist && normLine === normArtist) {
-    return true;
   }
 
   return false;
@@ -341,10 +315,12 @@ export function stripInfoLines(
 
   const sliced = payload.slice(startIdx, endIdx);
 
-  // Filter out any standalone placeholder or credit lines in the remaining body
+  // Filter out any standalone placeholder or credit lines in the remaining body.
+  // bodyPass=true skips title/artist matching so genuine lyric lines containing
+  // title words (e.g. "Sweet dreams are made of this") are never removed.
   const filtered = sliced.filter((line) => {
     const text = getLineText(line);
-    return !isPlaceholderText(text) && !isCreditOrInfoLine(text, title, artist);
+    return !isPlaceholderText(text) && !isCreditOrInfoLine(text, title, artist, true);
   });
 
   return filtered;
