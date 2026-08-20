@@ -313,9 +313,17 @@ export class TracksService {
   }
 
   private derivePlatformAndIdFromUrl(url: string): { platform: string; id: string } | null {
+    if (url.startsWith('spotify:track:')) {
+      const id = url.split(':')[2]?.split('?')[0];
+      if (id) return { platform: 'spotify', id };
+    }
     if (url.includes('spotify.com')) {
       const match = url.match(/track\/([a-zA-Z0-9]+)/);
       if (match?.[1]) return { platform: 'spotify', id: match[1] };
+    }
+    if (url.includes('spotify.link') || url.includes('spotify.app.link') || url.includes('spoti.fi')) {
+      const id = url.split('/').pop()?.split('?')[0];
+      if (id) return { platform: 'spotify', id };
     }
     if (url.includes('deezer.com')) {
       const match = url.match(/track\/(\d+)/);

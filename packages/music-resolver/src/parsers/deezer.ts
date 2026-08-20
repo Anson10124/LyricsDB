@@ -1,6 +1,6 @@
 import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
 import { HttpClient } from '../utils/http.js';
-import { cleanSearchQuery, normalizeSongTitle } from '../utils/query.js';
+import { normalizeSongTitle } from '../utils/query.js';
 import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
 import { BaseMusicParser } from './base.js';
 

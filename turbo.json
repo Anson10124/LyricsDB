@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": ["DATABASE_URL", "NODE_ENV", "PORT"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

@@ -1,6 +1,9 @@
 import { createHmac } from 'node:crypto';
 
-export function generateSpotifyTotp(serverTime: number, secret: string): string {
+export const DEFAULT_SPOTIFY_SECRET = '{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH';
+export const DEFAULT_SPOTIFY_VERSION = 59;
+
+export function generateSpotifyTotp(serverTime: number, secret: string = DEFAULT_SPOTIFY_SECRET): string {
   const secretArray = Array.from(secret, (c) => c.charCodeAt(0));
   const transformed = secretArray.map((element, index) => element ^ ((index % 33) + 9));
 

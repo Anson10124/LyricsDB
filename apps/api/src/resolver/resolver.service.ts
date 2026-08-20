@@ -1,9 +1,24 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, Optional } from '@nestjs/common';
 import { MusicResolver, type ResolveResult } from '@repo/music-resolver';
+import { getSpotifyToken, refreshSpotifyToken, type DatabaseClient } from '@repo/database';
+import { DATABASE_CONNECTION } from '../database/database.constants';
 
 @Injectable()
 export class ResolverService {
-  private resolver = new MusicResolver();
+  private resolver: MusicResolver;
+
+  constructor(@Optional() @Inject(DATABASE_CONNECTION) private readonly db?: DatabaseClient) {
+    this.resolver = new MusicResolver({
+      spotify: {
+        getToken: async (options, forceRefresh) => {
+          if (forceRefresh) {
+            return refreshSpotifyToken(this.db, { timeout: options?.timeout });
+          }
+          return getSpotifyToken(this.db, { timeout: options?.timeout });
+        },
+      },
+    });
+  }
 
   async resolveUrl(url: string, targetPlatforms?: string[]): Promise<ResolveResult> {
     if (!url || typeof url !== 'string') {

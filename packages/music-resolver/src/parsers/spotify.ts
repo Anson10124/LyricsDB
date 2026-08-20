@@ -5,10 +5,11 @@ import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
 import { BaseMusicParser } from './base.js';
 
 export const SPOTIFY_LINK_REGEX =
-  /^https:\/\/(open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(track|album|playlist|artist|episode|show)|spotify\.link)\/(\w{11,24})(?:[?#].*)?$/;
-export const SPOTIFY_LINK_MOBILE_REGEX = /^https:\/\/spotify\.link\/(\w+)/;
+  /^(?:https?:\/\/(?:open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(track|album|playlist|artist|episode|show)|(?:spotify\.link|spotify\.app\.link|spoti\.fi))\/([a-zA-Z0-9]+)|spotify:(track|album|playlist|artist|episode|show):([a-zA-Z0-9]+))(?:[?#].*)?$/i;
+
+export const SPOTIFY_LINK_MOBILE_REGEX = /^https?:\/\/(?:spotify\.link|spotify\.app\.link|spoti\.fi)\/(\w+)/i;
 export const SPOTIFY_LINK_DESKTOP_REGEX =
-  /(https:\/\/open\.spotify\.com\/(track|album|playlist|artist|episode|show)\/(\w+))/;
+  /(https?:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(track|album|playlist|artist|episode|show)\/([a-zA-Z0-9]+))/i;
 
 const SPOTIFY_TYPE_MAP: Record<string, MetadataType> = {
   'music.song': 'song',
@@ -23,8 +24,10 @@ interface SpotifyEmbedEntity {
   type?: string;
   name?: string;
   title?: string;
+  subtitle?: string;
   duration?: number;
-  artists?: Array<{ name: string }>;
+  artists?: Array<{ name: string; uri?: string }>;
+  trackList?: Array<{ title?: string; subtitle?: string }>;
   audioPreview?: { url?: string };
   visualIdentity?: { image?: Array<{ url?: string }> };
 }
@@ -34,35 +37,88 @@ export class SpotifyParser extends BaseMusicParser {
   readonly name = 'Spotify';
 
   match(url: string): boolean {
-    return SPOTIFY_LINK_REGEX.test(url) || url.includes('open.spotify.com') || url.includes('spotify.link');
+    return (
+      SPOTIFY_LINK_REGEX.test(url) ||
+      url.startsWith('spotify:') ||
+      url.includes('open.spotify.com') ||
+      url.includes('spotify.link') ||
+      url.includes('spotify.app.link') ||
+      url.includes('spoti.fi')
+    );
   }
 
   parse(url: string): { id: string; type?: MetadataType } {
-    const match = url.match(SPOTIFY_LINK_REGEX);
-    const id = match?.[3] || url.split('/').pop()?.split('?')[0] || '';
-    const rawType = match?.[2];
-    let type: MetadataType | undefined;
-    if (rawType === 'track') type = 'song';
-    else if (rawType === 'album') type = 'album';
-    else if (rawType === 'playlist') type = 'playlist';
-    else if (rawType === 'artist') type = 'artist';
-    else if (rawType === 'episode') type = 'podcast';
-    else if (rawType === 'show') type = 'show';
+    if (url.startsWith('spotify:')) {
+      const parts = url.split(':');
+      const rawType = parts[1];
+      const id = parts[2] || '';
+      return { id, type: this.mapRawType(rawType) };
+    }
 
-    return { id, type };
+    const match = url.match(SPOTIFY_LINK_REGEX);
+    if (match) {
+      const rawType = match[1] || match[3];
+      const id = match[2] || match[4] || '';
+      return { id, type: this.mapRawType(rawType) };
+    }
+
+    const desktopMatch = url.match(SPOTIFY_LINK_DESKTOP_REGEX);
+    if (desktopMatch) {
+      return { id: desktopMatch[3] || '', type: this.mapRawType(desktopMatch[2]) };
+    }
+
+    const id = url.split('/').pop()?.split('?')[0] || '';
+    return { id };
+  }
+
+  private mapRawType(rawType?: string): MetadataType | undefined {
+    if (!rawType) return undefined;
+    const lower = rawType.toLowerCase();
+    if (lower === 'track') return 'song';
+    if (lower === 'album') return 'album';
+    if (lower === 'playlist') return 'playlist';
+    if (lower === 'artist') return 'artist';
+    if (lower === 'episode') return 'podcast';
+    if (lower === 'show') return 'show';
+    return undefined;
   }
 
   async fetchMetadata(id: string, url: string, options?: ResolveOptions): Promise<TrackMetadata> {
-    const parsed = this.parse(url);
-    const itemType = parsed.type || 'song';
+    let targetUrl = url;
+    let targetId = id;
+    const parsed = this.parse(targetUrl);
+    let itemType = parsed.type || 'song';
+
+    // If shortlink or URI, resolve to canonical HTTP URL
+    if (targetUrl.startsWith('spotify:')) {
+      const singularPath = itemType === 'song' ? 'track' : itemType;
+      targetUrl = `https://open.spotify.com/${singularPath}/${targetId}`;
+    } else if (
+      targetUrl.includes('spotify.link') ||
+      targetUrl.includes('spotify.app.link') ||
+      targetUrl.includes('spoti.fi')
+    ) {
+      try {
+        const headRes = await fetch(targetUrl, { redirect: 'follow', method: 'GET' });
+        if (headRes.url && headRes.url !== targetUrl) {
+          targetUrl = headRes.url;
+          const reParsed = this.parse(targetUrl);
+          if (reParsed.id) targetId = reParsed.id;
+          if (reParsed.type) itemType = reParsed.type;
+        }
+      } catch {
+        // Fallback to scraping
+      }
+    }
+
     const singularPath = itemType === 'song' ? 'track' : itemType;
 
     // 1. Try Spotify Embed page (contains rich JSON data without any auth)
     try {
-      const embedUrl = `https://open.spotify.com/embed/${singularPath}/${id}`;
+      const embedUrl = `https://open.spotify.com/embed/${singularPath}/${targetId}`;
       const embedHtml = await HttpClient.get<string>(embedUrl, {
-        timeout: options?.timeout,
-        retries: options?.retries,
+        timeout: options?.timeout ?? 8000,
+        retries: options?.retries ?? 1,
       });
 
       const doc = getCheerioDoc(embedHtml);
@@ -75,14 +131,23 @@ export class SpotifyParser extends BaseMusicParser {
         if (entity && (entity.name || entity.title)) {
           const rawTitle = (entity.name || entity.title || '').trim();
           const normalized = normalizeSongTitle(rawTitle);
-          const artists = entity.artists?.map((a) => a.name).filter(Boolean) || [];
+
+          let artists: string[] = [];
+          if (entity.artists && entity.artists.length > 0) {
+            artists = entity.artists.map((a) => a.name).filter(Boolean);
+          } else if (entity.subtitle && itemType !== 'playlist' && itemType !== 'artist') {
+            artists = [entity.subtitle.trim()];
+          } else if (entity.trackList?.[0]?.subtitle && itemType === 'album') {
+            artists = [entity.trackList[0].subtitle.trim()];
+          }
+
           const artist = artists.join(', ') || undefined;
           const image = entity.visualIdentity?.image?.[0]?.url;
           const audio = entity.audioPreview?.url;
           const durationMs = entity.duration;
 
           return {
-            id,
+            id: targetId,
             title: rawTitle,
             cleanTitle: normalized.cleanTitle,
             artist,
@@ -101,16 +166,16 @@ export class SpotifyParser extends BaseMusicParser {
 
     // 2. Try Spotify oEmbed endpoint
     try {
-      const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+      const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(targetUrl)}`;
       const oembed = await HttpClient.get<{
         title?: string;
         thumbnail_url?: string;
-      }>(oembedUrl, { timeout: options?.timeout });
+      }>(oembedUrl, { timeout: options?.timeout ?? 8000 });
 
       if (oembed?.title) {
         const normalized = normalizeSongTitle(oembed.title);
         return {
-          id,
+          id: targetId,
           title: oembed.title,
           cleanTitle: normalized.cleanTitle,
           extraArtists: normalized.extraArtists,
@@ -123,10 +188,9 @@ export class SpotifyParser extends BaseMusicParser {
     }
 
     // 3. Fallback to OpenGraph HTML Scraping
-    let targetUrl = url;
     let html = await HttpClient.get<string>(targetUrl, {
-      timeout: options?.timeout,
-      retries: options?.retries,
+      timeout: options?.timeout ?? 8000,
+      retries: options?.retries ?? 1,
     });
 
     if (SPOTIFY_LINK_MOBILE_REGEX.test(targetUrl)) {
@@ -134,8 +198,8 @@ export class SpotifyParser extends BaseMusicParser {
       if (desktopMatch) {
         targetUrl = desktopMatch;
         html = await HttpClient.get<string>(targetUrl, {
-          timeout: options?.timeout,
-          retries: options?.retries,
+          timeout: options?.timeout ?? 8000,
+          retries: options?.retries ?? 1,
         });
       }
     }
@@ -149,7 +213,7 @@ export class SpotifyParser extends BaseMusicParser {
 
     const type: MetadataType = targetUrl.includes('episode')
       ? 'podcast'
-      : SPOTIFY_TYPE_MAP[ogType] || 'song';
+      : SPOTIFY_TYPE_MAP[ogType] || itemType;
 
     let artist: string | undefined;
     if (type === 'song' || type === 'album') {
@@ -165,7 +229,7 @@ export class SpotifyParser extends BaseMusicParser {
     const normalized = normalizeSongTitle(cleanedTitle);
 
     return {
-      id,
+      id: targetId,
       title: cleanedTitle,
       cleanTitle: normalized.cleanTitle,
       artist,
@@ -177,4 +241,5 @@ export class SpotifyParser extends BaseMusicParser {
     };
   }
 }
+
 

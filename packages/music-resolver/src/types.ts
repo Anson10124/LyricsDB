@@ -88,6 +88,7 @@ export interface ResolverConfig {
   spotify?: {
     apiUrl?: string;
     baseUrl?: string;
+    getToken?: (options?: ResolveOptions, forceRefresh?: boolean) => Promise<string>;
   };
   deezer?: {
     apiUrl?: string;

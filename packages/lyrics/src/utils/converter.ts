@@ -195,7 +195,10 @@ export function formatLyricsPayload(
             endTime: w.endTime,
           })),
         }));
-        formatted = generator.generate({ lines: ttmlLines as any, metadata: {} });
+        formatted = generator.generate({
+          lines: ttmlLines as unknown as Parameters<typeof generator.generate>[0]['lines'],
+          metadata: {},
+        });
         contentType = 'application/xml; charset=utf-8';
       }
       break;

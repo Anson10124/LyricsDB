@@ -58,7 +58,7 @@ export function normalizeSongTitle(rawTitle: string): TitleNormalizationResult {
   // 1. Extract and remove featuring artists from title:
   // e.g. "(feat. Artist)", "[feat. Artist]", "feat. Artist", "(ft. Artist)", "(with Artist)"
   title = title.replace(
-    /[\(\[\{]?(?:feat\.?|ft\.?|featuring|with|prod\.?\s+by)\s+([^\)\]\}]+)[\)\]\}]?/gi,
+    /[([{]?(?:feat\.?|ft\.?|featuring|with|prod\.?\s+by)\s+([^)}\]]+)[)}\]]?/gi,
     (_, artists) => {
       const split = splitArtists(artists);
       extraArtists.push(...split);
@@ -69,31 +69,31 @@ export function normalizeSongTitle(rawTitle: string): TitleNormalizationResult {
   // 2. Remove common noisy version tags:
   // - Remastered info: (Remastered 2011), (2021 Remaster), (2009 Digital Remaster), - Remastered
   title = title.replace(
-    /[\(\[](?:(?:digital\s+)?remaster(?:ed)?(?:\s+\d{4})?|\d{4}\s+(?:digital\s+)?remaster(?:ed)?|remastered|remaster)[\)\]]/gi,
+    /[([](?:(?:digital\s+)?remaster(?:ed)?(?:\s+\d{4})?|\d{4}\s+(?:digital\s+)?remaster(?:ed)?|remastered|remaster)[)\]]/gi,
     ''
   );
 
   // - Editions: (Deluxe Edition), [Deluxe], (Super Deluxe), (Bonus Track), (Anniversary Edition), (Expanded Edition)
   title = title.replace(
-    /[\(\[](?:(?:super\s+)?deluxe(?:\s+edition)?|bonus\s+track(?:\s+version)?|anniversary\s+edition|expanded\s+edition|special\s+edition|collector'?s?\s+edition)[\)\]]/gi,
+    /[([](?:(?:super\s+)?deluxe(?:\s+edition)?|bonus\s+track(?:\s+version)?|anniversary\s+edition|expanded\s+edition|special\s+edition|collector'?s?\s+edition)[)\]]/gi,
     ''
   );
 
   // - Mix / Version tags (keep remix info if not noise, but clean generic tags)
   title = title.replace(
-    /[\(\[](?:radio\s+edit|single\s+version|album\s+version|original\s+version|original\s+mix|stereo|mono|explicit|clean|explicit\s+version|clean\s+version)[\)\]]/gi,
+    /[([](?:radio\s+edit|single\s+version|album\s+version|original\s+version|original\s+mix|stereo|mono|explicit|clean|explicit\s+version|clean\s+version)[)\]]/gi,
     ''
   );
 
   // - Video / Audio / Web tags: (Official Music Video), (Official Audio), (Audio), (Lyric Video)
   title = title.replace(
-    /[\(\[](?:official\s+music\s+video|official\s+video|official\s+audio|audio|lyric\s+video|visualizer|hd|4k)[\)\]]/gi,
+    /[([](?:official\s+music\s+video|official\s+video|official\s+audio|audio|lyric\s+video|visualizer|hd|4k)[)\]]/gi,
     ''
   );
 
   // - Soundtrack tags: (From "Movie Title" Soundtrack)
   title = title.replace(
-    /[\(\[](?:from\s+["'].*?["'](?:\s+soundtrack)?|original\s+motion\s+picture\s+soundtrack|ost)[\)\]]/gi,
+    /[([](?:from\s+["'].*?["'](?:\s+soundtrack)?|original\s+motion\s+picture\s+soundtrack|ost)[)\]]/gi,
     ''
   );
 
@@ -104,7 +104,7 @@ export function normalizeSongTitle(rawTitle: string): TitleNormalizationResult {
   );
 
   // 4. Remove empty brackets remaining e.g. " ()", " []"
-  title = title.replace(/[\(\[\{]\s*[\)\]\}]/g, '');
+  title = title.replace(/[([{]\s*[)}\]]/g, '');
 
   // 5. Trim, normalize spacing
   const cleanTitle = title.replace(/\s+/g, ' ').trim();

@@ -221,7 +221,10 @@ export class LyricsEngine {
     return null;
   }
 
-  formatLyrics(lyrics: any, format: string) {
+  formatLyrics(
+    lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null | undefined,
+    format: string = 'json'
+  ) {
     return formatLyricsPayload(lyrics, format);
   }
 }

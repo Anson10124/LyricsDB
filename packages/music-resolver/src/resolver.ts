@@ -47,6 +47,7 @@ export class MusicResolver {
       new SpotifyAdapter({
         apiUrl: config?.spotify?.apiUrl,
         baseUrl: config?.spotify?.baseUrl,
+        getToken: config?.spotify?.getToken,
       })
     );
     this.registerAdapter(
