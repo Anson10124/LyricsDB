@@ -1,0 +1,27 @@
+FROM node:22-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN apk add --no-cache libc6-compat
+
+# Build stage
+FROM base AS builder
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm turbo run build --filter=api...
+
+# Production runtime stage
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=4000
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN apk add --no-cache libc6-compat
+
+COPY --from=builder /app /app
+
+EXPOSE 4000
+
+# Runs drizzle migration push to guarantee schemas exist, then starts the NestJS API
+CMD ["sh", "-c", "pnpm --filter @repo/database db:push && pnpm --filter api start:prod"]
