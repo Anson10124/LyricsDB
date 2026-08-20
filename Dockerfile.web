@@ -8,10 +8,6 @@ RUN apk add --no-cache libc6-compat
 FROM base AS builder
 WORKDIR /app
 
-# Public environment variables required at Next.js build time
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-
 COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=web...

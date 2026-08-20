@@ -9,8 +9,7 @@ import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import { LyricsView } from "@/components/lyrics-view";
 
 import Link from "next/link";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+import { getApiBaseUrl } from "@/lib/api-client";
 
 const initialProgress: TaskProgressState = {
   metaStatus: "pending",
@@ -65,7 +64,8 @@ export default function Home() {
     });
     setResult(null);
 
-    const streamUrl = `${API_BASE_URL}/api/lyrics/stream?url=${encodeURIComponent(url)}`;
+    const apiBase = getApiBaseUrl();
+    const streamUrl = `${apiBase}/api/lyrics/stream?url=${encodeURIComponent(url)}`;
     const es = new EventSource(streamUrl);
     eventSourceRef.current = es;
 

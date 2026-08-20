@@ -7,8 +7,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, Music2 } from "lucide-react";
 import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
 import { LyricsView } from "@/components/lyrics-view";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+import { getApiBaseUrl } from "@/lib/api-client";
 
 interface TrackPageProps {
   params: Promise<{ id: string }>;
@@ -30,7 +29,8 @@ export default function TrackPage({ params }: TrackPageProps) {
 
     async function loadTrackData() {
       try {
-        const trackRes = await fetch(`${API_BASE_URL}/api/tracks/${encodeURIComponent(id)}`);
+        const apiBase = getApiBaseUrl();
+        const trackRes = await fetch(`${apiBase}/api/tracks/${encodeURIComponent(id)}`);
         if (!trackRes.ok) {
           if (trackRes.status === 404) {
             throw new Error("Track not found");
@@ -45,7 +45,7 @@ export default function TrackPage({ params }: TrackPageProps) {
         if (trackData.hasLyrics) {
           try {
             const lyricsRes = await fetch(
-              `${API_BASE_URL}/api/tracks/${encodeURIComponent(id)}/lyrics?format=json`
+              `${apiBase}/api/tracks/${encodeURIComponent(id)}/lyrics?format=json`
             );
             if (lyricsRes.ok) {
               const lyricsData = await lyricsRes.json();

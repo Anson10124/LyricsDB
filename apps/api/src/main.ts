@@ -8,7 +8,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors();
 
-  const config = new DocumentBuilder()
+  const port = process.env.PORT || 4000;
+  const publicUrl =
+    process.env.PUBLIC_URL ||
+    process.env.SERVICE_URL_API ||
+    process.env.SERVICE_URL_WEB;
+
+  const docBuilder = new DocumentBuilder()
     .setTitle('LyricsDB API')
     .setDescription(
       `LyricsDB is a high-performance open-source lyrics indexing and synchronization platform.\n\n` +
@@ -22,14 +28,21 @@ async function bootstrap() {
     .setVersion('1.0.0')
     .setContact('LyricsDB Support', 'https://github.com/Anson10124/LyricsDB', 'support@lyricsdb.org')
     .setLicense('MIT', 'https://opensource.org/licenses/MIT')
-    .setExternalDoc('LyricsDB Full Documentation', 'http://localhost:3000/docs')
-    .addServer('http://localhost:4000', 'Local Development Server')
-    .addServer('https://lyricsdb.kollod.dev', 'Production API Server')
+    .setExternalDoc('LyricsDB Full Documentation', '/docs')
+    .addServer('/', 'Current Host / Reverse Proxy (Auto-detected)')
+    .addServer(`http://localhost:${port}`, 'Local Development Server');
+
+  if (publicUrl) {
+    docBuilder.addServer(publicUrl.replace(/\/$/, ''), 'Configured Public URL');
+  }
+
+  docBuilder
     .addTag('Tracks', 'Track lookup, database synchronization, and search operations')
     .addTag('Lyrics', 'Synchronized multi-format lyrics extraction and real-time SSE streaming')
     .addTag('Resolver', 'Cross-platform track link resolution and matching')
-    .addTag('System', 'Server health and system status endpoints')
-    .build();
+    .addTag('System', 'Server health and system status endpoints');
+
+  const config = docBuilder.build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
@@ -46,7 +59,6 @@ async function bootstrap() {
     console.warn('[Swagger] Could not write openapi.json to apps/web:', err);
   }
 
-  const port = process.env.PORT || 4000;
   await app.listen(port);
   console.log(`LyricsDB API running on http://localhost:${port}`);
 }

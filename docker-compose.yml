@@ -4,18 +4,62 @@ services:
     container_name: lyricsdb-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: lyricsdb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-lyricsdb}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d lyricsdb"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-lyricsdb}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - lyricsdb-network
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/anson10124/lyricsdb-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: always
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lyricsdb}}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SERVICE_URL_API: ${SERVICE_URL_API:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-4000}:4000"
+    networks:
+      - lyricsdb-network
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/anson10124/lyricsdb-web:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: always
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    networks:
+      - lyricsdb-network
 
 volumes:
   postgres_data:
+
+networks:
+  lyricsdb-network:
+    driver: bridge

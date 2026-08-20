@@ -22,12 +22,14 @@ services:
     environment:
       PORT: 4000
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lyricsdb}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lyricsdb}}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SERVICE_URL_API: ${SERVICE_URL_API:-}
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "4000:4000"
+      - "${API_PORT:-4000}:4000"
     networks:
       - lyricsdb-network
 
@@ -37,11 +39,12 @@ services:
     environment:
       PORT: 3000
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     depends_on:
       - api
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     networks:
       - lyricsdb-network
 

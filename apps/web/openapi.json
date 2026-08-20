@@ -1051,12 +1051,12 @@
   ],
   "servers": [
     {
-      "url": "http://localhost:4000",
-      "description": "Local Development Server"
+      "url": "/",
+      "description": "Current Host / Reverse Proxy (Auto-detected)"
     },
     {
-      "url": "https://lyricsdb.kollod.dev",
-      "description": "Production API Server"
+      "url": "http://localhost:4000",
+      "description": "Local Development Server"
     }
   ],
   "components": {
@@ -1422,6 +1422,6 @@
   },
   "externalDocs": {
     "description": "LyricsDB Full Documentation",
-    "url": "http://localhost:3000/docs"
+    "url": "/docs"
   }
 }

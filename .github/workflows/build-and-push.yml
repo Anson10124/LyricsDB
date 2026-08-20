@@ -56,8 +56,6 @@ jobs:
           context: .
           file: ./Dockerfile.web
           push: true
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.yourdomain.com' }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/lyricsdb-web:latest
             ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/lyricsdb-web:${{ github.sha }}
