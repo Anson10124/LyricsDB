@@ -1,9 +1,50 @@
+# Dependencies & Package Stores
 node_modules
+.pnp
+.pnp.js
+.pnpm-store
+
+# Git & CI
+.git
+.github
+
+# Build Outputs & Caches
 .turbo
 .next
+out
+build
 dist
-.git
+.vercel
+*.tsbuildinfo
+.eslintcache
+.prettiercache
+coverage
+
+# Environment & Config
 .env
 .env.*
 !.env.example
+
+# Docker Files (prevents cache invalidation on compose/dockerfile edits)
+Dockerfile*
+docker-compose*.yml
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE & OS Metadata
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Secrets & Docs
+*.pem
+*.key
+*.crt
+README.md
