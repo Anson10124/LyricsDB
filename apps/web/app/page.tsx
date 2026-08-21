@@ -11,6 +11,7 @@ import type {
 import { InputBar } from "@/components/input-bar";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import { LyricsView } from "@/components/lyrics-view";
+import type { DeezerTrack } from "@/lib/deezer";
 
 import Link from "next/link";
 import { getApiBaseUrl } from "@/lib/api-client";
@@ -30,6 +31,7 @@ export default function Home() {
   const [viewState, setViewState] = useState<"search" | "progress" | "lyrics">(
     "search",
   );
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [progress, setProgress] = useState<TaskProgressState>(initialProgress);
   const [result, setResult] = useState<{
     track: SanitizedTrack<TrackRecord>;
@@ -50,12 +52,23 @@ export default function Home() {
       doneTimeoutRef.current = null;
     }
     isCacheHitRef.current = false;
+    setIsDropdownOpen(false);
     setProgress(initialProgress);
     setResult(null);
     setViewState("search");
   };
 
-  const handleSearch = (url: string) => {
+  const startStream = ({
+    url,
+    platform,
+    id,
+    initialMeta,
+  }: {
+    url?: string;
+    platform?: string;
+    id?: string;
+    initialMeta?: TaskProgressState["metaData"];
+  }) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
@@ -67,11 +80,20 @@ export default function Home() {
     setProgress({
       ...initialProgress,
       metaStatus: "running",
+      metaData: initialMeta,
     });
     setResult(null);
 
     const apiBase = getApiBaseUrl();
-    const streamUrl = `${apiBase}/api/lyrics/stream?url=${encodeURIComponent(url)}`;
+    const queryParams = new URLSearchParams();
+    if (url) {
+      queryParams.set("url", url);
+    } else if (platform && id) {
+      queryParams.set("platform", platform);
+      queryParams.set("id", id);
+    }
+
+    const streamUrl = `${apiBase}/api/lyrics/stream?${queryParams.toString()}`;
     const es = new EventSource(streamUrl);
     eventSourceRef.current = es;
 
@@ -298,6 +320,28 @@ export default function Home() {
     };
   };
 
+  const handleSearchUrl = (url: string) => {
+    startStream({ url });
+  };
+
+  const handleSelectTrack = (track: DeezerTrack) => {
+    startStream({
+      platform: "deezer",
+      id: String(track.id),
+      initialMeta: {
+        title: track.title || track.title_short,
+        artist: track.artist?.name,
+        durationMs: track.duration ? track.duration * 1000 : undefined,
+        artworkUrl:
+          track.album?.cover_big ||
+          track.album?.cover_medium ||
+          track.album?.cover_small,
+        platform: "deezer",
+        id: String(track.id),
+      },
+    });
+  };
+
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
@@ -310,15 +354,26 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors">
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors overflow-hidden px-2">
       <AnimatePresence mode="wait">
         {viewState === "search" && (
           <motion.div
             key="search-view"
+            layout
             initial={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }}
+            animate={{
+              opacity: 1,
+              filter: "blur(0px)",
+              scale: 1,
+              y: isDropdownOpen ? -85 : 0,
+            }}
             exit={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+            transition={{
+              duration: 0.4,
+              ease: [0.23, 1, 0.32, 1],
+              y: { type: "spring", stiffness: 320, damping: 28 },
+              layout: { type: "spring", stiffness: 320, damping: 28 },
+            }}
             className="flex flex-col items-center w-full"
           >
             <div className="flex flex-col items-center gap-3 text-center mb-6 max-w-lg z-10">
@@ -327,12 +382,17 @@ export default function Home() {
               </h1>
 
               <p className="text-sm md:text-base text-muted-foreground">
-                Search your favorite song or paste in a link from Spotify, Apple
-                Music, or Deezer to get the lyrics instantly
+                Search your favorite song or paste a link from Spotify, Apple
+                Music, or Deezer to get synchronized lyrics instantly
               </p>
             </div>
 
-            <InputBar onSearch={handleSearch} isLoading={false} />
+            <InputBar
+              onSearchUrl={handleSearchUrl}
+              onSelectTrack={handleSelectTrack}
+              onOpenChange={setIsDropdownOpen}
+              isLoading={false}
+            />
           </motion.div>
         )}
 

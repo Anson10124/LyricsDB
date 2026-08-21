@@ -64,7 +64,7 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
   const artworkSrc = formatArtworkUrl(track.artwork, 600);
 
   return (
-    <div className="w-full max-w-3xl flex flex-col gap-6 py-6 px-4">
+    <div className="w-full max-w-3xl flex flex-col gap-6 py-6 px-2">
       {/* Top action bar */}
       <div className="flex items-center justify-between">
         {onReset ? (
@@ -88,7 +88,7 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       </div>
 
       {/* Track Header Card */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-border/70 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-border/70 bg-card/90 p-4 shadow-sm backdrop-blur-sm overflow-hidden">
         {artworkSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -102,16 +102,19 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
           </div>
         )}
 
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
+        <div className="flex-1 min-w-0 w-full flex flex-col gap-1">
+          <div className="flex items-center gap-2 min-w-0 w-full">
+            <h2 className="flex-1 min-w-0 text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
               {track.title}
             </h2>
           </div>
 
-          <p className="text-sm font-medium text-muted-foreground truncate">
+          <p className="max-w-full text-sm font-medium text-muted-foreground truncate">
             {track.artists?.join(", ") || "Unknown Artist"}
-            {track.album && ` • ${track.album}`}
+          </p>
+
+          <p className="max-w-full text-sm font-medium text-muted-foreground truncate">
+            {track.album ? track.album : "Unknown Album"}
           </p>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground/80 flex-wrap pt-1">

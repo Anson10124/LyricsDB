@@ -182,7 +182,7 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
           </div>
         )}
 
-        <div className="relative z-10 h-full w-full overflow-hidden px-4 sm:px-6">
+        <div className="relative z-10 h-full w-full overflow-hidden px-4 sm:px-6 pointer-events-none">
           <LyricPlayer
             lyricLines={lyricLines}
             currentTime={currentTime}
