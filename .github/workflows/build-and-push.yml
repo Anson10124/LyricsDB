@@ -63,8 +63,10 @@ jobs:
   deploy-webhook:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: ${{ secrets.COOLIFY_WEBHOOK_URL != '' }}
     steps:
       - name: Trigger Coolify Deploy Webhook
+        env:
+          COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+        if: env.COOLIFY_WEBHOOK != ''
         run: |
-          curl -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}"
+          curl -X GET "$COOLIFY_WEBHOOK"
