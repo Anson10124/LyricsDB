@@ -6,8 +6,10 @@ import {
 } from "@nestjs/common";
 import { MusicResolver, type ResolveResult } from "@repo/music-resolver";
 import {
+  getAppleMusicToken,
   getMusixmatchToken,
   getSpotifyToken,
+  refreshAppleMusicToken,
   refreshMusixmatchToken,
   refreshSpotifyToken,
   type DatabaseClient,
@@ -43,6 +45,16 @@ export class ResolverService {
             });
           }
           return getMusixmatchToken(this.db, { timeout: options?.timeout });
+        },
+      },
+      appleMusic: {
+        getToken: async (options, forceRefresh) => {
+          if (forceRefresh) {
+            return refreshAppleMusicToken(this.db, {
+              timeout: options?.timeout,
+            });
+          }
+          return getAppleMusicToken(this.db, { timeout: options?.timeout });
         },
       },
     });

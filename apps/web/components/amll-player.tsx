@@ -164,10 +164,21 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   return (
     <>
       <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none font-[family-name:var(--font-inter)]">
-        {track.artworkUrl && (
+        {(track.animatedArtwork?.squareVideoUrl ||
+          track.animatedArtwork?.tallVideoUrl ||
+          track.artworkUrl) && (
           <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
             <BackgroundRender
-              album={track.artworkUrl}
+              album={
+                track.animatedArtwork?.squareVideoUrl ||
+                track.animatedArtwork?.tallVideoUrl ||
+                track.artworkUrl ||
+                undefined
+              }
+              albumIsVideo={Boolean(
+                track.animatedArtwork?.squareVideoUrl ||
+                  track.animatedArtwork?.tallVideoUrl,
+              )}
               playing={isPlaying}
               fps={60}
               flowSpeed={1}

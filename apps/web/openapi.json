@@ -2376,6 +2376,11 @@
             "description": "Public URL to high-resolution album cover art",
             "nullable": true
           },
+          "animatedArtwork": {
+            "type": "object",
+            "description": "Full animated artwork payload with HLS playlists, direct highest-quality MP4s, and preview colors",
+            "nullable": true
+          },
           "lyricsType": {
             "type": "string",
             "example": "word",

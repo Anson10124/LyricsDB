@@ -2,6 +2,7 @@ import type { MetadataType, ResolveOptions, TrackMetadata } from "../types.js";
 import { HttpClient } from "../utils/http.js";
 import { normalizeSongTitle } from "../utils/query.js";
 import { getCheerioDoc, metaTagContent } from "../utils/scraper.js";
+import { fetchAppleAnimatedArtwork } from "../utils/apple-animated-artwork.js";
 import { BaseMusicParser } from "./base.js";
 
 export const APPLE_MUSIC_LINK_REGEX =
@@ -36,17 +37,34 @@ interface ITunesLookupResponse {
   }>;
 }
 
+export interface AppleMusicParserOptions {
+  lookupUrl?: string;
+  country?: string;
+  apiUrl?: string;
+  getToken?: (
+    options?: ResolveOptions,
+    forceRefresh?: boolean,
+  ) => Promise<string>;
+}
+
 export class AppleMusicParser extends BaseMusicParser {
   readonly id = "appleMusic";
   readonly name = "Apple Music";
 
   private lookupUrl: string;
   private defaultCountry: string;
+  private apiUrl?: string;
+  private getToken?: (
+    options?: ResolveOptions,
+    forceRefresh?: boolean,
+  ) => Promise<string>;
 
-  constructor(options?: { lookupUrl?: string; country?: string }) {
+  constructor(options?: AppleMusicParserOptions) {
     super();
     this.lookupUrl = options?.lookupUrl || "https://itunes.apple.com/lookup";
     this.defaultCountry = options?.country || "us";
+    this.apiUrl = options?.apiUrl;
+    this.getToken = options?.getToken;
   }
 
   match(url: string): boolean {
@@ -156,6 +174,29 @@ export class AppleMusicParser extends BaseMusicParser {
           const durationMs = item.trackTimeMillis;
           const isrc = item.isrc;
 
+          let animatedArtwork = undefined;
+          if (this.getToken) {
+            try {
+              const anim = await fetchAppleAnimatedArtwork(
+                id,
+                itemType === "album"
+                  ? "album"
+                  : itemType === "artist"
+                    ? "artist"
+                    : "song",
+                {
+                  country,
+                  apiUrl: this.apiUrl,
+                  getToken: this.getToken,
+                  timeout: options?.timeout,
+                },
+              );
+              if (anim) animatedArtwork = anim;
+            } catch {
+              // Ignore animated artwork errors
+            }
+          }
+
           return {
             id,
             title: rawTitle.trim(),
@@ -168,6 +209,7 @@ export class AppleMusicParser extends BaseMusicParser {
             audio,
             durationMs,
             isrc,
+            animatedArtwork,
           };
         }
       } catch {
@@ -211,6 +253,29 @@ export class AppleMusicParser extends BaseMusicParser {
 
       const normalized = normalizeSongTitle(title);
 
+      let animatedArtwork = undefined;
+      if (this.getToken && id && /^\d+$/.test(id)) {
+        try {
+          const anim = await fetchAppleAnimatedArtwork(
+            id,
+            detectedType === "album"
+              ? "album"
+              : detectedType === "artist"
+                ? "artist"
+                : "song",
+            {
+              country,
+              apiUrl: this.apiUrl,
+              getToken: this.getToken,
+              timeout: options?.timeout,
+            },
+          );
+          if (anim) animatedArtwork = anim;
+        } catch {
+          // Ignore
+        }
+      }
+
       return {
         id,
         title: title || `Apple Music Item ${id}`,
@@ -221,6 +286,7 @@ export class AppleMusicParser extends BaseMusicParser {
         type: detectedType,
         image,
         audio,
+        animatedArtwork,
       };
     } catch {
       // Final fallback

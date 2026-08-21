@@ -13,6 +13,8 @@ export type MetadataType =
   | "podcast"
   | "show";
 
+import type { AnimatedArtworkPayload } from "./track.js";
+
 export interface ResolverTrackMetadata {
   id: string;
   title: string;
@@ -28,6 +30,7 @@ export interface ResolverTrackMetadata {
   audio?: string;
   durationMs?: number;
   isrc?: string;
+  animatedArtwork?: AnimatedArtworkPayload;
 }
 
 // Alias for resolver-specific metadata
@@ -155,6 +158,10 @@ export interface ResolverConfig {
     apiUrl?: string;
     lookupUrl?: string;
     country?: string;
+    getToken?: (
+      options?: ResolveOptions,
+      forceRefresh?: boolean,
+    ) => Promise<string>;
   };
   qqMusic?: {
     apiUrl?: string;

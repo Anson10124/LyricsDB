@@ -1,5 +1,16 @@
 import type { LyricsType, SyncedLyricsPayload } from "./lyrics.js";
 
+export interface AnimatedArtworkPayload {
+  squareVideoUrl?: string;
+  tallVideoUrl?: string;
+  squareHlsUrl?: string;
+  tallHlsUrl?: string;
+  previewFrameUrl?: string;
+  bgColor?: string;
+  textColor1?: string;
+  textColor2?: string;
+}
+
 export interface TrackRecord {
   id: string;
   isrc?: string | null;
@@ -13,6 +24,7 @@ export interface TrackRecord {
   album?: string | null;
   durationMs: number;
   artworkUrl?: string | null;
+  animatedArtwork?: AnimatedArtworkPayload | null;
   lyricsType?: LyricsType | null;
   lyrics?: SyncedLyricsPayload | string | null;
   lyricsStoragePath?: string | null;

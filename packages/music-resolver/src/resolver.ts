@@ -19,6 +19,7 @@ import type {
   TrackMetadata,
 } from "./types.js";
 import { matchTrackWithMusixmatch } from "./utils/musixmatch-matcher.js";
+import { fetchAppleAnimatedArtwork } from "./utils/apple-animated-artwork.js";
 import { globalProviderLimiter } from "./utils/provider-limiter.js";
 import {
   cleanSearchQuery,
@@ -30,15 +31,19 @@ export class MusicResolver {
   private parsers = new Map<string, MusicParser>();
   private adapters = new Map<string, MusicAdapter>();
   private musixmatchConfig?: ResolverConfig["musixmatch"];
+  private appleMusicConfig?: ResolverConfig["appleMusic"];
 
   constructor(config?: ResolverConfig) {
     this.musixmatchConfig = config?.musixmatch;
+    this.appleMusicConfig = config?.appleMusic;
 
     // Register built-in default parsers
     this.registerParser(
       new AppleMusicParser({
         lookupUrl: config?.appleMusic?.lookupUrl,
         country: config?.appleMusic?.country,
+        apiUrl: config?.appleMusic?.apiUrl,
+        getToken: config?.appleMusic?.getToken,
       }),
     );
     this.registerParser(new SpotifyParser());
@@ -389,6 +394,41 @@ export class MusicResolver {
         ) {
           metadata.album = rawAlbum.trim();
           break;
+        }
+      }
+    }
+
+    // Backfill animated artwork from Apple Music if available and not already attached
+    if (!metadata.animatedArtwork && this.appleMusicConfig?.getToken) {
+      const appleKey = links["appleMusic"] ? "appleMusic" : "applemusic";
+      const appleLink = links[appleKey];
+      const appleId =
+        appleLink?.isVerified || (appleLink?.score || 0) >= 0.8
+          ? appleLink?.id
+          : undefined;
+
+      if (appleId && /^\d+$/.test(appleId)) {
+        try {
+          const anim = await fetchAppleAnimatedArtwork(
+            appleId,
+            metadata.type === "album"
+              ? "album"
+              : metadata.type === "artist"
+                ? "artist"
+                : "song",
+            {
+              country:
+                resolveOpts.preferredCountry || this.appleMusicConfig.country,
+              apiUrl: this.appleMusicConfig.apiUrl,
+              getToken: this.appleMusicConfig.getToken,
+              timeout: resolveOpts.timeout,
+            },
+          );
+          if (anim) {
+            metadata.animatedArtwork = anim;
+          }
+        } catch {
+          // Ignore errors
         }
       }
     }

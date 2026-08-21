@@ -91,6 +91,14 @@ export class SanitizedTrackDto {
   artworkUrl?: string | null;
 
   @ApiProperty({
+    description:
+      "Full animated artwork payload with HLS playlists, direct highest-quality MP4s, and preview colors",
+    required: false,
+    nullable: true,
+  })
+  animatedArtwork?: Record<string, unknown> | null;
+
+  @ApiProperty({
     example: "word",
     enum: ["word", "line", "plain", null],
     description: "Precision level of available synchronized lyrics",

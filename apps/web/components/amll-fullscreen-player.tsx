@@ -115,6 +115,12 @@ export function AmllFullscreenPlayer({
 
   // Sync track metadata and lyrics to AMLL atoms
   useEffect(() => {
+    const animatedVideo =
+      track.animatedArtwork?.squareVideoUrl ||
+      track.animatedArtwork?.tallVideoUrl;
+    const isVideo = Boolean(animatedVideo);
+    const coverUrl = animatedVideo || track.artworkUrl || "";
+
     setMusicId(track.id || track.spotifyId || track.appleMusicId || "track");
     setMusicName(track.title || "Unknown Track");
     setMusicArtists(
@@ -123,8 +129,8 @@ export function AmllFullscreenPlayer({
         : [{ name: "Unknown Artist", id: "0" }],
     );
     setMusicAlbumName(track.album || "");
-    setMusicCover(track.artworkUrl || "");
-    setMusicCoverIsVideo(false);
+    setMusicCover(coverUrl);
+    setMusicCoverIsVideo(isVideo);
     setMusicDuration(durationMs);
     setMusicLyricLines(lyricLines);
     setIsLyricPageOpened(true);
@@ -140,6 +146,7 @@ export function AmllFullscreenPlayer({
     track.artists,
     track.album,
     track.artworkUrl,
+    track.animatedArtwork,
     durationMs,
     lyricLines,
     setMusicId,

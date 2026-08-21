@@ -412,3 +412,141 @@ export async function refreshMusixmatchToken(
 
   return newToken;
 }
+
+const APPLE_MUSIC_PROVIDER = "apple";
+const APPLE_MUSIC_TOKEN_CACHE_FALLBACK_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export async function fetchAnonymousAppleMusicToken(options?: {
+  timeout?: number;
+}): Promise<{ token: string; expireAt: Date }> {
+  const timeout = options?.timeout ?? 8000;
+  const browseUrl = "https://music.apple.com/us/browse";
+
+  const browseRes = await fetch(browseUrl, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    },
+    signal: AbortSignal.timeout(timeout),
+  });
+
+  if (!browseRes.ok) {
+    throw new Error(
+      `Failed to fetch Apple Music browse page: HTTP ${browseRes.status}`,
+    );
+  }
+
+  const html = await browseRes.text();
+  const scriptRegex = /src="([^"]*\/assets\/index[^"]*\.js)"/g;
+  let match = scriptRegex.exec(html);
+  let jsPath = match ? match[1] : null;
+
+  if (!jsPath) {
+    const anyAssetRegex = /src="([^"]*\/assets\/[^"]+\.js)"/g;
+    while ((match = anyAssetRegex.exec(html)) !== null) {
+      if (match[1]?.includes("index") || match[1]?.includes("main")) {
+        jsPath = match[1];
+        break;
+      }
+    }
+  }
+
+  if (!jsPath) {
+    throw new Error("Could not find index.js in Apple Music HTML");
+  }
+
+  const jsUrl = jsPath.startsWith("http")
+    ? jsPath
+    : `https://music.apple.com${jsPath}`;
+  const jsRes = await fetch(jsUrl, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    },
+    signal: AbortSignal.timeout(timeout),
+  });
+
+  if (!jsRes.ok) {
+    throw new Error(`Failed to fetch Apple Music JS bundle: HTTP ${jsRes.status}`);
+  }
+
+  const jsContent = await jsRes.text();
+  const tokenMatch = jsContent.match(/(eyJ(?:hbGc|0eXAi).+?)"/);
+  if (!tokenMatch || !tokenMatch[1]) {
+    throw new Error("Could not find Bearer token in Apple Music JS");
+  }
+
+  const token = tokenMatch[1];
+  let expireAt = new Date(Date.now() + APPLE_MUSIC_TOKEN_CACHE_FALLBACK_TTL_MS);
+
+  try {
+    const parts = token.split(".");
+    if (parts[1]) {
+      const payload = JSON.parse(
+        Buffer.from(parts[1], "base64").toString("utf8"),
+      );
+      if (payload.exp && typeof payload.exp === "number") {
+        expireAt = new Date(payload.exp * 1000 - 24 * 60 * 60 * 1000);
+      }
+    }
+  } catch {
+    // Fallback TTL
+  }
+
+  return { token, expireAt };
+}
+
+export async function getAppleMusicToken(
+  dbClient?: DatabaseClient,
+  options?: { timeout?: number },
+): Promise<string> {
+  const client = dbClient || defaultDb;
+
+  try {
+    const existing = await client
+      .select()
+      .from(jwts)
+      .where(eq(jwts.provider, APPLE_MUSIC_PROVIDER))
+      .limit(1);
+
+    const record = existing[0];
+    if (record?.token && record?.expireAt) {
+      if (new Date(record.expireAt) > new Date()) {
+        return record.token;
+      }
+    }
+  } catch {
+    // Fallback to direct fetch
+  }
+
+  return refreshAppleMusicToken(client, options);
+}
+
+export async function refreshAppleMusicToken(
+  dbClient?: DatabaseClient,
+  options?: { timeout?: number },
+): Promise<string> {
+  const client = dbClient || defaultDb;
+  const { token, expireAt } = await fetchAnonymousAppleMusicToken(options);
+
+  try {
+    await client
+      .insert(jwts)
+      .values({
+        provider: APPLE_MUSIC_PROVIDER,
+        token,
+        expireAt,
+      })
+      .onConflictDoUpdate({
+        target: jwts.provider,
+        set: {
+          token,
+          expireAt,
+        },
+      });
+  } catch {
+    // Graceful fallback
+  }
+
+  return token;
+}

@@ -1,4 +1,8 @@
-import type { LyricsType, SyncedLyricsPayload } from "@repo/types";
+import type {
+  AnimatedArtworkPayload,
+  LyricsType,
+  SyncedLyricsPayload,
+} from "@repo/types";
 import {
   boolean,
   index,
@@ -33,6 +37,7 @@ export const tracks = pgTable(
     album: varchar("album", { length: 500 }),
     durationMs: integer("duration_ms").notNull(),
     artworkUrl: text("artwork_url"),
+    animatedArtwork: jsonb("animated_artwork").$type<AnimatedArtworkPayload>(),
 
     // Lyrics Content & Sync Type & Provider
     // lyricsType: 'word' | 'line' | 'plain' | null

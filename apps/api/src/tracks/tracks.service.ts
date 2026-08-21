@@ -380,6 +380,8 @@ export class TracksService {
       album: meta.album,
       durationMs: meta.durationMs || 0,
       artworkUrl: meta.image,
+      animatedArtwork:
+        meta.animatedArtwork || existingTrack?.animatedArtwork || null,
       isrc: meta.isrc || existingTrack?.isrc,
       spotifyId: validSpotifyId || existingTrack?.spotifyId,
       deezerId: validDeezerId || existingTrack?.deezerId,
@@ -501,6 +503,8 @@ export class TracksService {
               appleMusicId:
                 sanitizedData.appleMusicId || existing.appleMusicId,
               qqMusicId: sanitizedData.qqMusicId || existing.qqMusicId,
+              animatedArtwork:
+                sanitizedData.animatedArtwork || existing.animatedArtwork,
               lyrics: sanitizedData.lyrics || existing.lyrics,
               lyricsType: sanitizedData.lyricsType || existing.lyricsType,
               lyricsProvider:
@@ -789,6 +793,8 @@ export class TracksService {
         album: meta.album,
         durationMs: meta.durationMs || 0,
         artworkUrl: meta.image,
+        animatedArtwork:
+          meta.animatedArtwork || existingTrack?.animatedArtwork || null,
         isrc: meta.isrc || existingTrack?.isrc,
         spotifyId: validSpotifyId || existingTrack?.spotifyId,
         deezerId: validDeezerId || existingTrack?.deezerId,
