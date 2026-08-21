@@ -37,6 +37,9 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
   const isSyncedPayload = Array.isArray(rawLyrics);
 
   const formattedText = useMemo(() => {
+    if (selectedFormat === "metadata") {
+      return JSON.stringify(track, null, 2);
+    }
     if (!rawLyrics) return "";
     if (typeof rawLyrics === "string") {
       if (rawLyrics.trim().startsWith("<") || selectedFormat === "ttml") {
@@ -174,12 +177,13 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             "eslrc",
             "ass",
             "json",
+            "metadata",
           ] as LyricsViewFormat[]
         ).map((fmt) => (
           <button
             key={fmt}
             type="button"
-            disabled={!rawLyrics}
+            disabled={fmt !== "metadata" && !rawLyrics}
             onClick={() => setSelectedFormat(fmt)}
             className={`rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               selectedFormat === fmt
@@ -187,13 +191,25 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
                 : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            {fmt === "synced" ? "Interactive" : fmt === "eslrc" ? "ESLRC" : fmt}
+            {fmt === "synced"
+              ? "Interactive"
+              : fmt === "eslrc"
+                ? "ESLRC"
+                : fmt === "metadata"
+                  ? "Metadata"
+                  : fmt}
           </button>
         ))}
       </div>
 
-      {/* Lyrics Container */}
-      {!rawLyrics ? (
+      {/* Lyrics / Metadata Container */}
+      {selectedFormat === "metadata" ? (
+        <LyricsCodeViewer
+          format="metadata"
+          code={formattedText}
+          track={track}
+        />
+      ) : !rawLyrics ? (
         <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2 min-h-[300px]">
           <Music2 className="size-10 stroke-2 text-primary opacity-60" />
           <p className="text-sm font-medium">

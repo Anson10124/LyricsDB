@@ -200,6 +200,7 @@ export function LyricsCodeViewer({
       case "ttml":
         return lines.map((line) => tokenizeXmlLine(line));
       case "json":
+      case "metadata":
         return lines.map((line) => tokenizeJsonLine(line));
       default:
         return lines.map((line) => [{ type: "text" as const, text: line }]);
@@ -220,6 +221,7 @@ export function LyricsCodeViewer({
     const extMap: Record<string, string> = {
       ttml: "ttml",
       json: "json",
+      metadata: "metadata.json",
       eslrc: "lrc",
       lrc: "lrc",
       ass: "ass",
@@ -250,7 +252,9 @@ export function LyricsCodeViewer({
       case "lrc":
         return "LRC (Timed)";
       case "json":
-        return "JSON (Raw)";
+        return "JSON (Raw Lyrics)";
+      case "metadata":
+        return "JSON (Track Metadata)";
       case "ass":
         return "ASS (SubStation)";
       case "qrc":

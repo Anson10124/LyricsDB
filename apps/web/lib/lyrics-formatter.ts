@@ -18,7 +18,8 @@ export type LyricsViewFormat =
   | "yrc"
   | "qrc"
   | "ass"
-  | "json";
+  | "json"
+  | "metadata";
 
 export function convertCompactToAmllLines(
   payload: SyncedLyricsPayload,
