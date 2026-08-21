@@ -1,8 +1,13 @@
+import { globalProviderLimiter } from "./provider-limiter.js";
+
 export interface HttpOptions {
   headers?: Record<string, string>;
   timeout?: number;
   retries?: number;
   payload?: unknown;
+  provider?: string;
+  priority?: number;
+  bypassLimiter?: boolean;
 }
 
 export class HttpError extends Error {
@@ -21,6 +26,32 @@ export class HttpError extends Error {
 const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+
+export function detectProviderFromUrl(url: string): string | undefined {
+  const lower = url.toLowerCase();
+  if (lower.includes("spotify.com") || lower.includes("spoti.fi") || lower.includes("spotify.link")) {
+    return "spotify";
+  }
+  if (lower.includes("deezer.com")) {
+    return "deezer";
+  }
+  if (lower.includes("apple.com") || lower.includes("itunes.apple.com")) {
+    return "appleMusic";
+  }
+  if (lower.includes("163.com") || lower.includes("163cn.tv")) {
+    return "netease";
+  }
+  if (lower.includes("qq.com") || lower.includes("qqmusic")) {
+    return "qqMusic";
+  }
+  if (lower.includes("musixmatch.com")) {
+    return "musixmatch";
+  }
+  if (lower.includes("lrclib.net")) {
+    return "lrclib";
+  }
+  return undefined;
+}
 
 export class HttpClient {
   static async get<T>(url: string, options?: HttpOptions): Promise<T> {
@@ -62,6 +93,25 @@ export class HttpClient {
     method: "GET" | "POST" | "PUT" | "DELETE",
     url: string,
     options?: HttpOptions,
+  ): Promise<T> {
+    const provider = options?.provider || detectProviderFromUrl(url);
+
+    if (provider && !options?.bypassLimiter) {
+      return globalProviderLimiter.schedule<T>(
+        provider,
+        () => HttpClient.executeRawRequest<T>(method, url, options, provider),
+        options?.priority ?? 0,
+      );
+    }
+
+    return HttpClient.executeRawRequest<T>(method, url, options);
+  }
+
+  private static async executeRawRequest<T>(
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    url: string,
+    options?: HttpOptions,
+    provider?: string,
   ): Promise<T> {
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const retries = options?.retries ?? 2;
@@ -105,13 +155,24 @@ export class HttpClient {
 
         if (!response.ok) {
           const retryAfter = response.headers.get("retry-after") ?? undefined;
-          throw new HttpError(
+          const httpError = new HttpError(
             `HTTP ${response.status}: ${response.statusText}`,
             response.status,
             response.statusText,
             url,
             retryAfter,
           );
+
+          if (provider && response.status === 429) {
+            const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined;
+            globalProviderLimiter.triggerCooldown(
+              provider,
+              retryAfterSec || 60,
+              `HTTP 429 received from ${url}`,
+            );
+          }
+
+          throw httpError;
         }
 
         const text = await response.text();
@@ -135,6 +196,14 @@ export class HttpClient {
       } catch (error) {
         clearTimeout(timeoutId);
         lastError = error;
+
+        // If error was 429, don't retry in a tight loop — let limiter handle backoff
+        if (
+          error instanceof HttpError &&
+          error.status === 429
+        ) {
+          throw error;
+        }
 
         const isLastAttempt = attempt === retries;
         if (!isLastAttempt) {

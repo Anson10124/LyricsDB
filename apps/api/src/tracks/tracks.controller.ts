@@ -4,6 +4,7 @@ import {
   Get,
   MessageEvent,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Res,
@@ -16,44 +17,28 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
-  ApiProperty,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import { Observable, Subject } from "rxjs";
 import type {
   FormattedLyricsResult,
-  GetOrSyncTrackOptions,
   ProgressLogEvent,
 } from "@repo/types";
 import { TracksService } from "./tracks.service";
 import { SanitizedTrackDto } from "./dto/track-response.dto";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
-
-export class TrackQueryDto implements GetOrSyncTrackOptions {
-  @ApiProperty({
-    required: false,
-    description: "Platform name (spotify, apple, deezer, netease, qq, isrc)",
-    example: "spotify",
-  })
-  platform?: string;
-
-  @ApiProperty({
-    required: false,
-    description: "Platform-specific track ID",
-    example: "4cOdK2wGLETKBW3PvgPWqT",
-  })
-  id?: string;
-
-  @ApiProperty({
-    required: false,
-    description: "Direct song/track URL from any supported service",
-    example: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
-  })
-  url?: string;
-}
+import {
+  GetLyricsQueryDto,
+  LyricsByIdQueryDto,
+  TrackQueryDto,
+  TrackSearchQueryDto,
+  TrackStreamQueryDto,
+} from "./dto/track-query.dto";
+import { ClientIp } from "../common/decorators/client-ip.decorator";
 
 const SUPPORTED_FORMATS = [
   "ttml",
@@ -69,6 +54,8 @@ const SUPPORTED_FORMATS = [
   "json",
 ] as const;
 
+export { TrackQueryDto };
+
 @ApiTags("Tracks")
 @Controller(["api", ""])
 export class TracksController {
@@ -82,7 +69,7 @@ export class TracksController {
   @ApiOperation({
     summary: "Stream lyrics resolution progress via SSE",
     description:
-      "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress.",
+      "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress (60 RPM for cached hits, 6 RPM for live uncached resolutions).",
   })
   @ApiQuery({
     name: "platform",
@@ -126,61 +113,9 @@ export class TracksController {
         schema: {
           type: "object",
           properties: {
-            stage: {
-              type: "string",
-              enum: [
-                "init",
-                "cache_hit",
-                "cache_miss",
-                "resolving",
-                "platform_matched",
-                "lyrics_searching",
-                "lyrics_found",
-                "saving",
-                "done",
-                "error",
-              ],
-              example: "done",
-            },
-            data: {
-              type: "object",
-              example: {
-                track: {
-                  id: "791f8b9b-9593-46ce-9852-b1801d88a5d1",
-                  isrc: "GBARL8700014",
-                  spotifyId: "4cOdK2wGLETKBW3PvgPWqT",
-                  appleMusicId: "1559523359",
-                  deezerId: "3537337561",
-                  neteaseId: "2755500197",
-                  qqMusicId: "000f1Vqw2ACkez",
-                  title: "Never Gonna Give You Up",
-                  artists: ["Rick Astley"],
-                  album: "Whenever You Need Somebody",
-                  durationMs: 213573,
-                  artworkUrl:
-                    "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
-                  lyricsType: "word",
-                  lyricsProvider: "qqmusic",
-                  isVerified: true,
-                  hasLyrics: true,
-                },
-                lyrics: [
-                  [
-                    [1, 18500, 380, "Never "],
-                    [1, 18900, 390, "gonna "],
-                    [1, 19300, 480, "give "],
-                    [1, 19800, 580, "you "],
-                    [1, 20400, 1100, "up "],
-                  ],
-                ],
-                format: "json",
-                contentType: "application/json",
-              },
-            },
-            timestamp: {
-              type: "integer",
-              example: 1787262680794,
-            },
+            stage: { type: "string", example: "done" },
+            data: { type: "object" },
+            timestamp: { type: "integer", example: 1787262680794 },
           },
         },
       },
@@ -188,17 +123,15 @@ export class TracksController {
   })
   @ApiBadRequestResponse({
     type: ErrorResponseDto,
-    description: "Missing required query parameters",
+    description: "Missing required query parameters or invalid format",
   })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Sse("lyrics/stream")
   streamLyrics(
-    @Query("platform") platform?: string,
-    @Query("id") id?: string,
-    @Query("url") url?: string,
-    @Query("format") format?: string,
-    @Query("forceRefresh") forceRefresh?: string,
+    @Query() query: TrackStreamQueryDto,
+    @ClientIp() clientIp: string,
   ): Observable<MessageEvent> {
-    return this.handleLyricsStream({ platform, id, url, format, forceRefresh });
+    return this.handleLyricsStream(query, clientIp);
   }
 
   @ApiOperation({
@@ -255,27 +188,21 @@ export class TracksController {
     },
   })
   @ApiBadRequestResponse({ type: ErrorResponseDto })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Sse("tracks/stream")
   streamTracks(
-    @Query("platform") platform?: string,
-    @Query("id") id?: string,
-    @Query("url") url?: string,
-    @Query("format") format?: string,
-    @Query("forceRefresh") forceRefresh?: string,
+    @Query() query: TrackStreamQueryDto,
+    @ClientIp() clientIp: string,
   ): Observable<MessageEvent> {
-    return this.handleLyricsStream({ platform, id, url, format, forceRefresh });
+    return this.handleLyricsStream(query, clientIp);
   }
 
-  private handleLyricsStream(query: {
-    platform?: string;
-    id?: string;
-    url?: string;
-    format?: string;
-    forceRefresh?: string;
-  }): Observable<MessageEvent> {
+  private handleLyricsStream(
+    query: TrackStreamQueryDto,
+    clientIp = "127.0.0.1",
+  ): Observable<MessageEvent> {
     const subject = new Subject<MessageEvent>();
-    const shouldForceRefresh =
-      query.forceRefresh === "true" || query.forceRefresh === "1";
+    const shouldForceRefresh = Boolean(query.forceRefresh);
 
     // Execute background resolution while streaming progress events
     this.tracksService
@@ -292,6 +219,7 @@ export class TracksController {
             data: event,
           });
         },
+        clientIp,
       )
       .catch((err) => {
         const message =
@@ -319,7 +247,7 @@ export class TracksController {
   @ApiOperation({
     summary: "Get or synchronize a track by platform, ID, or URL",
     description:
-      "Looks up a track in the database cache (~2ms) or fetches, resolves cross-platform links, and caches metadata in PostgreSQL.",
+      "Looks up a track in the database cache (~2ms, 60 RPM/IP) or fetches and resolves metadata upstream (6 RPM/IP).",
   })
   @ApiQuery({
     name: "platform",
@@ -348,7 +276,7 @@ export class TracksController {
   })
   @ApiBadRequestResponse({
     type: ErrorResponseDto,
-    description: "Missing url or platform + id parameters",
+    description: "Missing url or platform + id parameters or invalid ID format",
   })
   @ApiNotFoundResponse({
     type: ErrorResponseDto,
@@ -356,22 +284,17 @@ export class TracksController {
   })
   @Get("tracks")
   async getTrack(
-    @Query("platform") platform?: string,
-    @Query("id") id?: string,
-    @Query("url") url?: string,
+    @Query() query: TrackQueryDto,
+    @ClientIp() clientIp: string,
   ) {
-    const track = await this.tracksService.getOrSyncTrack({
-      platform,
-      id,
-      url,
-    });
+    const track = await this.tracksService.getOrSyncTrack(query, clientIp);
     return this.tracksService.sanitizeTrack(track);
   }
 
   @ApiOperation({
     summary: "Lookup/sync a track via POST body",
     description:
-      "Alternative JSON body endpoint to look up or synchronize track metadata.",
+      "Alternative JSON body endpoint to look up (60 RPM/IP) or synchronize (6 RPM/IP) track metadata.",
   })
   @ApiBody({ type: TrackQueryDto })
   @ApiOkResponse({
@@ -380,15 +303,18 @@ export class TracksController {
   })
   @ApiBadRequestResponse({ type: ErrorResponseDto })
   @Post("tracks")
-  async postTrack(@Body() dto: TrackQueryDto) {
-    const track = await this.tracksService.getOrSyncTrack(dto);
+  async postTrack(
+    @Body() dto: TrackQueryDto,
+    @ClientIp() clientIp: string,
+  ) {
+    const track = await this.tracksService.getOrSyncTrack(dto, clientIp);
     return this.tracksService.sanitizeTrack(track);
   }
 
   @ApiOperation({
     summary: "Search tracks by keyword",
     description:
-      "Search indexed tracks in PostgreSQL database by title, artist, or album keyword.",
+      "Search indexed tracks in PostgreSQL database by title, artist, or album keyword (60 RPM/IP).",
   })
   @ApiQuery({
     name: "q",
@@ -399,22 +325,25 @@ export class TracksController {
   @ApiQuery({
     name: "limit",
     required: false,
-    description: "Maximum number of results to return (default: 20)",
-    example: "20",
+    description: "Maximum number of results to return (default: 20, max: 100)",
+    example: 20,
   })
   @ApiOkResponse({
     type: [SanitizedTrackDto],
     description: "Array of matching tracks ordered by relevance",
   })
   @Get("tracks/search")
-  async search(@Query("q") q: string, @Query("limit") limit?: string) {
-    return this.tracksService.search(q, limit ? parseInt(limit, 10) : 20);
+  async search(
+    @Query() query: TrackSearchQueryDto,
+    @ClientIp() clientIp: string,
+  ) {
+    return this.tracksService.search(query.q, query.limit ?? 20, clientIp);
   }
 
   @ApiOperation({
     summary: "Get track details by internal database ID",
     description:
-      "Retrieves sanitized track metadata by its internal PostgreSQL UUID.",
+      "Retrieves sanitized track metadata by its internal PostgreSQL UUID (60 RPM/IP).",
   })
   @ApiParam({
     name: "id",
@@ -430,8 +359,11 @@ export class TracksController {
     description: "Track ID not found in database",
   })
   @Get("tracks/:id")
-  async getById(@Param("id") id: string) {
-    const track = await this.tracksService.findById(id);
+  async getById(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @ClientIp() clientIp: string,
+  ) {
+    const track = await this.tracksService.findById(id, clientIp);
     return this.tracksService.sanitizeTrack(track);
   }
 
@@ -443,7 +375,7 @@ export class TracksController {
   @ApiOperation({
     summary: "Get synchronized lyrics for a track ID",
     description:
-      "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID.",
+      "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID (60 RPM/IP).",
   })
   @ApiParam({
     name: "id",
@@ -510,14 +442,18 @@ export class TracksController {
   })
   @Get("tracks/:id/lyrics")
   async getLyricsById(
-    @Param("id") trackId: string,
-    @Query("format") format?: string,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) trackId: string,
+    @Query() query: LyricsByIdQueryDto,
+    @ClientIp() clientIp: string,
     @Res() res?: Response,
   ) {
-    const result = await this.tracksService.getLyrics({
-      trackId,
-      format,
-    });
+    const result = await this.tracksService.getLyrics(
+      {
+        trackId,
+        format: query.format || "json",
+      },
+      clientIp,
+    );
     return this.sendLyricsResponse(result, res);
   }
 
@@ -525,7 +461,7 @@ export class TracksController {
   @ApiOperation({
     summary: "Get synchronized lyrics by platform ID or URL",
     description:
-      "Fetches or synchronizes lyrics on-the-fly from upstream sources and converts them to the requested format.",
+      "Fetches or synchronizes lyrics on-the-fly (60 RPM for cached hits, 6 RPM for live uncached resolutions).",
   })
   @ApiQuery({
     name: "platform",
@@ -600,7 +536,7 @@ export class TracksController {
   })
   @ApiBadRequestResponse({
     type: ErrorResponseDto,
-    description: "Missing url or platform + id",
+    description: "Missing url or platform + id or invalid ID format",
   })
   @ApiNotFoundResponse({
     type: ErrorResponseDto,
@@ -608,18 +544,19 @@ export class TracksController {
   })
   @Get("lyrics")
   async getLyrics(
-    @Query("platform") platform?: string,
-    @Query("id") id?: string,
-    @Query("url") url?: string,
-    @Query("format") format?: string,
+    @Query() query: GetLyricsQueryDto,
+    @ClientIp() clientIp: string,
     @Res() res?: Response,
   ) {
-    const result = await this.tracksService.getLyrics({
-      platform,
-      id,
-      url,
-      format,
-    });
+    const result = await this.tracksService.getLyrics(
+      {
+        platform: query.platform,
+        id: query.id,
+        url: query.url,
+        format: query.format || "json",
+      },
+      clientIp,
+    );
     return this.sendLyricsResponse(result, res);
   }
 

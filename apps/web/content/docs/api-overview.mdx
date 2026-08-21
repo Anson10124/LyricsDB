@@ -30,6 +30,22 @@ description: The LyricsDB API exposes REST and Server-Sent Events endpoints for 
 | `GET /api/lyrics/stream` | [Stream Lyrics](/docs/lyrics/streamLyrics) | Stream live resolution and extraction events over SSE. |
 | `GET /api/tracks/stream` | [Stream Tracks](/docs/lyrics/streamLyrics) | SSE streaming alias for `/api/lyrics/stream`. |
 
+### System
+
+| Method & Path | Documentation | Description |
+| :--- | :--- | :--- |
+| `GET /api/system/providers` | [Rate Limiting & Protection](/docs/rate-limits) | Inspect live upstream provider health, queue lengths, and circuit breakers. |
+
+---
+
+## Rate Limiting Summary
+
+LyricsDB enforces **differentiated IP rate limits**:
+- **Cached Database Reads**: **60 requests / minute per IP** (~2ms response).
+- **Uncached Live Resolutions**: **6 requests / minute per IP** (protects upstream services from rate limits).
+
+For complete details on quotas, headers, and circuit breakers, see the [Rate Limiting & Protection Guide](/docs/rate-limits).
+
 ---
 
 ## Standard Track Object Schema
@@ -68,7 +84,7 @@ All `/api/tracks` endpoints return a sanitized track record:
 | Status Code | Reason | Resolution / Meaning |
 | :--- | :--- | :--- |
 | `200 OK` | Success | The track metadata or lyrics were retrieved successfully. |
-| `400 Bad Request` | Invalid Input | Missing both `url` and `platform` + `id`, or invalid format/parameters. |
+| `400 Bad Request` | Invalid Input | Missing required parameters, invalid platform ID regex, or unsupported URL. |
 | `404 Not Found` | Not Found | The track was not found or no lyrics exist for the given song. |
-| `500 Server Error` | Internal Error | Upstream provider outage or database failure. |
-
+| `429 Too Many Requests` | Rate Limited | Client IP exceeded 60 RPM (cached) or 6 RPM (uncached live resolution). Check `retryAfter` field. |
+| `500 Server Error` | Internal Error | Database failure or unrecoverable system exception. |

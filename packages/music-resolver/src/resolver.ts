@@ -19,6 +19,7 @@ import type {
   TrackMetadata,
 } from "./types.js";
 import { matchTrackWithMusixmatch } from "./utils/musixmatch-matcher.js";
+import { globalProviderLimiter } from "./utils/provider-limiter.js";
 import {
   cleanSearchQuery,
   normalizeSongTitle,
@@ -129,6 +130,9 @@ export class MusicResolver {
     sourceId: string,
     options?: ResolveOptions,
   ): Promise<EnrichedMusixmatchMetadata | null> {
+    if (!globalProviderLimiter.isAvailable("musixmatch")) {
+      return null;
+    }
     try {
       const params: Parameters<typeof matchTrackWithMusixmatch>[0] = {};
 
@@ -299,6 +303,16 @@ export class MusicResolver {
           platformId !== parser.id && this.adapters.has(platformId),
       )
       .map(async (platformId) => {
+        if (!globalProviderLimiter.isAvailable(platformId)) {
+          options?.onProgress?.({
+            stage: "resolving",
+            step: "adapter_rate_limited",
+            platform: platformId,
+          });
+          links[platformId] = null;
+          return;
+        }
+
         const adapter = this.adapters.get(platformId)!;
         options?.onProgress?.({
           stage: "resolving",
@@ -407,6 +421,10 @@ export class MusicResolver {
     const adapterPromises = platformKeys
       .filter((platformId) => this.adapters.has(platformId))
       .map(async (platformId) => {
+        if (!globalProviderLimiter.isAvailable(platformId)) {
+          links[platformId] = null;
+          return;
+        }
         const adapter = this.adapters.get(platformId)!;
         links[platformId] = await this.queryAdapterWithFallback(
           adapter,

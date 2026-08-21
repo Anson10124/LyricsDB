@@ -36,6 +36,7 @@ import type {
 import { DATABASE_CONNECTION } from "../database/database.constants";
 import { ResolverService } from "../resolver/resolver.service";
 import { StorageService } from "../storage/storage.service";
+import { IpRateLimiterService } from "../common/rate-limiter/ip-rate-limiter.service";
 
 export type {
   GetOrSyncTrackOptions,
@@ -54,12 +55,16 @@ export class TracksService {
     @Inject(DATABASE_CONNECTION) private readonly db: DatabaseClient,
     private readonly resolverService: ResolverService,
     private readonly storageService: StorageService,
+    private readonly ipRateLimiter: IpRateLimiterService,
   ) {}
 
   // Universal Read-Through Endpoint:
-  // 1. Checks PostgreSQL database first (Instant ~2ms response).
-  // 2. If not found, resolves across all platforms, stores in PostgreSQL, and returns the unified track.
-  async getOrSyncTrack(options: GetOrSyncTrackOptions): Promise<Track> {
+  // 1. Checks PostgreSQL database first (Instant ~2ms response, limited to 60 RPM / IP).
+  // 2. If not found, enforces uncached rate limit (6 RPM / IP), resolves across platforms, and caches.
+  async getOrSyncTrack(
+    options: GetOrSyncTrackOptions,
+    clientIp = "127.0.0.1",
+  ): Promise<Track> {
     const { platform, id, url } = options;
 
     let targetPlatform = platform ? normalizePlatform(platform) : undefined;
@@ -81,15 +86,19 @@ export class TracksService {
       }
     }
 
-    // Step 1: Check Database (Cache Hit)
+    // Step 1: Check Database (Cache Hit -> 60 RPM per IP)
     if (targetPlatform && targetId) {
       const cached = await this.findByPlatformId(targetPlatform, targetId);
       if (cached) {
+        this.ipRateLimiter.consume(clientIp, "cached");
         return cached;
       }
     }
 
-    // Step 2: Build target URL if not provided
+    // Step 2: Cache Miss -> Live upstream resolution (6 RPM per IP)
+    this.ipRateLimiter.consume(clientIp, "uncached");
+
+    // Build target URL if not provided
     if (!targetUrl && targetPlatform && targetId) {
       try {
         targetUrl = buildPlatformUrl(targetPlatform, targetId);
@@ -107,7 +116,12 @@ export class TracksService {
     }
 
     // Step 3: Deduplicate concurrent requests (Thundering Herd protection)
-    const lockKey = `${targetPlatform || "url"}:${targetId || targetUrl}`;
+    // Canonicalize key so requests with URL and platform+id coalesce to the exact same promise
+    const lockKey =
+      targetPlatform && targetId
+        ? `${targetPlatform}:${targetId}`
+        : targetUrl;
+
     if (this.inFlightRequests.has(lockKey)) {
       return this.inFlightRequests.get(lockKey)!;
     }
@@ -133,8 +147,10 @@ export class TracksService {
     return link?.isVerified || (link?.score ?? 0) >= 0.8 ? link?.id : undefined;
   }
 
-  // Find a track by internal database UUID
-  async findById(id: string): Promise<Track> {
+  // Find a track by internal database UUID (fast cache -> 60 RPM per IP)
+  async findById(id: string, clientIp = "127.0.0.1"): Promise<Track> {
+    this.ipRateLimiter.consume(clientIp, "cached");
+
     const result = await this.db
       .select()
       .from(tracks)
@@ -212,13 +228,16 @@ export class TracksService {
   }
 
   // Get formatted lyrics for a track
-  async getLyrics(options: GetLyricsOptions): Promise<FormattedLyricsResult> {
+  async getLyrics(
+    options: GetLyricsOptions,
+    clientIp = "127.0.0.1",
+  ): Promise<FormattedLyricsResult> {
     let track: Track | null = null;
 
     if (options.trackId) {
-      track = await this.findById(options.trackId);
+      track = await this.findById(options.trackId, clientIp);
     } else {
-      track = await this.getOrSyncTrack(options);
+      track = await this.getOrSyncTrack(options, clientIp);
     }
 
     const rawLyrics = await this.resolveTrackLyrics(track);
@@ -234,14 +253,17 @@ export class TracksService {
     return this.lyricsEngine.formatLyrics(rawLyrics, options.format || "json");
   }
 
-  // Search tracks by title or artist in database
+  // Search tracks by title or artist in database (fast cache -> 60 RPM per IP)
   async search(
     query: string,
     limit = 20,
+    clientIp = "127.0.0.1",
   ): Promise<Array<SanitizedTrack<Track>>> {
     if (!query || query.trim().length === 0) {
       return [];
     }
+
+    this.ipRateLimiter.consume(clientIp, "cached");
 
     const searchTerm = `%${query.trim()}%`;
     const results = await this.db
@@ -369,25 +391,141 @@ export class TracksService {
       isVerified: existingTrack?.isVerified ?? false,
     };
 
-    const saved = await this.db
-      .insert(tracks)
-      .values(newTrackData)
-      .onConflictDoUpdate({
-        target: tracks.id,
-        set: {
-          ...newTrackData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    return this.safeSaveTrack(newTrackData);
+  }
 
-    return saved[0]!;
+  // Concurrency-Safe Database Ingestion & Conflict Handler:
+  // 1. Sanity Guard: Validates metadata before writing to PostgreSQL to prevent spam and DB pollution.
+  // 2. Race-Condition Recovery: If concurrent workers try to insert the same new track,
+  //    catches duplicate key / unique constraint errors and updates the existing record cleanly.
+  private async safeSaveTrack(newTrackData: NewTrack): Promise<Track> {
+    const cleanTitle = newTrackData.title?.trim();
+    if (!cleanTitle) {
+      throw new BadRequestException("Invalid track: title cannot be empty.");
+    }
+    const cleanArtists = (
+      Array.isArray(newTrackData.artists) ? newTrackData.artists : []
+    )
+      .map((a) => (typeof a === "string" ? a.trim() : ""))
+      .filter(Boolean);
+    if (cleanArtists.length === 0) {
+      throw new BadRequestException(
+        "Invalid track: artists list cannot be empty.",
+      );
+    }
+
+    const sanitizedData: NewTrack = {
+      ...newTrackData,
+      title: cleanTitle.slice(0, 500),
+      artists: cleanArtists.map((a) => a.slice(0, 500)),
+      album: newTrackData.album?.trim()?.slice(0, 500) || null,
+      durationMs: Math.max(0, Number(newTrackData.durationMs) || 0),
+    };
+
+    try {
+      if (sanitizedData.id) {
+        const saved = await this.db
+          .insert(tracks)
+          .values(sanitizedData)
+          .onConflictDoUpdate({
+            target: tracks.id,
+            set: {
+              ...sanitizedData,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        if (saved[0]) return saved[0];
+      } else {
+        const saved = await this.db
+          .insert(tracks)
+          .values(sanitizedData)
+          .returning();
+        if (saved[0]) return saved[0];
+      }
+    } catch (err: unknown) {
+      // Concurrency race condition handling:
+      // If another concurrent request inserted a track with the same unique index,
+      // catch the unique violation error and update the existing row instead of throwing a 500 error!
+      const isUniqueConflict =
+        (err &&
+          typeof err === "object" &&
+          (err as { code?: string }).code === "23505") ||
+        (err instanceof Error &&
+          (err.message.includes("unique") ||
+            err.message.includes("duplicate key") ||
+            err.message.includes("violates unique constraint")));
+
+      if (isUniqueConflict) {
+        let existing: Track | null = null;
+        if (sanitizedData.spotifyId)
+          existing = await this.findByPlatformId(
+            "spotify",
+            sanitizedData.spotifyId,
+          );
+        if (!existing && sanitizedData.appleMusicId)
+          existing = await this.findByPlatformId(
+            "apple",
+            sanitizedData.appleMusicId,
+          );
+        if (!existing && sanitizedData.deezerId)
+          existing = await this.findByPlatformId(
+            "deezer",
+            sanitizedData.deezerId,
+          );
+        if (!existing && sanitizedData.neteaseId)
+          existing = await this.findByPlatformId(
+            "netease",
+            sanitizedData.neteaseId,
+          );
+        if (!existing && sanitizedData.qqMusicId)
+          existing = await this.findByPlatformId(
+            "qq",
+            sanitizedData.qqMusicId,
+          );
+        if (!existing && sanitizedData.isrc)
+          existing = await this.findByPlatformId("isrc", sanitizedData.isrc);
+
+        if (existing) {
+          const updated = await this.db
+            .update(tracks)
+            .set({
+              ...sanitizedData,
+              id: existing.id,
+              isrc: sanitizedData.isrc || existing.isrc,
+              spotifyId: sanitizedData.spotifyId || existing.spotifyId,
+              deezerId: sanitizedData.deezerId || existing.deezerId,
+              neteaseId: sanitizedData.neteaseId || existing.neteaseId,
+              appleMusicId:
+                sanitizedData.appleMusicId || existing.appleMusicId,
+              qqMusicId: sanitizedData.qqMusicId || existing.qqMusicId,
+              lyrics: sanitizedData.lyrics || existing.lyrics,
+              lyricsType: sanitizedData.lyricsType || existing.lyricsType,
+              lyricsProvider:
+                sanitizedData.lyricsProvider || existing.lyricsProvider,
+              lyricsStoragePath:
+                sanitizedData.lyricsStoragePath ||
+                existing.lyricsStoragePath,
+              updatedAt: new Date(),
+            })
+            .where(eq(tracks.id, existing.id))
+            .returning();
+          if (updated[0]) return updated[0];
+          return existing;
+        }
+      }
+
+      throw err;
+    }
+
+    throw new BadRequestException("Failed to persist track metadata.");
   }
 
   // Real-time EventStream (SSE) live track and lyrics resolution
   async streamLyrics(
     options: StreamLyricsOptions,
     emitEvent: (event: ProgressLogEvent) => void,
+    clientIp = "127.0.0.1",
   ): Promise<void> {
     const format = options.format || "json";
     const { platform, id, url, forceRefresh } = options;
@@ -418,6 +556,9 @@ export class TracksService {
     }
 
     if (cachedTrack) {
+      // Consume from 60 RPM cached bucket
+      this.ipRateLimiter.consume(clientIp, "cached");
+
       const sanitized = this.sanitizeTrack(cachedTrack);
       let formattedLyrics: FormattedLyricsResult | undefined;
       const rawLyrics = await this.resolveTrackLyrics(cachedTrack);
@@ -455,6 +596,9 @@ export class TracksService {
       });
       return;
     }
+
+    // Cache Miss -> Consume from 6 RPM uncached live resolution bucket
+    this.ipRateLimiter.consume(clientIp, "uncached");
 
     if (!forceRefresh) {
       emitEvent({
@@ -656,19 +800,7 @@ export class TracksService {
         isVerified: existingTrack?.isVerified ?? false,
       };
 
-      const saved = await this.db
-        .insert(tracks)
-        .values(newTrackData)
-        .onConflictDoUpdate({
-          target: tracks.id,
-          set: {
-            ...newTrackData,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-
-      const finalTrack = saved[0]!;
+      const finalTrack = await this.safeSaveTrack(newTrackData);
       const sanitized = this.sanitizeTrack(finalTrack);
       let formattedLyrics: FormattedLyricsResult | undefined;
       const lyricsToFormat =

@@ -13,6 +13,7 @@ import {
   type DatabaseClient,
 } from "@repo/database";
 import { DATABASE_CONNECTION } from "../database/database.constants";
+import { IpRateLimiterService } from "../common/rate-limiter/ip-rate-limiter.service";
 
 @Injectable()
 export class ResolverService {
@@ -22,6 +23,8 @@ export class ResolverService {
     @Optional()
     @Inject(DATABASE_CONNECTION)
     private readonly db?: DatabaseClient,
+    @Optional()
+    private readonly ipRateLimiter?: IpRateLimiterService,
   ) {
     this.resolver = new MusicResolver({
       spotify: {
@@ -49,10 +52,14 @@ export class ResolverService {
     url: string,
     targetPlatforms?: string[],
     options?: Parameters<MusicResolver["resolve"]>[2],
+    clientIp = "127.0.0.1",
   ): Promise<ResolveResult> {
     if (!url || typeof url !== "string") {
       throw new BadRequestException('Query parameter "url" is required.');
     }
+
+    // Direct resolver endpoint is always live uncached resolution (6 RPM per IP)
+    this.ipRateLimiter?.consume(clientIp, "uncached");
 
     try {
       const result = await this.resolver.resolve(

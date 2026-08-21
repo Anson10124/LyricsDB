@@ -1,10 +1,12 @@
 import { existsSync } from "fs";
 import * as path from "path";
 import { config } from "dotenv";
+import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import * as fs from "fs";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 
 // Load .env from root if not already loaded into process.env
 if (!process.env.DATABASE_URL) {
@@ -25,6 +27,24 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors();
 
+  // Trust proxy for accurate client IP rate limiting behind reverse proxies
+  app.getHttpAdapter().getInstance().set("trust proxy", true);
+
+  // Global Inbound Request Validation Pipeline
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
+
+  // Global Exception Filter for clean error responses
+  app.useGlobalFilters(new AllExceptionsFilter());
+
   const port = process.env.PORT || 4000;
   const publicUrl =
     process.env.PUBLIC_URL ||
@@ -40,7 +60,8 @@ async function bootstrap() {
         `* **Precision Timed Lyrics**: Word-by-word and syllable-level sync with background vocals and duet roles.\n` +
         `* **Format Engine**: Real-time conversion to TTML, LRC, LRCA2, YRC, QRC, ESLRC, ASS, LYL, LYS, LQE, and compact JSON.\n` +
         `* **Real-Time Streaming**: Server-Sent Events (SSE) tracking extraction lifecycle and timing progress.\n` +
-        `* **PostgreSQL Fast Cache**: Sub-millisecond indexed read-through caching with thundering-herd deduplication.`,
+        `* **PostgreSQL Fast Cache**: Sub-millisecond indexed read-through caching with thundering-herd deduplication.\n` +
+        `* **Provider Rate-Limiting & Circuit Breakers**: Smart queueing, RPM limits, and automated cooldowns to protect upstream services.`,
     )
     .setVersion("1.0.0")
     .setContact(
@@ -67,7 +88,10 @@ async function bootstrap() {
       "Synchronized multi-format lyrics extraction and real-time SSE streaming",
     )
     .addTag("Resolver", "Cross-platform track link resolution and matching")
-    .addTag("System", "Server health and system status endpoints");
+    .addTag(
+      "System",
+      "Server health, provider circuit breakers, and rate limit status endpoints",
+    );
 
   const config = docBuilder.build();
 

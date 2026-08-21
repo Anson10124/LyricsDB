@@ -4,6 +4,7 @@ import type {
   SyncedLyricsPayload,
   VocalType,
 } from "@repo/types";
+import { globalProviderLimiter } from "@repo/music-resolver";
 import {
   fetchDeezerLyrics,
   type DeezerLyricsResponse,
@@ -200,31 +201,49 @@ export class LyricsEngine {
       null;
 
     const getQQLyrics = () => {
-      if (!qqLyricsPromise && context.qqMusicId) {
-        qqLyricsPromise = fetchQQMusicLyrics({ qqMusicId: context.qqMusicId });
+      if (!globalProviderLimiter.isAvailable("qqmusic")) {
+        return Promise.resolve(null);
       }
-      return qqLyricsPromise;
+      if (!qqLyricsPromise && context.qqMusicId) {
+        qqLyricsPromise = globalProviderLimiter.schedule("qqmusic", () =>
+          fetchQQMusicLyrics({ qqMusicId: context.qqMusicId }),
+        );
+      }
+      return qqLyricsPromise || Promise.resolve(null);
     };
 
     const getDeezerLyrics = () => {
-      if (!deezerLyricsPromise && context.deezerId) {
-        deezerLyricsPromise = fetchDeezerLyrics({ deezerId: context.deezerId });
+      if (!globalProviderLimiter.isAvailable("deezer")) {
+        return Promise.resolve(null);
       }
-      return deezerLyricsPromise;
+      if (!deezerLyricsPromise && context.deezerId) {
+        deezerLyricsPromise = globalProviderLimiter.schedule("deezer", () =>
+          fetchDeezerLyrics({ deezerId: context.deezerId }),
+        );
+      }
+      return deezerLyricsPromise || Promise.resolve(null);
     };
 
     const getNeteaseLyrics = () => {
-      if (!neteaseLyricsPromise && context.neteaseId) {
-        neteaseLyricsPromise = fetchNeteaseLyrics({
-          neteaseId: context.neteaseId,
-          title: context.title,
-          artist,
-        });
+      if (!globalProviderLimiter.isAvailable("netease")) {
+        return Promise.resolve(null);
       }
-      return neteaseLyricsPromise;
+      if (!neteaseLyricsPromise && context.neteaseId) {
+        neteaseLyricsPromise = globalProviderLimiter.schedule("netease", () =>
+          fetchNeteaseLyrics({
+            neteaseId: context.neteaseId,
+            title: context.title,
+            artist,
+          }),
+        );
+      }
+      return neteaseLyricsPromise || Promise.resolve(null);
     };
 
     const getMusixmatchLyrics = () => {
+      if (!globalProviderLimiter.isAvailable("musixmatch")) {
+        return Promise.resolve(null);
+      }
       if (
         !musixmatchLyricsPromise &&
         (context.spotifyId ||
@@ -233,18 +252,20 @@ export class LyricsEngine {
           context.musixmatchId ||
           context.title)
       ) {
-        musixmatchLyricsPromise = fetchMusixmatchLyrics({
-          spotifyId: context.spotifyId,
-          isrc: context.isrc,
-          appleMusicId: context.appleMusicId,
-          musixmatchId: context.musixmatchId,
-          title: context.title,
-          artist,
-          artists: context.artists,
-          durationMs: context.durationMs,
-        });
+        musixmatchLyricsPromise = globalProviderLimiter.schedule("musixmatch", () =>
+          fetchMusixmatchLyrics({
+            spotifyId: context.spotifyId,
+            isrc: context.isrc,
+            appleMusicId: context.appleMusicId,
+            musixmatchId: context.musixmatchId,
+            title: context.title,
+            artist,
+            artists: context.artists,
+            durationMs: context.durationMs,
+          }),
+        );
       }
-      return musixmatchLyricsPromise;
+      return musixmatchLyricsPromise || Promise.resolve(null);
     };
 
     // ==========================================
@@ -436,7 +457,10 @@ export class LyricsEngine {
                 };
               }
             }
-            const fullLrc = await fetchQQMusicFullLrc(context.qqMusicId!);
+            const fullLrc = await globalProviderLimiter.schedule(
+              "qqmusic",
+              () => fetchQQMusicFullLrc(context.qqMusicId!),
+            );
             if (fullLrc) {
               const parsed = parseLrc(fullLrc, metadata);
               if (parsed.length > 0) {
@@ -551,7 +575,7 @@ export class LyricsEngine {
     }
 
     // 5. LRCLIB Synced LRC
-    if (context.title) {
+    if (context.title && globalProviderLimiter.isAvailable("lrclib")) {
       context.onProgress?.({
         stage: "lyrics_searching",
         provider: "lrclib",
@@ -561,13 +585,15 @@ export class LyricsEngine {
       tier2Tasks.push(
         (async () => {
           try {
-            const res = await fetchLrclibLyrics({
-              title: context.title,
-              artist,
-              album: context.album,
-              durationMs: context.durationMs,
-              isrc: context.isrc,
-            });
+            const res = await globalProviderLimiter.schedule("lrclib", () =>
+              fetchLrclibLyrics({
+                title: context.title,
+                artist,
+                album: context.album,
+                durationMs: context.durationMs,
+                isrc: context.isrc,
+              }),
+            );
             if (res?.syncedLyrics) {
               const parsed = parseLrc(res.syncedLyrics, metadata);
               if (parsed.length > 0) {
@@ -669,17 +695,19 @@ export class LyricsEngine {
     }
 
     // 3. LRCLIB Plain
-    if (context.title) {
+    if (context.title && globalProviderLimiter.isAvailable("lrclib")) {
       tier3Tasks.push(
         (async () => {
           try {
-            const res = await fetchLrclibLyrics({
-              title: context.title,
-              artist,
-              album: context.album,
-              durationMs: context.durationMs,
-              isrc: context.isrc,
-            });
+            const res = await globalProviderLimiter.schedule("lrclib", () =>
+              fetchLrclibLyrics({
+                title: context.title,
+                artist,
+                album: context.album,
+                durationMs: context.durationMs,
+                isrc: context.isrc,
+              }),
+            );
             if (
               res?.plainLyrics &&
               !res.instrumental &&

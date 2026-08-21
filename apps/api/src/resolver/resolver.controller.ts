@@ -4,29 +4,17 @@ import {
   ApiBody,
   ApiOkResponse,
   ApiOperation,
-  ApiProperty,
   ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { ResolverService } from "./resolver.service";
 import { ResolveResultDto } from "./dto/resolver-response.dto";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
+import { ResolveDto, ResolveQueryDto } from "./dto/resolver-query.dto";
+import { ClientIp } from "../common/decorators/client-ip.decorator";
 
-export class ResolveDto {
-  @ApiProperty({
-    description: "Source song URL from any supported streaming platform",
-    example: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
-  })
-  url!: string;
-
-  @ApiProperty({
-    required: false,
-    description: "Optional list of target platforms to restrict resolution",
-    type: [String],
-    example: ["spotify", "deezer", "netease", "apple", "qq"],
-  })
-  targetPlatforms?: string[];
-}
+export { ResolveDto };
 
 @ApiTags("Resolver")
 @Controller(["api/resolver", "resolver"])
@@ -37,7 +25,7 @@ export class ResolverController {
   @ApiOperation({
     summary: "Resolve track metadata and links by URL query",
     description:
-      "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music.",
+      "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music (6 RPM/IP).",
   })
   @ApiQuery({
     name: "url",
@@ -54,9 +42,18 @@ export class ResolverController {
     type: ErrorResponseDto,
     description: "Missing or invalid streaming URL parameter",
   })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Get()
-  async resolveByQuery(@Query("url") url: string) {
-    return this.resolverService.resolveUrl(url);
+  async resolveByQuery(
+    @Query() query: ResolveQueryDto,
+    @ClientIp() clientIp: string,
+  ) {
+    return this.resolverService.resolveUrl(
+      query.url,
+      undefined,
+      undefined,
+      clientIp,
+    );
   }
 
   // POST /api/resolver
@@ -64,7 +61,7 @@ export class ResolverController {
   @ApiOperation({
     summary: "Resolve track metadata and links via JSON body",
     description:
-      "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links.",
+      "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links (6 RPM/IP).",
   })
   @ApiBody({ type: ResolveDto })
   @ApiOkResponse({
@@ -75,9 +72,18 @@ export class ResolverController {
     type: ErrorResponseDto,
     description: "Invalid request body or unsupported URL",
   })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post()
-  async resolveByBody(@Body() dto: ResolveDto) {
-    return this.resolverService.resolveUrl(dto.url, dto.targetPlatforms);
+  async resolveByBody(
+    @Body() dto: ResolveDto,
+    @ClientIp() clientIp: string,
+  ) {
+    return this.resolverService.resolveUrl(
+      dto.url,
+      dto.targetPlatforms,
+      undefined,
+      clientIp,
+    );
   }
 
   // GET /api/resolver/sample

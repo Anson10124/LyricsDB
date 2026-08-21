@@ -155,9 +155,55 @@
         ]
       }
     },
+    "/api/system/providers": {
+      "get": {
+        "description": "Returns live operational metrics for all upstream music/lyrics providers, including circuit breaker states (HEALTHY, DEGRADED, COOLDOWN, HALF_OPEN), in-flight concurrent requests, queue depth, and remaining cooldown seconds.",
+        "operationId": "SystemController_getProviderMetrics[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of provider health and rate limiting metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemProvidersResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get upstream music providers health, queues, and rate-limit statuses",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/system/providers": {
+      "get": {
+        "description": "Returns live operational metrics for all upstream music/lyrics providers, including circuit breaker states (HEALTHY, DEGRADED, COOLDOWN, HALF_OPEN), in-flight concurrent requests, queue depth, and remaining cooldown seconds.",
+        "operationId": "SystemController_getProviderMetrics[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of provider health and rate limiting metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemProvidersResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get upstream music providers health, queues, and rate-limit statuses",
+        "tags": [
+          "System"
+        ]
+      }
+    },
     "/api/resolver": {
       "get": {
-        "description": "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music.",
+        "description": "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music (6 RPM/IP).",
         "operationId": "ResolverController_resolveByQuery[0]",
         "parameters": [
           {
@@ -199,7 +245,7 @@
         ]
       },
       "post": {
-        "description": "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links.",
+        "description": "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links (6 RPM/IP).",
         "operationId": "ResolverController_resolveByBody[0]",
         "parameters": [],
         "requestBody": {
@@ -242,7 +288,7 @@
     },
     "/resolver": {
       "get": {
-        "description": "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music.",
+        "description": "Resolves canonical song metadata (title, artist, album, ISRC, duration, artwork) and discovers matching URLs across Spotify, Apple Music, Deezer, NetEase, and QQ Music (6 RPM/IP).",
         "operationId": "ResolverController_resolveByQuery[1]",
         "parameters": [
           {
@@ -284,7 +330,7 @@
         ]
       },
       "post": {
-        "description": "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links.",
+        "description": "Alternative JSON body endpoint to resolve canonical metadata and discover cross-platform streaming links (6 RPM/IP).",
         "operationId": "ResolverController_resolveByBody[1]",
         "parameters": [],
         "requestBody": {
@@ -373,7 +419,7 @@
     },
     "/api/lyrics/stream": {
       "get": {
-        "description": "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress.",
+        "description": "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress (60 RPM for cached hits, 6 RPM for live uncached resolutions).",
         "operationId": "TracksController_streamLyrics[0]",
         "parameters": [
           {
@@ -449,80 +495,10 @@
                   "properties": {
                     "stage": {
                       "type": "string",
-                      "enum": [
-                        "init",
-                        "cache_hit",
-                        "cache_miss",
-                        "resolving",
-                        "platform_matched",
-                        "lyrics_searching",
-                        "lyrics_found",
-                        "saving",
-                        "done",
-                        "error"
-                      ],
                       "example": "done"
                     },
                     "data": {
-                      "type": "object",
-                      "example": {
-                        "track": {
-                          "id": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
-                          "isrc": "GBARL8700014",
-                          "spotifyId": "4cOdK2wGLETKBW3PvgPWqT",
-                          "appleMusicId": "1559523359",
-                          "deezerId": "3537337561",
-                          "neteaseId": "2755500197",
-                          "qqMusicId": "000f1Vqw2ACkez",
-                          "title": "Never Gonna Give You Up",
-                          "artists": [
-                            "Rick Astley"
-                          ],
-                          "album": "Whenever You Need Somebody",
-                          "durationMs": 213573,
-                          "artworkUrl": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
-                          "lyricsType": "word",
-                          "lyricsProvider": "qqmusic",
-                          "isVerified": true,
-                          "hasLyrics": true
-                        },
-                        "lyrics": [
-                          [
-                            [
-                              1,
-                              18500,
-                              380,
-                              "Never "
-                            ],
-                            [
-                              1,
-                              18900,
-                              390,
-                              "gonna "
-                            ],
-                            [
-                              1,
-                              19300,
-                              480,
-                              "give "
-                            ],
-                            [
-                              1,
-                              19800,
-                              580,
-                              "you "
-                            ],
-                            [
-                              1,
-                              20400,
-                              1100,
-                              "up "
-                            ]
-                          ]
-                        ],
-                        "format": "json",
-                        "contentType": "application/json"
-                      }
+                      "type": "object"
                     },
                     "timestamp": {
                       "type": "integer",
@@ -534,7 +510,7 @@
             }
           },
           "400": {
-            "description": "Missing required query parameters",
+            "description": "Missing required query parameters or invalid format",
             "content": {
               "application/json": {
                 "schema": {
@@ -553,7 +529,7 @@
     },
     "/lyrics/stream": {
       "get": {
-        "description": "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress.",
+        "description": "Server-Sent Events endpoint streaming real-time extraction, platform matching, and timing progress (60 RPM for cached hits, 6 RPM for live uncached resolutions).",
         "operationId": "TracksController_streamLyrics[1]",
         "parameters": [
           {
@@ -629,80 +605,10 @@
                   "properties": {
                     "stage": {
                       "type": "string",
-                      "enum": [
-                        "init",
-                        "cache_hit",
-                        "cache_miss",
-                        "resolving",
-                        "platform_matched",
-                        "lyrics_searching",
-                        "lyrics_found",
-                        "saving",
-                        "done",
-                        "error"
-                      ],
                       "example": "done"
                     },
                     "data": {
-                      "type": "object",
-                      "example": {
-                        "track": {
-                          "id": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
-                          "isrc": "GBARL8700014",
-                          "spotifyId": "4cOdK2wGLETKBW3PvgPWqT",
-                          "appleMusicId": "1559523359",
-                          "deezerId": "3537337561",
-                          "neteaseId": "2755500197",
-                          "qqMusicId": "000f1Vqw2ACkez",
-                          "title": "Never Gonna Give You Up",
-                          "artists": [
-                            "Rick Astley"
-                          ],
-                          "album": "Whenever You Need Somebody",
-                          "durationMs": 213573,
-                          "artworkUrl": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
-                          "lyricsType": "word",
-                          "lyricsProvider": "qqmusic",
-                          "isVerified": true,
-                          "hasLyrics": true
-                        },
-                        "lyrics": [
-                          [
-                            [
-                              1,
-                              18500,
-                              380,
-                              "Never "
-                            ],
-                            [
-                              1,
-                              18900,
-                              390,
-                              "gonna "
-                            ],
-                            [
-                              1,
-                              19300,
-                              480,
-                              "give "
-                            ],
-                            [
-                              1,
-                              19800,
-                              580,
-                              "you "
-                            ],
-                            [
-                              1,
-                              20400,
-                              1100,
-                              "up "
-                            ]
-                          ]
-                        ],
-                        "format": "json",
-                        "contentType": "application/json"
-                      }
+                      "type": "object"
                     },
                     "timestamp": {
                       "type": "integer",
@@ -714,7 +620,7 @@
             }
           },
           "400": {
-            "description": "Missing required query parameters",
+            "description": "Missing required query parameters or invalid format",
             "content": {
               "application/json": {
                 "schema": {
@@ -951,7 +857,7 @@
     },
     "/api/tracks": {
       "get": {
-        "description": "Looks up a track in the database cache (~2ms) or fetches, resolves cross-platform links, and caches metadata in PostgreSQL.",
+        "description": "Looks up a track in the database cache (~2ms, 60 RPM/IP) or fetches and resolves metadata upstream (6 RPM/IP).",
         "operationId": "TracksController_getTrack[0]",
         "parameters": [
           {
@@ -997,7 +903,7 @@
             }
           },
           "400": {
-            "description": "Missing url or platform + id parameters",
+            "description": "Missing url or platform + id parameters or invalid ID format",
             "content": {
               "application/json": {
                 "schema": {
@@ -1023,7 +929,7 @@
         ]
       },
       "post": {
-        "description": "Alternative JSON body endpoint to look up or synchronize track metadata.",
+        "description": "Alternative JSON body endpoint to look up (60 RPM/IP) or synchronize (6 RPM/IP) track metadata.",
         "operationId": "TracksController_postTrack[0]",
         "parameters": [],
         "requestBody": {
@@ -1066,7 +972,7 @@
     },
     "/tracks": {
       "get": {
-        "description": "Looks up a track in the database cache (~2ms) or fetches, resolves cross-platform links, and caches metadata in PostgreSQL.",
+        "description": "Looks up a track in the database cache (~2ms, 60 RPM/IP) or fetches and resolves metadata upstream (6 RPM/IP).",
         "operationId": "TracksController_getTrack[1]",
         "parameters": [
           {
@@ -1112,7 +1018,7 @@
             }
           },
           "400": {
-            "description": "Missing url or platform + id parameters",
+            "description": "Missing url or platform + id parameters or invalid ID format",
             "content": {
               "application/json": {
                 "schema": {
@@ -1138,7 +1044,7 @@
         ]
       },
       "post": {
-        "description": "Alternative JSON body endpoint to look up or synchronize track metadata.",
+        "description": "Alternative JSON body endpoint to look up (60 RPM/IP) or synchronize (6 RPM/IP) track metadata.",
         "operationId": "TracksController_postTrack[1]",
         "parameters": [],
         "requestBody": {
@@ -1181,7 +1087,7 @@
     },
     "/api/tracks/search": {
       "get": {
-        "description": "Search indexed tracks in PostgreSQL database by title, artist, or album keyword.",
+        "description": "Search indexed tracks in PostgreSQL database by title, artist, or album keyword (60 RPM/IP).",
         "operationId": "TracksController_search[0]",
         "parameters": [
           {
@@ -1198,10 +1104,10 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Maximum number of results to return (default: 20)",
+            "description": "Maximum number of results to return (default: 20, max: 100)",
             "schema": {
-              "example": "20",
-              "type": "string"
+              "example": 20,
+              "type": "number"
             }
           }
         ],
@@ -1228,7 +1134,7 @@
     },
     "/tracks/search": {
       "get": {
-        "description": "Search indexed tracks in PostgreSQL database by title, artist, or album keyword.",
+        "description": "Search indexed tracks in PostgreSQL database by title, artist, or album keyword (60 RPM/IP).",
         "operationId": "TracksController_search[1]",
         "parameters": [
           {
@@ -1245,10 +1151,10 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Maximum number of results to return (default: 20)",
+            "description": "Maximum number of results to return (default: 20, max: 100)",
             "schema": {
-              "example": "20",
-              "type": "string"
+              "example": 20,
+              "type": "number"
             }
           }
         ],
@@ -1275,7 +1181,7 @@
     },
     "/api/tracks/{id}": {
       "get": {
-        "description": "Retrieves sanitized track metadata by its internal PostgreSQL UUID.",
+        "description": "Retrieves sanitized track metadata by its internal PostgreSQL UUID (60 RPM/IP).",
         "operationId": "TracksController_getById[0]",
         "parameters": [
           {
@@ -1319,7 +1225,7 @@
     },
     "/tracks/{id}": {
       "get": {
-        "description": "Retrieves sanitized track metadata by its internal PostgreSQL UUID.",
+        "description": "Retrieves sanitized track metadata by its internal PostgreSQL UUID (60 RPM/IP).",
         "operationId": "TracksController_getById[1]",
         "parameters": [
           {
@@ -1363,7 +1269,7 @@
     },
     "/api/tracks/{id}/lyrics": {
       "get": {
-        "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID.",
+        "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID (60 RPM/IP).",
         "operationId": "TracksController_getLyricsById[0]",
         "parameters": [
           {
@@ -1516,7 +1422,7 @@
     },
     "/tracks/{id}/lyrics": {
       "get": {
-        "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID.",
+        "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID (60 RPM/IP).",
         "operationId": "TracksController_getLyricsById[1]",
         "parameters": [
           {
@@ -1669,7 +1575,7 @@
     },
     "/api/lyrics": {
       "get": {
-        "description": "Fetches or synchronizes lyrics on-the-fly from upstream sources and converts them to the requested format.",
+        "description": "Fetches or synchronizes lyrics on-the-fly (60 RPM for cached hits, 6 RPM for live uncached resolutions).",
         "operationId": "TracksController_getLyrics[0]",
         "parameters": [
           {
@@ -1822,7 +1728,7 @@
             }
           },
           "400": {
-            "description": "Missing url or platform + id",
+            "description": "Missing url or platform + id or invalid ID format",
             "content": {
               "application/json": {
                 "schema": {
@@ -1851,7 +1757,7 @@
     },
     "/lyrics": {
       "get": {
-        "description": "Fetches or synchronizes lyrics on-the-fly from upstream sources and converts them to the requested format.",
+        "description": "Fetches or synchronizes lyrics on-the-fly (60 RPM for cached hits, 6 RPM for live uncached resolutions).",
         "operationId": "TracksController_getLyrics[1]",
         "parameters": [
           {
@@ -2004,7 +1910,7 @@
             }
           },
           "400": {
-            "description": "Missing url or platform + id",
+            "description": "Missing url or platform + id or invalid ID format",
             "content": {
               "application/json": {
                 "schema": {
@@ -2034,7 +1940,7 @@
   },
   "info": {
     "title": "LyricsDB API",
-    "description": "LyricsDB is a high-performance open-source lyrics indexing and synchronization platform.\n\n### Features\n* **Multi-Platform Resolution**: Cross-references Spotify, Apple Music, Deezer, NetEase Cloud Music, QQ Music, and ISRC.\n* **Precision Timed Lyrics**: Word-by-word and syllable-level sync with background vocals and duet roles.\n* **Format Engine**: Real-time conversion to TTML, LRC, LRCA2, YRC, QRC, ESLRC, ASS, LYL, LYS, LQE, and compact JSON.\n* **Real-Time Streaming**: Server-Sent Events (SSE) tracking extraction lifecycle and timing progress.\n* **PostgreSQL Fast Cache**: Sub-millisecond indexed read-through caching with thundering-herd deduplication.",
+    "description": "LyricsDB is a high-performance open-source lyrics indexing and synchronization platform.\n\n### Features\n* **Multi-Platform Resolution**: Cross-references Spotify, Apple Music, Deezer, NetEase Cloud Music, QQ Music, and ISRC.\n* **Precision Timed Lyrics**: Word-by-word and syllable-level sync with background vocals and duet roles.\n* **Format Engine**: Real-time conversion to TTML, LRC, LRCA2, YRC, QRC, ESLRC, ASS, LYL, LYS, LQE, and compact JSON.\n* **Real-Time Streaming**: Server-Sent Events (SSE) tracking extraction lifecycle and timing progress.\n* **PostgreSQL Fast Cache**: Sub-millisecond indexed read-through caching with thundering-herd deduplication.\n* **Provider Rate-Limiting & Circuit Breakers**: Smart queueing, RPM limits, and automated cooldowns to protect upstream services.",
     "version": "1.0.0",
     "contact": {
       "name": "LyricsDB Support",
@@ -2061,7 +1967,7 @@
     },
     {
       "name": "System",
-      "description": "Server health and system status endpoints"
+      "description": "Server health, provider circuit breakers, and rate limit status endpoints"
     }
   ],
   "servers": [
@@ -2076,6 +1982,113 @@
   ],
   "components": {
     "schemas": {
+      "ProviderMetricsDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Provider identifier name",
+            "example": "spotify"
+          },
+          "state": {
+            "type": "string",
+            "description": "Current circuit breaker state",
+            "enum": [
+              "HEALTHY",
+              "DEGRADED",
+              "COOLDOWN",
+              "HALF_OPEN"
+            ],
+            "example": "HEALTHY"
+          },
+          "activeCount": {
+            "type": "number",
+            "description": "Number of active in-flight concurrent requests",
+            "example": 1
+          },
+          "queueLength": {
+            "type": "number",
+            "description": "Number of queued requests waiting for semaphore slot",
+            "example": 0
+          },
+          "totalRequests": {
+            "type": "number",
+            "description": "Total lifetime requests dispatched to provider",
+            "example": 142
+          },
+          "totalSuccesses": {
+            "type": "number",
+            "description": "Total successful requests",
+            "example": 142
+          },
+          "totalFailures": {
+            "type": "number",
+            "description": "Total failed requests",
+            "example": 0
+          },
+          "total429s": {
+            "type": "number",
+            "description": "Total HTTP 429 Too Many Requests received",
+            "example": 0
+          },
+          "cooldownEndsAt": {
+            "type": "number",
+            "description": "Timestamp when current cooldown expires (if in COOLDOWN)",
+            "example": 1787262740794
+          },
+          "remainingCooldownSeconds": {
+            "type": "number",
+            "description": "Remaining cooldown time in seconds",
+            "example": 0
+          },
+          "lastError": {
+            "type": "string",
+            "description": "Last encountered error message",
+            "example": "HTTP 429 Rate Limit hit"
+          }
+        },
+        "required": [
+          "provider",
+          "state",
+          "activeCount",
+          "queueLength",
+          "totalRequests",
+          "totalSuccesses",
+          "totalFailures",
+          "total429s"
+        ]
+      },
+      "SystemProvidersResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Overall system provider health status",
+            "enum": [
+              "HEALTHY",
+              "DEGRADED"
+            ],
+            "example": "HEALTHY"
+          },
+          "timestamp": {
+            "type": "number",
+            "description": "Current UNIX millisecond timestamp",
+            "example": 1787262680794
+          },
+          "providers": {
+            "description": "Array of provider health and rate limiting metrics",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderMetricsDto"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "timestamp",
+          "providers"
+        ]
+      },
       "ResolverTrackMetadataDto": {
         "type": "object",
         "properties": {
