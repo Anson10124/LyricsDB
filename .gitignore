@@ -17,6 +17,7 @@ node_modules/
 out/
 build/
 dist/
+.source/
 
 # Turbo & Vercel
 .turbo/
