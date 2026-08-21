@@ -15,4 +15,5 @@ export * from "./utils/info-lines.js";
 export * from "./utils/explicit.js";
 export * from "./utils/syllable-sanitizer.js";
 export * from "./utils/capitalization.js";
+export * from "./utils/matcher.js";
 export * from "./engine.js";

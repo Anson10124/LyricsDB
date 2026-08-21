@@ -34,8 +34,10 @@ import {
 } from "./parsers/musixmatch.js";
 import { parseQrc } from "./parsers/qrc.js";
 import { parseYrc } from "./parsers/yrc.js";
-import { formatLyricsPayload } from "./utils/converter.js";
+import { formatLyricsPayload, optimizeLyricsPayload } from "./utils/converter.js";
 import { isPlaceholderLyricText } from "./utils/info-lines.js";
+import { containsMaskedTokens, fixExplicitText } from "./utils/explicit.js";
+import { alignAndUnmaskLyrics } from "./utils/matcher.js";
 
 export interface ResolveLyricsContext {
   title: string;
@@ -176,6 +178,103 @@ export function evaluateLyricsCandidate(
     wordCount,
     spanMs,
     coverageRatio,
+  };
+}
+
+async function unmaskCandidate(
+  candidate: ResolvedLyricsResult,
+  availableReferences: Array<SyncedLyricsPayload | string | null | undefined>,
+  context: ResolveLyricsContext,
+  metadata: { title: string; artist?: string },
+  getters: {
+    getMusixmatchLyrics: () => Promise<MusixmatchLyricsResponse | null>;
+    getDeezerLyrics: () => Promise<DeezerLyricsResponse | null>;
+    getNeteaseLyrics: () => Promise<NeteaseLyricsResponse | null>;
+    getQQLyrics: () => Promise<QQMusicLyricsResponse | null>;
+  },
+): Promise<ResolvedLyricsResult> {
+  if (!containsMaskedTokens(candidate.lyrics)) {
+    return candidate;
+  }
+
+  const references: Array<SyncedLyricsPayload | string | null | undefined> = [
+    ...availableReferences,
+  ];
+
+  // Check cached provider responses for plain/synced text references
+  try {
+    const [mmRes, dzRes, neRes, qqRes] = await Promise.allSettled([
+      getters.getMusixmatchLyrics(),
+      getters.getDeezerLyrics(),
+      getters.getNeteaseLyrics(),
+      getters.getQQLyrics(),
+    ]);
+
+    if (mmRes.status === "fulfilled" && mmRes.value) {
+      if (mmRes.value.plainLyrics) references.push(mmRes.value.plainLyrics);
+      if (mmRes.value.subtitles) references.push(mmRes.value.subtitles);
+      if (mmRes.value.richsync) references.push(mmRes.value.richsync);
+    }
+    if (dzRes.status === "fulfilled" && dzRes.value) {
+      if (dzRes.value.text) references.push(dzRes.value.text);
+      if (dzRes.value.synchronizedLines) {
+        references.push(
+          dzRes.value.synchronizedLines.map((l) => l.line).join("\n"),
+        );
+      }
+    }
+    if (neRes.status === "fulfilled" && neRes.value) {
+      if (neRes.value.lrc?.lyric) references.push(neRes.value.lrc.lyric);
+      if (neRes.value.yrc?.lyric) references.push(neRes.value.yrc.lyric);
+    }
+    if (qqRes.status === "fulfilled" && qqRes.value) {
+      if (qqRes.value.lrc) references.push(qqRes.value.lrc);
+    }
+  } catch {
+    // Ignore error collecting background cached responses
+  }
+
+  let unmasked = alignAndUnmaskLyrics(candidate.lyrics, references);
+  let lyricsResult = unmasked.lyrics;
+
+  // If still has masked tokens and LRCLIB is available, fetch LRCLIB for clean text
+  if (
+    containsMaskedTokens(lyricsResult) &&
+    context.title &&
+    globalProviderLimiter.isAvailable("lrclib")
+  ) {
+    try {
+      const lrclibRes = await globalProviderLimiter.schedule("lrclib", () =>
+        fetchLrclibLyrics({
+          title: context.title,
+          artist: context.artist || context.artists?.[0],
+          album: context.album,
+          durationMs: context.durationMs,
+          isrc: context.isrc,
+        }),
+      );
+      if (lrclibRes?.syncedLyrics) references.push(lrclibRes.syncedLyrics);
+      if (lrclibRes?.plainLyrics) references.push(lrclibRes.plainLyrics);
+
+      unmasked = alignAndUnmaskLyrics(lyricsResult, references);
+      lyricsResult = unmasked.lyrics;
+    } catch {
+      // Ignore LRCLIB fallback error
+    }
+  }
+
+  if (Array.isArray(lyricsResult)) {
+    lyricsResult = optimizeLyricsPayload(
+      lyricsResult as SyncedLyricsPayload,
+      metadata,
+    );
+  } else if (typeof lyricsResult === "string") {
+    lyricsResult = fixExplicitText(lyricsResult);
+  }
+
+  return {
+    ...candidate,
+    lyrics: lyricsResult,
   };
 }
 
@@ -426,7 +525,19 @@ export class LyricsEngine {
       const completeTier1 = tier1Candidates.filter((c) => c.isComplete);
       if (completeTier1.length > 0) {
         completeTier1.sort((a, b) => b.score - a.score);
-        const best = completeTier1[0]!.candidate;
+        let best = completeTier1[0]!.candidate;
+
+        const otherRefs = tier1Candidates
+          .map((c) => c.candidate.lyrics)
+          .filter((l) => l !== best.lyrics);
+
+        best = await unmaskCandidate(best, otherRefs, context, metadata, {
+          getMusixmatchLyrics,
+          getDeezerLyrics,
+          getNeteaseLyrics,
+          getQQLyrics,
+        });
+
         context.onProgress?.({
           stage: "lyrics_found",
           provider: best.provider,
@@ -646,7 +757,19 @@ export class LyricsEngine {
       const completeTier2 = tier2Candidates.filter((c) => c.isComplete);
       if (completeTier2.length > 0) {
         completeTier2.sort((a, b) => b.score - a.score);
-        const best = completeTier2[0]!.candidate;
+        let best = completeTier2[0]!.candidate;
+
+        const otherRefs = tier2Candidates
+          .map((c) => c.candidate.lyrics)
+          .filter((l) => l !== best.lyrics);
+
+        best = await unmaskCandidate(best, otherRefs, context, metadata, {
+          getMusixmatchLyrics,
+          getDeezerLyrics,
+          getNeteaseLyrics,
+          getQQLyrics,
+        });
+
         context.onProgress?.({
           stage: "lyrics_found",
           provider: best.provider,
@@ -766,7 +889,19 @@ export class LyricsEngine {
 
       if (tier3Candidates.length > 0) {
         tier3Candidates.sort((a, b) => b.score - a.score);
-        const best = tier3Candidates[0]!.candidate;
+        let best = tier3Candidates[0]!.candidate;
+
+        const otherRefs = tier3Candidates
+          .map((c) => c.candidate.lyrics)
+          .filter((l) => l !== best.lyrics);
+
+        best = await unmaskCandidate(best, otherRefs, context, metadata, {
+          getMusixmatchLyrics,
+          getDeezerLyrics,
+          getNeteaseLyrics,
+          getQQLyrics,
+        });
+
         context.onProgress?.({
           stage: "lyrics_found",
           provider: best.provider,

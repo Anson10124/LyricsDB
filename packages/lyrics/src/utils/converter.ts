@@ -26,13 +26,19 @@ import { stripInfoLines } from "./info-lines.js";
 import { fixExplicitLyrics } from "./explicit.js";
 import { standardizeSyllables } from "./syllable-sanitizer.js";
 import { normalizeCapitalization } from "./capitalization.js";
+import { alignAndUnmaskLyrics } from "./matcher.js";
 
 export function optimizeLyricsPayload(
   payload: SyncedLyricsPayload,
   metadata?: { title?: string; artist?: string },
+  references?: Array<SyncedLyricsPayload | string | null | undefined>,
 ): SyncedLyricsPayload {
   let result = payload;
   result = stripInfoLines(result, metadata);
+  if (references && references.length > 0) {
+    const unmasked = alignAndUnmaskLyrics(result, references);
+    result = unmasked.lyrics as SyncedLyricsPayload;
+  }
   result = fixExplicitLyrics(result);
   result = standardizeSyllables(result);
   result = normalizeCapitalization(result);
