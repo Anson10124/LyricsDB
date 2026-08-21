@@ -16,6 +16,10 @@ const LyricPlayer = dynamic(
   { ssr: false },
 );
 
+type LyricLineMouseEvent = Parameters<
+  NonNullable<React.ComponentProps<typeof LyricPlayer>["onLyricLineClick"]>
+>[0];
+
 const BackgroundRender = dynamic(
   () =>
     import("@applemusic-like-lyrics/react").then((mod) => mod.BackgroundRender),
@@ -80,9 +84,10 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
     };
   }, [isPlaying, durationMs]);
 
-  const handleLineClick = (event: any) => {
-    if (event?.line?.startTime !== undefined) {
-      setCurrentTime(event.line.startTime);
+  const handleLineClick = (event: LyricLineMouseEvent) => {
+    const targetLine = lyricLines[event.lineIndex];
+    if (targetLine?.startTime !== undefined) {
+      setCurrentTime(targetLine.startTime);
       lastFrameTimeRef.current = null;
     }
   };

@@ -296,7 +296,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -331,7 +333,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -360,7 +364,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -395,7 +401,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -472,7 +480,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -504,7 +514,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -533,7 +545,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -568,7 +582,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -605,7 +621,9 @@ export class LyricsEngine {
                 };
               }
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -658,7 +676,9 @@ export class LyricsEngine {
                 provider: "deezer",
               };
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -688,7 +708,9 @@ export class LyricsEngine {
                 provider: "musixmatch",
               };
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );
@@ -720,7 +742,9 @@ export class LyricsEngine {
                 provider: "lrclib",
               };
             }
-          } catch {}
+          } catch {
+            // Ignore error and continue fallback search
+          }
           return null;
         })(),
       );

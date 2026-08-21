@@ -30,15 +30,19 @@ export default async function Page(props: {
             ...defaultMdxComponents,
             Mermaid,
             mermaid: Mermaid,
-            OpenAPIPage: async (compProps: any) => (
+            OpenAPIPage: async (
+              compProps: React.ComponentProps<typeof OpenAPIPage>,
+            ) => (
               <OpenAPIPage
-                {...await openapi.preloadOpenAPIPage(page)}
+                {...(await openapi.preloadOpenAPIPage(page))}
                 {...compProps}
               />
             ),
-            APIPage: async (compProps: any) => (
+            APIPage: async (
+              compProps: React.ComponentProps<typeof OpenAPIPage>,
+            ) => (
               <OpenAPIPage
-                {...await openapi.preloadOpenAPIPage(page)}
+                {...(await openapi.preloadOpenAPIPage(page))}
                 {...compProps}
               />
             ),
