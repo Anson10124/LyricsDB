@@ -7,8 +7,26 @@ RUN apk add --no-cache libc6-compat
 # Build stage
 FROM base AS builder
 WORKDIR /app
+
+# Copy package manifests first for layer caching
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY packages/database/package.json ./packages/database/
+COPY packages/lyrics/package.json ./packages/lyrics/
+COPY packages/music-resolver/package.json ./packages/music-resolver/
+COPY packages/types/package.json ./packages/types/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/typescript-config/package.json ./packages/typescript-config/
+COPY packages/eslint-config/package.json ./packages/eslint-config/
+
+# Install dependencies using persistent BuildKit cache
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+
+# Copy application source code
 COPY . .
-RUN pnpm install --frozen-lockfile
+
+# Build API and dependencies
 RUN pnpm turbo run build --filter=api...
 
 # Production runtime stage

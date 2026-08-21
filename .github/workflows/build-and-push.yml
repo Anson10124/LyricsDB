@@ -12,6 +12,16 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            dockerfile: ./Dockerfile.api
+            image: lyricsdb-api
+          - service: web
+            dockerfile: ./Dockerfile.web
+            image: lyricsdb-web
     permissions:
       contents: read
       packages: write
@@ -36,36 +46,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build and push API image
-      - name: Build and push API
+      # Build and push service concurrently
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.api
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/lyricsdb-api:latest
-            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/lyricsdb-api:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/${{ matrix.image }}:latest
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-      # Build and push Web image
-      - name: Build and push Web
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.web
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/lyricsdb-web:latest
-            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/lyricsdb-web:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Optional: Trigger Coolify Webhook to deploy instantly
+  # Optional: Trigger Coolify Webhook to deploy instantly once both images build successfully
+  deploy-webhook:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: env.COOLIFY_WEBHOOK != ''
+    env:
+      COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+    steps:
       - name: Trigger Coolify Deploy Webhook
-        if: env.COOLIFY_WEBHOOK != ''
         run: |
           curl -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}"
-        env:
-          COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK_URL }}
