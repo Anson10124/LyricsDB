@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "quickstart",
+    "self-hosting",
     "supported-platforms",
     "formats",
     "streaming",

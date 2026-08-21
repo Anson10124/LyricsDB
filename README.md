@@ -1,159 +1,190 @@
-# Turborepo starter
+# LyricsDB
 
-This Turborepo starter is maintained by the Turborepo core team.
+<p align="center">
+  <strong>A high-performance open-source lyrics indexing, synchronization, and multi-platform metadata resolution platform.</strong>
+</p>
 
-## Using this example
+<p align="center">
+  <a href="#key-features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#self-hosting--database-options">Self-Hosting</a> •
+  <a href="#supported-formats">Formats</a> •
+  <a href="#tech-stack">Architecture</a> •
+  <a href="#api-reference">API</a>
+</p>
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## Key Features
+
+- **Cross-Platform Song Matching**: Automatically cross-references song metadata across **Spotify**, **Apple Music**, **Deezer**, **NetEase Cloud Music**, **QQ Music**, and standard **ISRC** codes with confidence scoring tiers.
+- **Syllable & Word-by-Word Timed Lyrics**: Extracts precise word- and syllable-level timestamps with support for background vocals and duet roles.
+- **Multi-Tiered Resolution Engine**: Concurrently queries and scores lyrics candidates across upstream providers (QQ Music, Deezer, NetEase, Musixmatch, LRCLIB) with intelligent fallback from word-level sync to line-level and plain text.
+- **Universal Format Engine**: Dynamically converts lyrics to **TTML**, **LRC**, **LRCA2**, **YRC**, **QRC**, **ESLRC**, **ASS**, **LYL**, **LYS**, **LQE**, and structured **JSON**.
+- **Real-Time Streaming**: Server-Sent Events (SSE) tracking extraction lifecycle and timing progress (`/api/lyrics/stream`).
+- **Hybrid Storage & PostgreSQL Caching**: Sub-millisecond indexed metadata caching in PostgreSQL with optional S3-compatible Object Storage offloading (**Supabase Storage**, **Cloudflare R2**, **AWS S3**, **MinIO**) to scale to **1,000,000+ tracks** on free tiers.
+
+---
+
+## Quick Start
+
+### 1. Prerequisites
+
+- **Node.js**: $\ge 18$
+- **pnpm**: $\ge 9.0.0$
+- **Docker** (optional, for running local PostgreSQL)
+
+### 2. Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/Anson10124/LyricsDB.git
+cd LyricsDB
+
+# Install dependencies
+pnpm install
+
+# Copy environment template
+cp .env.example .env
 ```
 
-## What's inside?
+### 3. Database Setup & Push
 
-This Turborepo includes the following packages/apps:
+```bash
+# Start local Docker PostgreSQL (if using local database)
+pnpm db:up
 
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+# Push schema to database
+pnpm db:push
 ```
 
-Without global `turbo`, use your package manager:
+### 4. Run Development Server
 
-```sh
-cd my-turborepo
-npx turbo build
-pnpm dlx turbo build
-pnpm exec turbo build
+```bash
+pnpm dev
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+- **Web Interface**: [http://localhost:3000](http://localhost:3000)
+- **API Server**: [http://localhost:4000](http://localhost:4000)
+- **Swagger Documentation**: [http://localhost:4000/docs](http://localhost:4000/docs)
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
 
-```sh
-turbo build --filter=docs
+## Self-Hosting & Database Options
+
+LyricsDB supports multiple self-hosting architectures:
+
+### Option A: 100% Local with Docker (Zero External Config)
+
+```bash
+docker compose up -d
 ```
 
-Without global `turbo`:
+Runs the full stack: local PostgreSQL container, NestJS API, and Next.js Web frontend.
 
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+### Option B: Supabase (500 MB DB + 1 GB Storage Free Tier)
+
+1. Set up a project on [Supabase](https://supabase.com).
+2. Create a bucket named `lyrics` in Supabase Storage.
+3. Configure your `.env`:
+
+   ```env
+   # PostgreSQL Connection
+   DATABASE_URL=postgres://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+   DIRECT_URL=postgres://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+   DATABASE_SSL=require
+
+   # Supabase Storage (S3 Protocol)
+   STORAGE_BUCKET=lyrics
+   STORAGE_ENDPOINT=https://[PROJECT_REF].supabase.co/storage/v1/s3
+   STORAGE_REGION=us-east-1
+   STORAGE_ACCESS_KEY_ID=[S3_ACCESS_KEY_ID]
+   STORAGE_SECRET_ACCESS_KEY=[S3_SECRET_ACCESS_KEY]
+   STORAGE_FORCE_PATH_STYLE=true
+   ```
+
+4. Push database tables and run:
+   ```bash
+   pnpm db:push
+   docker compose up -d api web
+   ```
+
+### Option C: Cloudflare R2 (10 GB Free Storage + Zero Egress Fees)
+
+```env
+STORAGE_BUCKET=lyrics
+STORAGE_ENDPOINT=https://[CLOUDFLARE_ACCOUNT_ID].r2.cloudflarestorage.com
+STORAGE_REGION=auto
+STORAGE_ACCESS_KEY_ID=[R2_ACCESS_KEY_ID]
+STORAGE_SECRET_ACCESS_KEY=[R2_SECRET_ACCESS_KEY]
+STORAGE_FORCE_PATH_STYLE=false
 ```
 
-### Develop
+---
 
-To develop all apps and packages, run the following command:
+## Supported Formats
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+| Format              | Query Param                | Content-Type       | Precision               | Description                                                |
+| :------------------ | :------------------------- | :----------------- | :---------------------- | :--------------------------------------------------------- |
+| **JSON**            | `format=json`              | `application/json` | Syllable / Word / Plain | Compact token array `[vocalType, startMs, lengthMs, text]` |
+| **TTML**            | `format=ttml`              | `application/xml`  | Syllable / Word         | Timed Text XML with word spans, background roles & duets   |
+| **LRC**             | `format=lrc`               | `text/plain`       | Line-by-Line            | Standard timestamped `[mm:ss.xx]` lyric lines              |
+| **LRCA2**           | `format=lrca2`             | `text/plain`       | Syllable                | Enhanced A2 LRC with syllable timing annotations           |
+| **YRC**             | `format=yrc`               | `text/plain`       | Syllable                | NetEase Cloud Music syllable timing format                 |
+| **QRC**             | `format=qrc`               | `text/plain`       | Syllable                | QQ Music syllable timing lyric format                      |
+| **ESLRC**           | `format=eslrc`             | `text/plain`       | Syllable                | Extended Synced LRC format                                 |
+| **ASS**             | `format=ass`               | `text/plain`       | Syllable / Karaoke      | Advanced SubStation Alpha karaoke subtitle format          |
+| **LYL / LYS / LQE** | `format=lyl`, `lys`, `lqe` | `text/plain`       | Line / Syllable         | Specialized karaoke & player formats                       |
 
-```sh
-cd my-turborepo
-turbo dev
+---
+
+## API Examples
+
+### 1. Fetch Synced Lyrics
+
+```bash
+# Fetch Apple Music-style TTML XML lyrics via Spotify URL
+curl "http://localhost:4000/api/lyrics?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=ttml"
+
+# Fetch compact JSON lyrics via Spotify Track ID
+curl "http://localhost:4000/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=json"
 ```
 
-Without global `turbo`, use your package manager:
+### 2. Retrieve Track Metadata
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
+```bash
+curl "http://localhost:4000/api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT"
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 3. Real-Time SSE Stream
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
+```bash
+curl -N "http://localhost:4000/api/lyrics/stream?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=json"
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+## Monorepo Architecture
+
+```
+lyricsdb/
+├── apps/
+│   ├── api/                 # NestJS backend API & WebSocket/SSE streaming
+│   └── web/                 # Next.js 16 + Fumadocs documentation & lyrics player UI
+├── packages/
+│   ├── database/            # Drizzle ORM schema, migrations, and PostgreSQL client
+│   ├── lyrics/              # Multi-tier lyrics extraction, matching & format conversion engine
+│   ├── music-resolver/      # Cross-platform music link & ISRC metadata resolver
+│   ├── types/               # Shared TypeScript schemas & definitions
+│   ├── ui/                  # Shared React UI components
+│   ├── eslint-config/       # Shared ESLint configuration
+│   └── typescript-config/   # Shared tsconfig definitions
+├── docker-compose.yml       # Docker Compose development & deployment
+└── turbo.json               # Turborepo task pipeline configuration
 ```
 
-### Remote Caching
+---
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+## License
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+MIT © [LyricsDB Contributors](https://github.com/Anson10124/LyricsDB)

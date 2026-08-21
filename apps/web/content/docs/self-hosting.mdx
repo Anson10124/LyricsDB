@@ -1,0 +1,129 @@
+---
+title: Self-Hosting & Storage Setup
+description: Learn how to host LyricsDB yourself using Docker, Supabase, Cloudflare R2, or local PostgreSQL.
+---
+
+LyricsDB is designed to be lightweight and flexible. You can self-host it with zero external configuration (using local Docker PostgreSQL) or use free-tier cloud services (**Supabase** for managed PostgreSQL + **Cloudflare R2** or **Supabase Storage** for object storage) to store up to **1,000,000+ tracks** on 100% free tiers.
+
+---
+
+## 1. Quick Start with Docker
+
+### Option A: Local Stack (Zero Configuration)
+If you want to run everything locally on your own machine or VPS:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Anson10124/LyricsDB.git
+cd LyricsDB
+
+# 2. Copy the example environment file
+cp .env.example .env
+
+# 3. Start the full stack (PostgreSQL + API + Web UI)
+docker compose up -d
+```
+
+- Web App: `http://localhost:3000`
+- API Backend: `http://localhost:4000`
+- Swagger Docs: `http://localhost:4000/docs`
+
+---
+
+### Option B: Cloud Database & Storage (Supabase / R2)
+If your `.env` is configured with external database and storage credentials, you can launch only the `api` and `web` services without running a local PostgreSQL container:
+
+```bash
+docker compose up -d api web
+```
+
+---
+
+## 2. Using Supabase (500 MB DB + 1 GB Storage Free)
+
+Supabase provides 500 MB of PostgreSQL storage and 1 GB of Object Storage on their free plan. Because word-by-word lyrics JSON files make up ~95% of data size, offloading lyrics to Storage allows a 500 MB database to easily hold ~1,000,000 tracks.
+
+### Step 1: Get Supabase Database Connection
+1. In your [Supabase Dashboard](https://supabase.com), go to **Project Settings** $\rightarrow$ **Database**.
+2. Under **Connection string** $\rightarrow$ select the **URI** tab.
+3. Copy the Direct connection URI:
+   ```
+   postgres://postgres:[YOUR-PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+   ```
+
+### Step 2: Configure Supabase Storage (S3 API)
+1. Go to **Storage** $\rightarrow$ Click **New bucket** $\rightarrow$ Name it `lyrics` (can be public or private).
+2. Go to **Project Settings** $\rightarrow$ **Storage** $\rightarrow$ **S3 Access Keys** $\rightarrow$ Click **Generate new token**.
+3. Copy the **Access Key ID** and **Secret Access Key**.
+
+### Step 3: Update `.env`
+```bash
+# Supabase PostgreSQL
+DATABASE_URL=postgres://postgres:[YOUR_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+DIRECT_URL=postgres://postgres:[YOUR_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+DATABASE_SSL=require
+
+# Supabase Storage (S3 API)
+STORAGE_BUCKET=lyrics
+STORAGE_ENDPOINT=https://[PROJECT_REF].supabase.co/storage/v1/s3
+STORAGE_REGION=us-east-1
+STORAGE_ACCESS_KEY_ID=[YOUR_S3_ACCESS_KEY_ID]
+STORAGE_SECRET_ACCESS_KEY=[YOUR_S3_SECRET_ACCESS_KEY]
+STORAGE_FORCE_PATH_STYLE=true
+```
+
+### Step 4: Push Schema & Start
+```bash
+# Push database tables to Supabase
+pnpm db:push
+
+# Start development server
+pnpm dev
+```
+
+---
+
+## 3. Using Cloudflare R2 (10 GB Free Storage + Zero Egress Fees)
+
+If you need more storage capacity, Cloudflare R2 offers **10 GB free monthly storage** and **$0 egress fees**.
+
+### Step 1: Create R2 Bucket and API Token
+1. In [Cloudflare Dashboard](https://dash.cloudflare.com), go to **R2 Object Storage** $\rightarrow$ **Create bucket** (name it `lyrics`).
+2. Click **Manage R2 API Tokens** $\rightarrow$ **Create API Token**.
+3. Set permissions to **Object Read & Write** $\rightarrow$ Create and copy the credentials.
+
+### Step 2: Update `.env`
+```bash
+# Supabase or Managed PostgreSQL
+DATABASE_URL=postgres://postgres:[YOUR_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+DIRECT_URL=postgres://postgres:[YOUR_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+DATABASE_SSL=require
+
+# Cloudflare R2 Storage (10 GB Free)
+STORAGE_BUCKET=lyrics
+STORAGE_ENDPOINT=https://[YOUR_CLOUDFLARE_ACCOUNT_ID].r2.cloudflarestorage.com
+STORAGE_REGION=auto
+STORAGE_ACCESS_KEY_ID=[YOUR_R2_ACCESS_KEY_ID]
+STORAGE_SECRET_ACCESS_KEY=[YOUR_R2_SECRET_ACCESS_KEY]
+STORAGE_FORCE_PATH_STYLE=false
+```
+
+---
+
+## 4. Environment Variables Reference
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/lyricsdb` | Primary PostgreSQL connection URL. |
+| `DIRECT_URL` | *(Empty)* | Direct connection string on port 5432 (used by Drizzle for migrations). |
+| `DATABASE_SSL` | *(Auto-detected)* | Set to `require` for SSL database connections (e.g. Supabase, AWS RDS). |
+| `DATABASE_PREPARE` | `true` | Set to `false` when connecting via transaction poolers (Supavisor port 6543 / PgBouncer). |
+| `STORAGE_BUCKET` | *(Unset)* | S3 bucket name. If unset, lyrics are stored directly in PostgreSQL JSONB. |
+| `STORAGE_ENDPOINT` | *(Unset)* | S3-compatible endpoint (Supabase Storage, Cloudflare R2, MinIO, or AWS S3). |
+| `STORAGE_REGION` | `auto` | Storage region (e.g., `us-east-1`, `auto`). |
+| `STORAGE_ACCESS_KEY_ID` | *(Unset)* | S3 Access Key ID. |
+| `STORAGE_SECRET_ACCESS_KEY`| *(Unset)* | S3 Secret Access Key. |
+| `STORAGE_FORCE_PATH_STYLE` | `true` | Set to `true` for MinIO/Supabase, or `false` for standard S3/R2 virtual-host style. |
+| `PORT` | `4000` | Port for the NestJS API server. |
+| `PUBLIC_URL` | *(Auto-detected)* | Public API domain for Swagger documentation. |
+| `API_INTERNAL_URL` | `http://api:4000` | Internal URL for Next.js to proxy requests to NestJS. |
