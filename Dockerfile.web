@@ -16,12 +16,15 @@ COPY packages/ui/package.json ./packages/ui/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
 
-# Install dependencies using persistent BuildKit cache
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# Install dependencies using persistent BuildKit cache (ignore scripts until source is copied)
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source files
 COPY apps/web ./apps/web
 COPY packages ./packages
+
+# Run postinstall scripts now that source files are present
+RUN pnpm --filter web run postinstall
 
 # Build standalone Next.js output
 RUN pnpm turbo run build --filter=web...

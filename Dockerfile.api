@@ -20,11 +20,14 @@ COPY packages/ui/package.json ./packages/ui/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
 
-# Install dependencies using persistent BuildKit cache
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# Install dependencies using persistent BuildKit cache (ignore scripts until source is copied)
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy application source code
 COPY . .
+
+# Run postinstall scripts now that source files are present
+RUN pnpm --filter web run postinstall
 
 # Build API and dependencies
 RUN pnpm turbo run build --filter=api...
