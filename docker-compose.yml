@@ -59,7 +59,6 @@ services:
       PORT: 3000
       NODE_ENV: production
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4000}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     depends_on:
       - api
     ports:

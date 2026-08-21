@@ -120,6 +120,12 @@ STORAGE_SECRET_ACCESS_KEY=[R2_SECRET_ACCESS_KEY]
 STORAGE_FORCE_PATH_STYLE=false
 ```
 
+### Option D: Coolify Deployment
+1. Create a **Docker Compose** resource in your Coolify dashboard.
+2. Under **Domains**, set `https://lyricsdb.yourdomain.com` on the `web` service (port 3000). Next.js will automatically proxy all `/api/*` requests to the `api` service (port 4000).
+3. Add your Supabase & Storage environment variables.
+4. Click **Deploy**.
+
 ---
 
 ## Supported Formats

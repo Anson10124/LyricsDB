@@ -110,7 +110,55 @@ STORAGE_FORCE_PATH_STYLE=false
 
 ---
 
-## 4. Environment Variables Reference
+## 4. Deploying to Coolify (Self-Hosted PaaS)
+
+You can easily deploy LyricsDB to your self-hosted **Coolify** instance with Docker Compose while sharing the same Supabase database as your local development environment.
+
+### Step 1: Create a New Resource in Coolify
+1. In your Coolify dashboard, go to your Project/Environment.
+2. Click **+ New Resource** -> Select **Docker Compose**.
+3. Choose **GitHub App** or **Public Repository** and select your `LyricsDB` repository (branch `main`).
+
+### Step 2: Configure Domains in Coolify
+Under the **General** settings of your Docker Compose resource:
+- For the **`web`** service (Port 3000): Set the domain to:
+  ```
+  https://lyricsdb.yourdomain.com
+  ```
+- **How `/api` Routing Works**:
+  Next.js in the `web` container automatically reverse-proxies any requests matching `/api/*` (e.g. `https://lyricsdb.yourdomain.com/api/tracks`, `https://lyricsdb.yourdomain.com/api/lyrics`, etc.) internally to the `api` container on port 4000 over Docker's internal network (`http://api:4000`).
+  This means you **do not need separate Traefik path rules**—pointing `https://lyricsdb.yourdomain.com` to `web` seamlessly serves both the frontend UI and the REST API under the same domain.
+
+### Step 3: Configure Environment Variables in Coolify
+In the **Environment Variables** tab in Coolify, add your Supabase / Cloudflare credentials (the exact same ones as your local development `.env`):
+
+```bash
+# Database Connection (Supabase)
+DATABASE_URL=postgres://postgres:[YOUR_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+DIRECT_URL=postgres://postgres:[YOUR_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+DATABASE_SSL=require
+
+# Storage Connection (Supabase Storage or Cloudflare R2)
+STORAGE_BUCKET=lyrics
+STORAGE_ENDPOINT=https://[PROJECT_REF].supabase.co/storage/v1/s3
+STORAGE_REGION=us-east-1
+STORAGE_ACCESS_KEY_ID=[YOUR_S3_ACCESS_KEY_ID]
+STORAGE_SECRET_ACCESS_KEY=[YOUR_S3_SECRET_ACCESS_KEY]
+STORAGE_FORCE_PATH_STYLE=true
+
+# Service Networking & Public URLs
+PUBLIC_URL=https://lyricsdb.yourdomain.com
+API_INTERNAL_URL=http://api:4000
+NODE_ENV=production
+```
+
+### Step 4: Deploy
+Click **Deploy** in Coolify.
+During container start, `Dockerfile.api` automatically applies any missing database migrations to Supabase (`pnpm db:push`) before starting the NestJS server.
+
+---
+
+## 5. Environment Variables Reference
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
@@ -126,4 +174,5 @@ STORAGE_FORCE_PATH_STYLE=false
 | `STORAGE_FORCE_PATH_STYLE` | `true` | Set to `true` for MinIO/Supabase, or `false` for standard S3/R2 virtual-host style. |
 | `PORT` | `4000` | Port for the NestJS API server. |
 | `PUBLIC_URL` | *(Auto-detected)* | Public API domain for Swagger documentation. |
-| `API_INTERNAL_URL` | `http://api:4000` | Internal URL for Next.js to proxy requests to NestJS. |
+| `API_INTERNAL_URL` | `http://api:4000` | Internal URL for Next.js to proxy requests to NestJS backend. |
+
