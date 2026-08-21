@@ -2370,15 +2370,9 @@
             "example": 213573,
             "description": "Track duration in milliseconds"
           },
-          "artworkUrl": {
+          "artwork": {
             "type": "object",
-            "example": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
-            "description": "Public URL to high-resolution album cover art",
-            "nullable": true
-          },
-          "animatedArtwork": {
-            "type": "object",
-            "description": "Full animated artwork payload with HLS playlists, direct highest-quality MP4s, and preview colors",
+            "description": "Rich artwork metadata object including parametric templateUrl, width, height, color palettes, and motion video streams",
             "nullable": true
           },
           "lyricsType": {

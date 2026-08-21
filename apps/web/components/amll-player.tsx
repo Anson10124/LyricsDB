@@ -9,6 +9,7 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { convertCompactToAmllLines } from "@/lib/lyrics-formatter";
+import { formatArtworkUrl } from "@/lib/artwork";
 import "@applemusic-like-lyrics/core/style.css";
 
 const LyricPlayer = dynamic(
@@ -161,24 +162,19 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
     );
   }
 
+  const videoCover =
+    track.artwork?.squareVideoUrl || track.artwork?.tallVideoUrl;
+  const staticCover = formatArtworkUrl(track.artwork, 1000);
+  const albumCover = videoCover || staticCover;
+
   return (
     <>
       <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none font-[family-name:var(--font-inter)]">
-        {(track.animatedArtwork?.squareVideoUrl ||
-          track.animatedArtwork?.tallVideoUrl ||
-          track.artworkUrl) && (
+        {albumCover && (
           <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
             <BackgroundRender
-              album={
-                track.animatedArtwork?.squareVideoUrl ||
-                track.animatedArtwork?.tallVideoUrl ||
-                track.artworkUrl ||
-                undefined
-              }
-              albumIsVideo={Boolean(
-                track.animatedArtwork?.squareVideoUrl ||
-                  track.animatedArtwork?.tallVideoUrl,
-              )}
+              album={albumCover}
+              albumIsVideo={Boolean(videoCover)}
               playing={isPlaying}
               fps={60}
               flowSpeed={1}

@@ -1,5 +1,6 @@
 export type {
   AnimatedArtworkPayload,
+  ArtworkMetadata,
   EnrichedMusixmatchMetadata,
   MatchCandidate,
   MetadataType,

@@ -1,8 +1,13 @@
-import type { MetadataType, ResolveOptions, TrackMetadata } from "../types.js";
+import type {
+  ArtworkMetadata,
+  MetadataType,
+  ResolveOptions,
+  TrackMetadata,
+} from "../types.js";
 import { HttpClient } from "../utils/http.js";
 import { normalizeSongTitle } from "../utils/query.js";
 import { getCheerioDoc, metaTagContent } from "../utils/scraper.js";
-import { fetchAppleAnimatedArtwork } from "../utils/apple-animated-artwork.js";
+import { fetchAppleArtworkMetadata } from "../utils/apple-animated-artwork.js";
 import { BaseMusicParser } from "./base.js";
 
 export const APPLE_MUSIC_LINK_REGEX =
@@ -167,17 +172,28 @@ export class AppleMusicParser extends BaseMusicParser {
           const normalized = normalizeSongTitle(rawTitle);
           const artist = item.artistName;
           const album = isTrack ? item.collectionName : undefined;
-          const image = item.artworkUrl100
-            ? item.artworkUrl100.replace(/\/\d+x\d+bb\./, "/600x600bb.")
+          const rawTemplate = item.artworkUrl100
+            ? item.artworkUrl100.replace(/\/\d+x\d+bb\./, "/{w}x{h}bb.")
             : undefined;
+          const defaultImage = rawTemplate
+            ? rawTemplate.replace("{w}", "1000").replace("{h}", "1000")
+            : item.artworkUrl100;
           const audio = item.previewUrl;
           const durationMs = item.trackTimeMillis;
           const isrc = item.isrc;
 
-          let animatedArtwork = undefined;
+          let artwork: ArtworkMetadata | undefined = rawTemplate
+            ? {
+                url: defaultImage,
+                templateUrl: rawTemplate,
+                width: 3000,
+                height: 3000,
+              }
+            : undefined;
+
           if (this.getToken) {
             try {
-              const anim = await fetchAppleAnimatedArtwork(
+              const fullArtwork = await fetchAppleArtworkMetadata(
                 id,
                 itemType === "album"
                   ? "album"
@@ -191,9 +207,14 @@ export class AppleMusicParser extends BaseMusicParser {
                   timeout: options?.timeout,
                 },
               );
-              if (anim) animatedArtwork = anim;
+              if (fullArtwork) {
+                artwork = {
+                  ...artwork,
+                  ...fullArtwork,
+                };
+              }
             } catch {
-              // Ignore animated artwork errors
+              // Ignore artwork errors
             }
           }
 
@@ -205,11 +226,11 @@ export class AppleMusicParser extends BaseMusicParser {
             extraArtists: normalized.extraArtists,
             album,
             type: itemType,
-            image,
+            image: artwork?.url || defaultImage,
             audio,
             durationMs,
             isrc,
-            animatedArtwork,
+            artwork,
           };
         }
       } catch {
@@ -253,10 +274,13 @@ export class AppleMusicParser extends BaseMusicParser {
 
       const normalized = normalizeSongTitle(title);
 
-      let animatedArtwork = undefined;
+      let artwork: ArtworkMetadata | undefined = image
+        ? { url: image }
+        : undefined;
+
       if (this.getToken && id && /^\d+$/.test(id)) {
         try {
-          const anim = await fetchAppleAnimatedArtwork(
+          const fullArtwork = await fetchAppleArtworkMetadata(
             id,
             detectedType === "album"
               ? "album"
@@ -270,7 +294,12 @@ export class AppleMusicParser extends BaseMusicParser {
               timeout: options?.timeout,
             },
           );
-          if (anim) animatedArtwork = anim;
+          if (fullArtwork) {
+            artwork = {
+              ...artwork,
+              ...fullArtwork,
+            };
+          }
         } catch {
           // Ignore
         }
@@ -284,9 +313,9 @@ export class AppleMusicParser extends BaseMusicParser {
         extraArtists: normalized.extraArtists,
         description,
         type: detectedType,
-        image,
+        image: artwork?.url || image,
         audio,
-        animatedArtwork,
+        artwork,
       };
     } catch {
       // Final fallback

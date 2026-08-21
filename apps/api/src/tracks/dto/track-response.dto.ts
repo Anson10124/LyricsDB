@@ -83,20 +83,12 @@ export class SanitizedTrackDto {
   durationMs!: number;
 
   @ApiProperty({
-    example: "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
-    description: "Public URL to high-resolution album cover art",
-    required: false,
-    nullable: true,
-  })
-  artworkUrl?: string | null;
-
-  @ApiProperty({
     description:
-      "Full animated artwork payload with HLS playlists, direct highest-quality MP4s, and preview colors",
+      "Rich artwork metadata object including parametric templateUrl, width, height, color palettes, and motion video streams",
     required: false,
     nullable: true,
   })
-  animatedArtwork?: Record<string, unknown> | null;
+  artwork?: Record<string, unknown> | null;
 
   @ApiProperty({
     example: "word",

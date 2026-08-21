@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useSetAtom } from "jotai";
 import type { SanitizedTrack, TrackRecord } from "@repo/types";
 import type { LyricLine } from "@applemusic-like-lyrics/core";
+import { formatArtworkUrl } from "@/lib/artwork";
 import {
   PrebuiltLyricPlayer,
   musicIdAtom,
@@ -116,10 +117,11 @@ export function AmllFullscreenPlayer({
   // Sync track metadata and lyrics to AMLL atoms
   useEffect(() => {
     const animatedVideo =
-      track.animatedArtwork?.squareVideoUrl ||
-      track.animatedArtwork?.tallVideoUrl;
+      track.artwork?.squareVideoUrl ||
+      track.artwork?.tallVideoUrl;
     const isVideo = Boolean(animatedVideo);
-    const coverUrl = animatedVideo || track.artworkUrl || "";
+    const coverUrl =
+      animatedVideo || formatArtworkUrl(track.artwork, 1000) || "";
 
     setMusicId(track.id || track.spotifyId || track.appleMusicId || "track");
     setMusicName(track.title || "Unknown Track");
@@ -145,8 +147,7 @@ export function AmllFullscreenPlayer({
     track.title,
     track.artists,
     track.album,
-    track.artworkUrl,
-    track.animatedArtwork,
+    track.artwork,
     durationMs,
     lyricLines,
     setMusicId,

@@ -13,7 +13,7 @@ export type MetadataType =
   | "podcast"
   | "show";
 
-import type { AnimatedArtworkPayload } from "./track.js";
+import type { ArtworkMetadata } from "./track.js";
 
 export interface ResolverTrackMetadata {
   id: string;
@@ -30,7 +30,7 @@ export interface ResolverTrackMetadata {
   audio?: string;
   durationMs?: number;
   isrc?: string;
-  animatedArtwork?: AnimatedArtworkPayload;
+  artwork?: ArtworkMetadata;
 }
 
 // Alias for resolver-specific metadata

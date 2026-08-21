@@ -1,5 +1,5 @@
 import type {
-  AnimatedArtworkPayload,
+  ArtworkMetadata,
   LyricsType,
   SyncedLyricsPayload,
 } from "@repo/types";
@@ -36,8 +36,7 @@ export const tracks = pgTable(
     artists: jsonb("artists").$type<string[]>().default([]).notNull(),
     album: varchar("album", { length: 500 }),
     durationMs: integer("duration_ms").notNull(),
-    artworkUrl: text("artwork_url"),
-    animatedArtwork: jsonb("animated_artwork").$type<AnimatedArtworkPayload>(),
+    artwork: jsonb("artwork").$type<ArtworkMetadata>(),
 
     // Lyrics Content & Sync Type & Provider
     // lyricsType: 'word' | 'line' | 'plain' | null

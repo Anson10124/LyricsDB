@@ -19,7 +19,7 @@ import type {
   TrackMetadata,
 } from "./types.js";
 import { matchTrackWithMusixmatch } from "./utils/musixmatch-matcher.js";
-import { fetchAppleAnimatedArtwork } from "./utils/apple-animated-artwork.js";
+import { fetchAppleArtworkMetadata } from "./utils/apple-animated-artwork.js";
 import { globalProviderLimiter } from "./utils/provider-limiter.js";
 import {
   cleanSearchQuery,
@@ -398,8 +398,13 @@ export class MusicResolver {
       }
     }
 
-    // Backfill animated artwork from Apple Music if available and not already attached
-    if (!metadata.animatedArtwork && this.appleMusicConfig?.getToken) {
+    // Ensure metadata.artwork exists if metadata.image exists
+    if (!metadata.artwork && metadata.image) {
+      metadata.artwork = { url: metadata.image };
+    }
+
+    // Backfill rich artwork & animated video from Apple Music if available
+    if (this.appleMusicConfig?.getToken) {
       const appleKey = links["appleMusic"] ? "appleMusic" : "applemusic";
       const appleLink = links[appleKey];
       const appleId =
@@ -407,9 +412,13 @@ export class MusicResolver {
           ? appleLink?.id
           : undefined;
 
-      if (appleId && /^\d+$/.test(appleId)) {
+      const needsArtworkBackfill =
+        !metadata.artwork?.templateUrl ||
+        (!metadata.artwork?.squareVideoUrl && !metadata.artwork?.tallVideoUrl);
+
+      if (appleId && /^\d+$/.test(appleId) && needsArtworkBackfill) {
         try {
-          const anim = await fetchAppleAnimatedArtwork(
+          const appleArtwork = await fetchAppleArtworkMetadata(
             appleId,
             metadata.type === "album"
               ? "album"
@@ -424,8 +433,14 @@ export class MusicResolver {
               timeout: resolveOpts.timeout,
             },
           );
-          if (anim) {
-            metadata.animatedArtwork = anim;
+          if (appleArtwork) {
+            metadata.artwork = {
+              ...metadata.artwork,
+              ...appleArtwork,
+            };
+            if (appleArtwork.url && !metadata.image) {
+              metadata.image = appleArtwork.url;
+            }
           }
         } catch {
           // Ignore errors

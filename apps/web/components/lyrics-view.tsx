@@ -8,6 +8,7 @@ import type {
   SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
+import { formatArtworkUrl } from "@/lib/artwork";
 import {
   formatLyricsOnClient,
   formatXml,
@@ -60,6 +61,8 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
     );
   }, [rawLyrics, selectedFormat, track]);
 
+  const artworkSrc = formatArtworkUrl(track.artwork, 600);
+
   return (
     <div className="w-full max-w-3xl flex flex-col gap-6 py-6 px-4">
       {/* Top action bar */}
@@ -86,10 +89,10 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
 
       {/* Track Header Card */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-border/70 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
-        {track.artworkUrl ? (
+        {artworkSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={track.artworkUrl}
+            src={artworkSrc}
             alt={track.title}
             className="size-20 sm:size-24 rounded-xl object-cover shadow-sm ring-1 ring-border/50 shrink-0"
           />
