@@ -2154,6 +2154,9 @@
             "type": "string",
             "example": "GBARL8700014",
             "description": "International Standard Recording Code (ISRC)"
+          },
+          "artwork": {
+            "$ref": "#/components/schemas/ArtworkMetadataDto"
           }
         },
         "required": [
@@ -2161,6 +2164,102 @@
           "title",
           "type"
         ]
+      },
+      "ArtworkMetadataDto": {
+        "type": "object",
+        "description": "Rich artwork metadata containing parametric URL templates, original dimensions, theme color palettes, Display P3 gamut flags, and animated cover video streams",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/0c/82/48/0c8248a8-4a5b-d30d-8056-f32d650d2fc9/190295978068.jpg/1000x1000bb.jpg",
+            "description": "High-resolution static fallback image URL (e.g. 1000x1000)",
+            "nullable": true
+          },
+          "templateUrl": {
+            "type": "string",
+            "example": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/0c/82/48/0c8248a8-4a5b-d30d-8056-f32d650d2fc9/190295978068.jpg/{w}x{h}bb.jpg",
+            "description": "Dynamic parametric image URL template with {w} and {h} placeholders for client-side resolution scaling",
+            "nullable": true
+          },
+          "width": {
+            "type": "number",
+            "example": 1425,
+            "description": "Native width in pixels of original source artwork",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "example": 1425,
+            "description": "Native height in pixels of original source artwork",
+            "nullable": true
+          },
+          "bgColor": {
+            "type": "string",
+            "example": "#00293f",
+            "description": "Dominant background hex color for player UI and adaptive backgrounds",
+            "nullable": true
+          },
+          "textColor1": {
+            "type": "string",
+            "example": "#ddeef5",
+            "description": "Primary high-contrast text color hex code",
+            "nullable": true
+          },
+          "textColor2": {
+            "type": "string",
+            "example": "#b2dc2d",
+            "description": "Secondary accent text color hex code",
+            "nullable": true
+          },
+          "textColor3": {
+            "type": "string",
+            "example": "#b0c6d0",
+            "description": "Tertiary text color hex code",
+            "nullable": true
+          },
+          "textColor4": {
+            "type": "string",
+            "example": "#8eb831",
+            "description": "Quaternary subtle accent text color hex code",
+            "nullable": true
+          },
+          "hasP3": {
+            "type": "boolean",
+            "example": false,
+            "description": "Indicates whether the artwork asset was mastered with Apple Display P3 wide color gamut profile",
+            "nullable": true
+          },
+          "squareVideoUrl": {
+            "type": "string",
+            "example": "https://mvod.itunes.apple.com/itunes-assets/HLSVideo126/v4/33/e7/59/33e7590e-f44c-b72b-95e8-b4e97e6e3402/P633450300_Anull_video_gr593_sdr_2160x2160-.mp4",
+            "description": "Direct UHD/2K square animated MP4 cover video (e.g. 2160x2160)",
+            "nullable": true
+          },
+          "tallVideoUrl": {
+            "type": "string",
+            "example": "https://mvod.itunes.apple.com/itunes-assets/HLSVideo116/v4/b8/9d/bd/b89dbdd4-b09a-b888-ba92-b8a2b5119293/P633445007_Anull_video_gr593_sdr_2048x2732-.mp4",
+            "description": "Direct portrait/tall animated MP4 cover video (e.g. 2048x2732)",
+            "nullable": true
+          },
+          "squareHlsUrl": {
+            "type": "string",
+            "example": "https://mvod.itunes.apple.com/itunes-assets/HLSVideo126/v4/39/01/5c/39015c9d-d39e-6201-db55-4260a175518a/P633450300_default.m3u8",
+            "description": "Master HLS (.m3u8) video stream for adaptive square animated artwork",
+            "nullable": true
+          },
+          "tallHlsUrl": {
+            "type": "string",
+            "example": "https://mvod.itunes.apple.com/itunes-assets/HLSVideo116/v4/50/c2/19/50c21964-99b5-8036-41ca-fb6393fec298/P633445007_default.m3u8",
+            "description": "Master HLS (.m3u8) video stream for adaptive tall animated artwork",
+            "nullable": true
+          },
+          "previewFrameUrl": {
+            "type": "string",
+            "example": "https://is1-ssl.mzstatic.com/image/thumb/Video116/v4/94/3a/55/943a550f-f2dd-cd9d-2915-90e12c72c5d7/Jobaefac012-f9f8-455b-b9bd-5861475e1cd5-157156448-PreviewImage_Preview_Image_Intermediate_nonvideo_sdr_301769248_1582073659-Time1697230251887.png/1080x1080bb.jpg",
+            "description": "Still preview frame image for animated motion cover",
+            "nullable": true
+          }
+        }
       },
       "ResolveResultDto": {
         "type": "object",
@@ -2371,9 +2470,7 @@
             "description": "Track duration in milliseconds"
           },
           "artwork": {
-            "type": "object",
-            "description": "Rich artwork metadata object including parametric templateUrl, width, height, color palettes, and motion video streams",
-            "nullable": true
+            "$ref": "#/components/schemas/ArtworkMetadataDto"
           },
           "lyricsType": {
             "type": "string",
