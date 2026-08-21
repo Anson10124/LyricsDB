@@ -8,7 +8,8 @@ const DEEZER_JWT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const SPOTIFY_PROVIDER = "spotify";
 const SPOTIFY_TOKEN_CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (Spotify token lasts 60 min)
-const DEFAULT_SPOTIFY_SECRET = "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH";
+const DEFAULT_SPOTIFY_SECRET =
+  process.env.SPOTIFY_TOTP_SECRET || "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH";
 const DEFAULT_SPOTIFY_VERSION = 59;
 const PLAYER_JS_REGEX =
   /"(https:\/\/[^" ]+\/(?:mobile-)?web-player\.[0-9a-f]+\.js)"/;

@@ -1,4 +1,6 @@
 import { globalProviderLimiter } from "./provider-limiter.js";
+import { assertSafeUrl } from "./ssrf-guard.js";
+
 
 export interface HttpOptions {
   headers?: Record<string, string>;
@@ -68,6 +70,7 @@ export class HttpClient {
 
   static async resolveRedirect(url: string, maxRedirects = 5): Promise<string> {
     try {
+      assertSafeUrl(url);
       let currentUrl = url;
       for (let i = 0; i < maxRedirects; i++) {
         const response = await fetch(currentUrl, {
@@ -78,7 +81,9 @@ export class HttpClient {
 
         const location = response.headers.get("location");
         if (location && [301, 302, 303, 307, 308].includes(response.status)) {
-          currentUrl = new URL(location, currentUrl).toString();
+          const nextUrl = new URL(location, currentUrl).toString();
+          assertSafeUrl(nextUrl);
+          currentUrl = nextUrl;
         } else {
           break;
         }
@@ -94,6 +99,7 @@ export class HttpClient {
     url: string,
     options?: HttpOptions,
   ): Promise<T> {
+    assertSafeUrl(url);
     const provider = options?.provider || detectProviderFromUrl(url);
 
     if (provider && !options?.bypassLimiter) {
@@ -113,6 +119,7 @@ export class HttpClient {
     options?: HttpOptions,
     provider?: string,
   ): Promise<T> {
+    assertSafeUrl(url);
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const retries = options?.retries ?? 2;
 

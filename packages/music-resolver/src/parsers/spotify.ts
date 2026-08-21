@@ -107,12 +107,9 @@ export class SpotifyParser extends BaseMusicParser {
       targetUrl.includes("spoti.fi")
     ) {
       try {
-        const headRes = await fetch(targetUrl, {
-          redirect: "follow",
-          method: "GET",
-        });
-        if (headRes.url && headRes.url !== targetUrl) {
-          targetUrl = headRes.url;
+        const resolvedUrl = await HttpClient.resolveRedirect(targetUrl);
+        if (resolvedUrl && resolvedUrl !== targetUrl) {
+          targetUrl = resolvedUrl;
           const reParsed = this.parse(targetUrl);
           if (reParsed.id) targetId = reParsed.id;
           if (reParsed.type) itemType = reParsed.type;

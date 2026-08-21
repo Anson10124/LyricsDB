@@ -38,13 +38,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       if (
         exception.name === "ProviderRateLimitedError" ||
         exception.name === "ThrottlerException"
       ) {
         status = HttpStatus.TOO_MANY_REQUESTS;
+        message = exception.message;
         error = "Too Many Requests";
+      } else if (exception.name === "SsrfError") {
+        status = HttpStatus.BAD_REQUEST;
+        message = exception.message;
+        error = "Bad Request";
+      } else {
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+        error = "Internal Server Error";
+        // Do not leak internal database errors or stack messages to API consumers in production
+        message =
+          process.env.NODE_ENV === "production"
+            ? "An internal server error occurred."
+            : exception.message;
       }
     }
 

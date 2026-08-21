@@ -15,6 +15,9 @@
     "PUBLIC_URL",
     "SERVICE_URL_API",
     "SERVICE_URL_WEB",
+    "SPOTIFY_TOTP_SECRET",
+    "CORS_ORIGINS",
+    "TRUST_PROXY",
     "NODE_ENV",
     "PORT"
   ],

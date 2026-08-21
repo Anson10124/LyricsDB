@@ -25,10 +25,57 @@ if (!process.env.DATABASE_URL) {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors();
+  const expressApp = app.getHttpAdapter().getInstance();
 
-  // Trust proxy for accurate client IP rate limiting behind reverse proxies
-  app.getHttpAdapter().getInstance().set("trust proxy", true);
+  // Security Hardening: Disable X-Powered-By header to prevent technology fingerprinting
+  expressApp.disable("x-powered-by");
+
+  // Security Hardening: Apply essential HTTP security headers
+  expressApp.use((_req: unknown, res: { setHeader: (name: string, value: string) => void }, next: () => void) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("X-XSS-Protection", "0");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader(
+        "Strict-Transport-Security",
+        "max-age=31536000; includeSubDomains; preload",
+      );
+    }
+    next();
+  });
+
+  // CORS Configuration: Restrict allowed origins in production
+  const corsOriginsEnv = process.env.CORS_ORIGINS;
+  const allowedOrigins: (string | RegExp)[] | boolean =
+    corsOriginsEnv && corsOriginsEnv !== "*"
+      ? corsOriginsEnv.split(",").map((origin) => origin.trim())
+      : process.env.NODE_ENV === "production"
+        ? [
+            process.env.PUBLIC_URL || "",
+            process.env.SERVICE_URL_WEB || "",
+            "http://localhost:3000",
+          ].filter(Boolean)
+        : true; // In development, allow all origins
+
+  app.enableCors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    maxAge: 86400,
+  });
+
+  // Trust proxy configuration: defaults to single trusted reverse proxy hop in production
+  const trustProxyConfig = process.env.TRUST_PROXY || (process.env.NODE_ENV === "production" ? 1 : "loopback");
+  const parsedTrustProxy =
+    trustProxyConfig === "true"
+      ? true
+      : trustProxyConfig === "false"
+        ? false
+        : !isNaN(Number(trustProxyConfig))
+          ? Number(trustProxyConfig)
+          : trustProxyConfig;
+  expressApp.set("trust proxy", parsedTrustProxy);
 
   // Global Inbound Request Validation Pipeline
   app.useGlobalPipes(

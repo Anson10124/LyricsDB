@@ -265,7 +265,9 @@ export class TracksService {
 
     this.ipRateLimiter.consume(clientIp, "cached");
 
-    const searchTerm = `%${query.trim()}%`;
+    // Escape SQL LIKE wildcards (%, _, \) to prevent pattern injection and excessive table scans
+    const escapedQuery = query.trim().replace(/[%_\\]/g, "\\$&");
+    const searchTerm = `%${escapedQuery}%`;
     const results = await this.db
       .select()
       .from(tracks)

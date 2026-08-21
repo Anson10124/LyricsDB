@@ -21,6 +21,8 @@ const DEFAULT_CONFIG: RateLimitConfig = {
   windowMs: 60_000,
 };
 
+const MAX_BUCKET_ENTRIES = 20_000;
+
 @Injectable()
 export class IpRateLimiterService implements OnModuleDestroy {
   private readonly config: RateLimitConfig;
@@ -85,6 +87,12 @@ export class IpRateLimiterService implements OnModuleDestroy {
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
+    }
+
+    // Protect against unbounded memory growth: evict oldest entry if cap is reached
+    if (!buckets.has(cleanIp) && buckets.size >= MAX_BUCKET_ENTRIES) {
+      const oldestKey = buckets.keys().next().value;
+      if (oldestKey) buckets.delete(oldestKey);
     }
 
     timestamps.push(now);

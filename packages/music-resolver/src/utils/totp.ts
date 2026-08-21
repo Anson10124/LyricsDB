@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
 import { HttpClient } from "./http.js";
 
-export const DEFAULT_SPOTIFY_SECRET = "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH";
+export const DEFAULT_SPOTIFY_SECRET =
+  process.env.SPOTIFY_TOTP_SECRET || "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH";
 export const DEFAULT_SPOTIFY_VERSION = 59;
 export const SPOTIFY_PLAYER_JS_REGEX =
   /"(https:\/\/[^" ]+\/(?:mobile-)?web-player\.[0-9a-f]+\.js)"/;
