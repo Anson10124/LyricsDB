@@ -44,16 +44,16 @@ docker compose up -d api web
 Supabase provides 500 MB of PostgreSQL storage and 1 GB of Object Storage on their free plan. Because word-by-word lyrics JSON files make up ~95% of data size, offloading lyrics to Storage allows a 500 MB database to easily hold ~1,000,000 tracks.
 
 ### Step 1: Get Supabase Database Connection
-1. In your [Supabase Dashboard](https://supabase.com), go to **Project Settings** $\rightarrow$ **Database**.
-2. Under **Connection string** $\rightarrow$ select the **URI** tab.
+1. In your [Supabase Dashboard](https://supabase.com), go to **Project Settings** -> **Database**.
+2. Under **Connection string** -> select the **URI** tab.
 3. Copy the Direct connection URI:
    ```
    postgres://postgres:[YOUR-PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
    ```
 
 ### Step 2: Configure Supabase Storage (S3 API)
-1. Go to **Storage** $\rightarrow$ Click **New bucket** $\rightarrow$ Name it `lyrics` (can be public or private).
-2. Go to **Project Settings** $\rightarrow$ **Storage** $\rightarrow$ **S3 Access Keys** $\rightarrow$ Click **Generate new token**.
+1. Go to **Storage** -> Click **New bucket** -> Name it `lyrics` (can be public or private).
+2. Go to **Project Settings** -> **Storage** -> **S3 Access Keys** -> Click **Generate new token**.
 3. Copy the **Access Key ID** and **Secret Access Key**.
 
 ### Step 3: Update `.env`
@@ -88,9 +88,9 @@ pnpm dev
 If you need more storage capacity, Cloudflare R2 offers **10 GB free monthly storage** and **$0 egress fees**.
 
 ### Step 1: Create R2 Bucket and API Token
-1. In [Cloudflare Dashboard](https://dash.cloudflare.com), go to **R2 Object Storage** $\rightarrow$ **Create bucket** (name it `lyrics`).
-2. Click **Manage R2 API Tokens** $\rightarrow$ **Create API Token**.
-3. Set permissions to **Object Read & Write** $\rightarrow$ Create and copy the credentials.
+1. In [Cloudflare Dashboard](https://dash.cloudflare.com), go to **R2 Object Storage** -> **Create bucket** (name it `lyrics`).
+2. Click **Manage R2 API Tokens** -> **Create API Token**.
+3. Set permissions to **Object Read & Write** -> Create and copy the credentials.
 
 ### Step 2: Update `.env`
 ```bash
