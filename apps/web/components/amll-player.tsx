@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Play, Pause, RotateCcw } from "lucide-react";
+import { Maximize, RotateCcw } from "lucide-react";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
@@ -26,6 +26,14 @@ const BackgroundRender = dynamic(
   { ssr: false },
 );
 
+const AmllFullscreenPlayer = dynamic(
+  () =>
+    import("@/components/amll-fullscreen-player").then(
+      (mod) => mod.AmllFullscreenPlayer,
+    ),
+  { ssr: false },
+);
+
 interface AmllPlayerProps {
   track: SanitizedTrack<TrackRecord>;
   rawLyrics: SyncedLyricsPayload;
@@ -34,6 +42,7 @@ interface AmllPlayerProps {
 export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
   const durationMs = track.durationMs || 180000;
@@ -42,55 +51,107 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
     [rawLyrics],
   );
 
-  const lastFrameTimeRef = useRef<number | null>(null);
-  const animFrameIdRef = useRef<number | null>(null);
+  const playbackStartTimeRef = useRef<number | null>(null);
+  const playbackStartOffsetRef = useRef<number>(0);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   useEffect(() => {
-    if (!isPlaying) {
-      lastFrameTimeRef.current = null;
-      if (animFrameIdRef.current) {
-        cancelAnimationFrame(animFrameIdRef.current);
-        animFrameIdRef.current = null;
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement && isFullscreen) {
+        setIsFullscreen(false);
       }
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, [isFullscreen]);
+
+  // Main playback timer loop based on high-resolution performance.now()
+  useEffect(() => {
+    if (!isPlaying) {
+      playbackStartTimeRef.current = null;
       return;
     }
 
-    const onFrame = (now: number) => {
-      if (lastFrameTimeRef.current !== null) {
-        const delta = now - lastFrameTimeRef.current;
-        setCurrentTime((prev) => {
-          const next = prev + delta;
-          if (next >= durationMs) {
-            setIsPlaying(false);
-            return durationMs;
-          }
-          return next;
-        });
-      }
-      lastFrameTimeRef.current = now;
-      animFrameIdRef.current = requestAnimationFrame(onFrame);
-    };
+    playbackStartTimeRef.current = performance.now();
+    playbackStartOffsetRef.current = currentTime;
 
-    animFrameIdRef.current = requestAnimationFrame(onFrame);
+    const intervalId = setInterval(() => {
+      if (playbackStartTimeRef.current === null) return;
+      const elapsed = performance.now() - playbackStartTimeRef.current;
+      const nextTime = playbackStartOffsetRef.current + elapsed;
+
+      if (nextTime >= durationMs) {
+        setCurrentTime(durationMs);
+        setIsPlaying(false);
+      } else {
+        setCurrentTime(nextTime);
+      }
+    }, 50);
 
     return () => {
-      if (animFrameIdRef.current) {
-        cancelAnimationFrame(animFrameIdRef.current);
-      }
+      clearInterval(intervalId);
     };
   }, [isPlaying, durationMs]);
 
-  const handleLineClick = (event: LyricLineMouseEvent) => {
-    const targetLine = lyricLines[event.lineIndex];
-    if (targetLine?.startTime !== undefined) {
-      setCurrentTime(targetLine.startTime);
-      lastFrameTimeRef.current = null;
+  const handleLineClick = useCallback(
+    (event: LyricLineMouseEvent) => {
+      const targetLine = lyricLines[event.lineIndex];
+      if (targetLine?.startTime !== undefined) {
+        const newTime = targetLine.startTime;
+        playbackStartTimeRef.current = performance.now();
+        playbackStartOffsetRef.current = newTime;
+        setCurrentTime(newTime);
+      }
+    },
+    [lyricLines],
+  );
+
+  const handleOpenFullscreen = useCallback(() => {
+    setIsFullscreen(true);
+    try {
+      if (
+        !document.fullscreenElement &&
+        document.documentElement.requestFullscreen
+      ) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch {
+      // Fallback to overlay fullscreen
     }
-  };
+  }, []);
+
+  const handleCloseFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  const handleTogglePlay = useCallback(() => {
+    setIsPlaying((prev) => !prev);
+  }, []);
+
+  const handleSeek = useCallback((position: number) => {
+    playbackStartTimeRef.current = performance.now();
+    playbackStartOffsetRef.current = position;
+    setCurrentTime(position);
+  }, []);
+
+  const handleRestart = useCallback(() => {
+    playbackStartTimeRef.current = performance.now();
+    playbackStartOffsetRef.current = 0;
+    setCurrentTime(0);
+    setIsPlaying(true);
+  }, []);
 
   if (!isClient) {
     return (
@@ -101,60 +162,70 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   }
 
   return (
-    <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none font-[family-name:var(--font-inter)]">
-      {track.artworkUrl && (
-        <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
-          <BackgroundRender
-            album={track.artworkUrl}
+    <>
+      <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none font-[family-name:var(--font-inter)]">
+        {track.artworkUrl && (
+          <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
+            <BackgroundRender
+              album={track.artworkUrl}
+              playing={isPlaying}
+              fps={60}
+              flowSpeed={1}
+            />
+          </div>
+        )}
+
+        <div className="relative z-10 h-full w-full overflow-hidden px-4 sm:px-6">
+          <LyricPlayer
+            lyricLines={lyricLines}
+            currentTime={currentTime}
             playing={isPlaying}
-            fps={60}
-            flowSpeed={1}
+            alignAnchor="center"
+            alignPosition={0.4}
+            enableSpring={true}
+            enableBlur={true}
+            enableScale={true}
+            wordFadeWidth={0.8}
+            onLyricLineClick={handleLineClick}
+            className="h-full w-full"
           />
         </div>
-      )}
 
-      <div className="relative z-10 h-full w-full overflow-hidden px-4 sm:px-6">
-        <LyricPlayer
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleOpenFullscreen}
+            className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
+            title="Fullscreen"
+          >
+            <Maximize className="size-4" />
+          </button>
+        </div>
+
+        <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleRestart}
+            className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
+            title="Restart"
+          >
+            <RotateCcw className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      {isFullscreen && (
+        <AmllFullscreenPlayer
+          track={track}
           lyricLines={lyricLines}
+          isPlaying={isPlaying}
           currentTime={currentTime}
-          playing={isPlaying}
-          alignAnchor="center"
-          alignPosition={0.4}
-          enableSpring={true}
-          enableBlur={true}
-          enableScale={true}
-          wordFadeWidth={0.8}
-          onLyricLineClick={handleLineClick}
-          className="h-full w-full"
+          durationMs={durationMs}
+          onClose={handleCloseFullscreen}
+          onTogglePlay={handleTogglePlay}
+          onSeek={handleSeek}
         />
-      </div>
-
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setCurrentTime(0);
-            lastFrameTimeRef.current = null;
-          }}
-          className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
-          title="Restart"
-        >
-          <RotateCcw className="size-4" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setIsPlaying((p) => !p)}
-          className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
-          title={isPlaying ? "Pause" : "Play"}
-        >
-          {isPlaying ? (
-            <Pause className="size-4" />
-          ) : (
-            <Play className="size-4" />
-          )}
-        </button>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
