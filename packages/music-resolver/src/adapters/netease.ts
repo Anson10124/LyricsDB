@@ -1,7 +1,13 @@
-import type { MatchCandidate, MusicAdapter, ResolveOptions, ResolvedLink, TrackMetadata } from '../types.js';
-import { HttpClient } from '../utils/http.js';
-import { weapiEncrypt } from '../utils/netease-crypto.js';
-import { findBestMatch } from '../utils/string-similarity.js';
+import type {
+  MatchCandidate,
+  MusicAdapter,
+  ResolveOptions,
+  ResolvedLink,
+  TrackMetadata,
+} from "../types.js";
+import { HttpClient } from "../utils/http.js";
+import { weapiEncrypt } from "../utils/netease-crypto.js";
+import { findBestMatch } from "../utils/string-similarity.js";
 
 export enum NeteaseSearchType {
   Song = 1,
@@ -29,20 +35,26 @@ export interface NeteaseCloudSearchResponse {
   result?: {
     songs?: NeteaseSongItem[];
     songCount?: number;
-    albums?: Array<{ id: number; name: string; artist?: { name: string }; picUrl?: string }>;
+    albums?: Array<{
+      id: number;
+      name: string;
+      artist?: { name: string };
+      picUrl?: string;
+    }>;
     artists?: Array<{ id: number; name: string; picUrl?: string }>;
     playlists?: Array<{ id: number; name: string; coverImgUrl?: string }>;
   };
 }
 
 export class NeteaseAdapter implements MusicAdapter {
-  readonly id = 'netease';
-  readonly name = 'NetEase Cloud Music';
+  readonly id = "netease";
+  readonly name = "NetEase Cloud Music";
 
   private apiUrl: string;
 
   constructor(options?: { apiUrl?: string }) {
-    this.apiUrl = options?.apiUrl || 'https://music.163.com/weapi/cloudsearch/pc';
+    this.apiUrl =
+      options?.apiUrl || "https://music.163.com/weapi/cloudsearch/pc";
   }
 
   // Direct CloudSearch API call
@@ -53,7 +65,7 @@ export class NeteaseAdapter implements MusicAdapter {
       limit?: number;
       offset?: number;
     },
-    httpOptions?: ResolveOptions
+    httpOptions?: ResolveOptions,
   ): Promise<NeteaseCloudSearchResponse> {
     const payload = {
       s: keywords,
@@ -61,7 +73,7 @@ export class NeteaseAdapter implements MusicAdapter {
       limit: options?.limit || 20,
       offset: options?.offset || 0,
       total: true,
-      csrf_token: '',
+      csrf_token: "",
     };
 
     const encrypted = weapiEncrypt(payload);
@@ -72,10 +84,10 @@ export class NeteaseAdapter implements MusicAdapter {
 
     return HttpClient.post<NeteaseCloudSearchResponse>(this.apiUrl, body, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Referer: 'https://music.163.com',
+        "Content-Type": "application/x-www-form-urlencoded",
+        Referer: "https://music.163.com",
         Cookie:
-          'os=pc; osver=Microsoft-Windows-10-Professional-build-19045-64bit; appver=3.1.17.204416; channel=netease;',
+          "os=pc; osver=Microsoft-Windows-10-Professional-build-19045-64bit; appver=3.1.17.204416; channel=netease;",
         ...httpOptions?.customHeaders,
       },
       timeout: httpOptions?.timeout,
@@ -87,15 +99,21 @@ export class NeteaseAdapter implements MusicAdapter {
   async search(
     query: string,
     metadata: TrackMetadata,
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<ResolvedLink | null> {
     try {
       let searchType = NeteaseSearchType.Song;
-      if (metadata.type === 'album') searchType = NeteaseSearchType.Album;
-      else if (metadata.type === 'artist') searchType = NeteaseSearchType.Artist;
-      else if (metadata.type === 'playlist') searchType = NeteaseSearchType.Playlist;
+      if (metadata.type === "album") searchType = NeteaseSearchType.Album;
+      else if (metadata.type === "artist")
+        searchType = NeteaseSearchType.Artist;
+      else if (metadata.type === "playlist")
+        searchType = NeteaseSearchType.Playlist;
 
-      const response = await this.cloudSearch(query, { type: searchType, limit: 20 }, options);
+      const response = await this.cloudSearch(
+        query,
+        { type: searchType, limit: 20 },
+        options,
+      );
 
       if (response.code !== 200 || !response.result) {
         return null;
@@ -117,7 +135,7 @@ export class NeteaseAdapter implements MusicAdapter {
 
           candidates.push({
             title: song.name,
-            artist: artists.join(', ') || undefined,
+            artist: artists.join(", ") || undefined,
             artists: artists.length > 0 ? artists : undefined,
             album: song.al?.name,
             durationMs: song.dt,
@@ -126,7 +144,10 @@ export class NeteaseAdapter implements MusicAdapter {
             id: String(song.id),
           });
         }
-      } else if (searchType === NeteaseSearchType.Album && response.result.albums) {
+      } else if (
+        searchType === NeteaseSearchType.Album &&
+        response.result.albums
+      ) {
         for (const album of response.result.albums) {
           candidates.push({
             title: album.name,
@@ -135,7 +156,10 @@ export class NeteaseAdapter implements MusicAdapter {
             id: String(album.id),
           });
         }
-      } else if (searchType === NeteaseSearchType.Artist && response.result.artists) {
+      } else if (
+        searchType === NeteaseSearchType.Artist &&
+        response.result.artists
+      ) {
         for (const artist of response.result.artists) {
           candidates.push({
             title: artist.name,
@@ -143,7 +167,10 @@ export class NeteaseAdapter implements MusicAdapter {
             id: String(artist.id),
           });
         }
-      } else if (searchType === NeteaseSearchType.Playlist && response.result.playlists) {
+      } else if (
+        searchType === NeteaseSearchType.Playlist &&
+        response.result.playlists
+      ) {
         for (const playlist of response.result.playlists) {
           candidates.push({
             title: playlist.name,

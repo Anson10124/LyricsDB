@@ -1,29 +1,33 @@
-import { createHmac } from 'node:crypto';
-import { eq } from 'drizzle-orm';
-import { db as defaultDb, type DatabaseClient } from './client.js';
-import { jwts } from './schema/jwt.js';
+import { createHmac } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { db as defaultDb, type DatabaseClient } from "./client.js";
+import { jwts } from "./schema/jwt.js";
 
-const DEEZER_PROVIDER = 'deezer';
+const DEEZER_PROVIDER = "deezer";
 const DEEZER_JWT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const SPOTIFY_PROVIDER = 'spotify';
+const SPOTIFY_PROVIDER = "spotify";
 const SPOTIFY_TOKEN_CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (Spotify token lasts 60 min)
-const DEFAULT_SPOTIFY_SECRET = '{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH';
+const DEFAULT_SPOTIFY_SECRET = "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH";
 const DEFAULT_SPOTIFY_VERSION = 59;
-const PLAYER_JS_REGEX = /"(https:\/\/[^" ]+\/(?:mobile-)?web-player\.[0-9a-f]+\.js)"/;
-const SECRETS_REGEX = /\{\s*secret\s*:\s*["']([^"']+)["']\s*,\s*version\s*:\s*(\d+)\s*\}/g;
+const PLAYER_JS_REGEX =
+  /"(https:\/\/[^" ]+\/(?:mobile-)?web-player\.[0-9a-f]+\.js)"/;
+const SECRETS_REGEX =
+  /\{\s*secret\s*:\s*["']([^"']+)["']\s*,\s*version\s*:\s*(\d+)\s*\}/g;
 
 function generateTotp(serverTime: number, secret: string): string {
   const secretArray = Array.from(secret, (c) => c.charCodeAt(0));
-  const transformed = secretArray.map((element, index) => element ^ ((index % 33) + 9));
-  const hexSecret = Buffer.from(transformed.join(''), 'utf8').toString('hex');
-  const secretBytes = Buffer.from(hexSecret, 'hex');
+  const transformed = secretArray.map(
+    (element, index) => element ^ ((index % 33) + 9),
+  );
+  const hexSecret = Buffer.from(transformed.join(""), "utf8").toString("hex");
+  const secretBytes = Buffer.from(hexSecret, "hex");
 
   const counter = Math.floor(serverTime / 30);
   const counterBuffer = Buffer.alloc(8);
   counterBuffer.writeBigUInt64BE(BigInt(counter));
 
-  const hmac = createHmac('sha1', secretBytes);
+  const hmac = createHmac("sha1", secretBytes);
   hmac.update(counterBuffer);
   const hmacResult = hmac.digest();
 
@@ -34,32 +38,42 @@ function generateTotp(serverTime: number, secret: string): string {
     ((hmacResult[offset + 2]! & 0xff) << 8) |
     (hmacResult[offset + 3]! & 0xff);
 
-  return (code % 10 ** 6).toString().padStart(6, '0');
+  return (code % 10 ** 6).toString().padStart(6, "0");
 }
 
-export async function fetchAnonymousDeezerJwt(options?: { timeout?: number }): Promise<string> {
+export async function fetchAnonymousDeezerJwt(options?: {
+  timeout?: number;
+}): Promise<string> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options?.timeout ?? 8000);
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    options?.timeout ?? 8000,
+  );
 
   try {
-    const res = await fetch('https://auth.deezer.com/login/anonymous?jo=p&rto=c', {
-      method: 'GET',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    const res = await fetch(
+      "https://auth.deezer.com/login/anonymous?jo=p&rto=c",
+      {
+        method: "GET",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+        },
+        signal: controller.signal,
       },
-      signal: controller.signal,
-    });
+    );
 
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      throw new Error(`Failed to fetch anonymous Deezer JWT: HTTP ${res.status}`);
+      throw new Error(
+        `Failed to fetch anonymous Deezer JWT: HTTP ${res.status}`,
+      );
     }
 
     const data = (await res.json()) as { jwt?: string };
     if (!data.jwt) {
-      throw new Error('Deezer anonymous auth response did not include jwt');
+      throw new Error("Deezer anonymous auth response did not include jwt");
     }
 
     return data.jwt;
@@ -71,7 +85,7 @@ export async function fetchAnonymousDeezerJwt(options?: { timeout?: number }): P
 
 export async function getDeezerJwt(
   dbClient?: DatabaseClient,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
 
@@ -98,7 +112,7 @@ export async function getDeezerJwt(
 
 export async function refreshDeezerJwt(
   dbClient?: DatabaseClient,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
   const newToken = await fetchAnonymousDeezerJwt(options);
@@ -126,11 +140,16 @@ export async function refreshDeezerJwt(
   return newToken;
 }
 
-export async function fetchAnonymousSpotifyToken(options?: { timeout?: number }): Promise<string> {
+export async function fetchAnonymousSpotifyToken(options?: {
+  timeout?: number;
+}): Promise<string> {
   const timeout = options?.timeout ?? 8000;
-  const baseUrl = 'https://open.spotify.com';
+  const baseUrl = "https://open.spotify.com";
 
-  const requestToken = async (secret: string, version: number): Promise<string | null> => {
+  const requestToken = async (
+    secret: string,
+    version: number,
+  ): Promise<string | null> => {
     const timeRes = await fetch(`${baseUrl}/api/server-time`, {
       signal: AbortSignal.timeout(timeout),
     });
@@ -139,20 +158,20 @@ export async function fetchAnonymousSpotifyToken(options?: { timeout?: number })
 
     const totp = generateTotp(serverTime, secret);
     const tokenUrl = new URL(`${baseUrl}/api/token`);
-    tokenUrl.searchParams.set('reason', 'init');
-    tokenUrl.searchParams.set('productType', 'web-player');
-    tokenUrl.searchParams.set('totp', totp);
-    tokenUrl.searchParams.set('totpServer', totp);
-    tokenUrl.searchParams.set('totpVer', version.toString());
-    tokenUrl.searchParams.set('ts', serverTime.toString());
+    tokenUrl.searchParams.set("reason", "init");
+    tokenUrl.searchParams.set("productType", "web-player");
+    tokenUrl.searchParams.set("totp", totp);
+    tokenUrl.searchParams.set("totpServer", totp);
+    tokenUrl.searchParams.set("totpVer", version.toString());
+    tokenUrl.searchParams.set("ts", serverTime.toString());
 
     const tokenRes = await fetch(tokenUrl.toString(), {
       headers: {
-        Accept: 'application/json',
+        Accept: "application/json",
         Referer: `${baseUrl}/`,
         Origin: baseUrl,
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
       },
       signal: AbortSignal.timeout(timeout),
     });
@@ -164,25 +183,32 @@ export async function fetchAnonymousSpotifyToken(options?: { timeout?: number })
 
   // Stage 1: Try fast-path with default known secret & version
   try {
-    const fastToken = await requestToken(DEFAULT_SPOTIFY_SECRET, DEFAULT_SPOTIFY_VERSION);
+    const fastToken = await requestToken(
+      DEFAULT_SPOTIFY_SECRET,
+      DEFAULT_SPOTIFY_VERSION,
+    );
     if (fastToken) return fastToken;
   } catch {
     // Fallback to Stage 2
   }
 
   // Stage 2: Scrape web-player JS bundle for rotated secret
-  const htmlRes = await fetch(baseUrl, { signal: AbortSignal.timeout(timeout) });
+  const htmlRes = await fetch(baseUrl, {
+    signal: AbortSignal.timeout(timeout),
+  });
   const html = await htmlRes.text();
   const jsMatch = html.match(PLAYER_JS_REGEX);
   if (!jsMatch?.[1]) {
-    throw new Error('Could not find Spotify player JS bundle URL');
+    throw new Error("Could not find Spotify player JS bundle URL");
   }
 
-  const jsRes = await fetch(jsMatch[1], { signal: AbortSignal.timeout(timeout) });
+  const jsRes = await fetch(jsMatch[1], {
+    signal: AbortSignal.timeout(timeout),
+  });
   const js = await jsRes.text();
 
   let latestVersion = 0;
-  let latestSecret = '';
+  let latestSecret = "";
   let match;
   while ((match = SECRETS_REGEX.exec(js)) !== null) {
     const ver = parseInt(match[2]!, 10);
@@ -194,12 +220,14 @@ export async function fetchAnonymousSpotifyToken(options?: { timeout?: number })
   SECRETS_REGEX.lastIndex = 0;
 
   if (!latestSecret) {
-    throw new Error('Failed to extract Spotify TOTP secret from bundle');
+    throw new Error("Failed to extract Spotify TOTP secret from bundle");
   }
 
   const scrapedToken = await requestToken(latestSecret, latestVersion);
   if (!scrapedToken) {
-    throw new Error('Failed to fetch Spotify anonymous token after bundle scrape');
+    throw new Error(
+      "Failed to fetch Spotify anonymous token after bundle scrape",
+    );
   }
 
   return scrapedToken;
@@ -207,7 +235,7 @@ export async function fetchAnonymousSpotifyToken(options?: { timeout?: number })
 
 export async function getSpotifyToken(
   dbClient?: DatabaseClient,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
 
@@ -233,7 +261,7 @@ export async function getSpotifyToken(
 
 export async function refreshSpotifyToken(
   dbClient?: DatabaseClient,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
   const newToken = await fetchAnonymousSpotifyToken(options);
@@ -261,12 +289,12 @@ export async function refreshSpotifyToken(
   return newToken;
 }
 
-const MUSIXMATCH_PROVIDER = 'musixmatch';
+const MUSIXMATCH_PROVIDER = "musixmatch";
 const MUSIXMATCH_TOKEN_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 function generateMusixmatchRandomId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz';
-  let result = '';
+  const chars = "abcdefghijklmnopqrstuvwxyz";
+  let result = "";
   for (let i = 0; i < 8; i++) {
     result += chars[Math.floor(Math.random() * chars.length)];
   }
@@ -287,9 +315,9 @@ export async function fetchAnonymousMusixmatchToken(options?: {
     try {
       const res = await fetch(url, {
         headers: {
-          authority: 'apic-desktop.musixmatch.com',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          authority: "apic-desktop.musixmatch.com",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
         },
         signal: AbortSignal.timeout(timeout),
       });
@@ -303,12 +331,12 @@ export async function fetchAnonymousMusixmatchToken(options?: {
         };
 
         const token = data.message?.body?.user_token;
-        if (token && token !== 'Upgrade. Paid script.') {
+        if (token && token !== "Upgrade. Paid script.") {
           return token;
         }
 
         const hint = data.message?.header?.hint;
-        if (hint === 'captcha' || data.message?.header?.status_code === 401) {
+        if (hint === "captcha" || data.message?.header?.status_code === 401) {
           // Wait briefly before next attempt
           await new Promise((resolve) => setTimeout(resolve, 800));
           continue;
@@ -323,12 +351,14 @@ export async function fetchAnonymousMusixmatchToken(options?: {
     }
   }
 
-  throw new Error('Failed to acquire Musixmatch user token after multiple attempts');
+  throw new Error(
+    "Failed to acquire Musixmatch user token after multiple attempts",
+  );
 }
 
 export async function getMusixmatchToken(
   dbClient?: DatabaseClient,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
 
@@ -354,7 +384,7 @@ export async function getMusixmatchToken(
 
 export async function refreshMusixmatchToken(
   dbClient?: DatabaseClient,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
   const newToken = await fetchAnonymousMusixmatchToken(options);

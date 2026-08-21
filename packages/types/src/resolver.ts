@@ -1,6 +1,17 @@
-export type PlatformId = 'spotify' | 'appleMusic' | 'deezer' | 'netease' | 'qqMusic';
+export type PlatformId =
+  | "spotify"
+  | "appleMusic"
+  | "deezer"
+  | "netease"
+  | "qqMusic";
 
-export type MetadataType = 'song' | 'album' | 'playlist' | 'artist' | 'podcast' | 'show';
+export type MetadataType =
+  | "song"
+  | "album"
+  | "playlist"
+  | "artist"
+  | "podcast"
+  | "show";
 
 export interface ResolverTrackMetadata {
   id: string;
@@ -51,7 +62,7 @@ export interface ResolvedLink {
   isVerified?: boolean;
   notAvailable?: boolean;
   score?: number;
-  matchReason?: 'isrc' | 'fuzzy' | 'direct';
+  matchReason?: "isrc" | "fuzzy" | "direct";
   breakdown?: ScoreBreakdown;
   raw?: Record<string, unknown>;
 }
@@ -88,7 +99,7 @@ export interface MusicAdapter {
   search(
     query: string,
     metadata: ResolverTrackMetadata,
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<ResolvedLink | null>;
 }
 
@@ -97,7 +108,11 @@ export interface MusicParser {
   readonly name: string;
   match(url: string): boolean;
   parse(url: string): { id: string; type?: MetadataType };
-  fetchMetadata(id: string, url: string, options?: ResolveOptions): Promise<ResolverTrackMetadata>;
+  fetchMetadata(
+    id: string,
+    url: string,
+    options?: ResolveOptions,
+  ): Promise<ResolverTrackMetadata>;
   buildSearchQuery(metadata: ResolverTrackMetadata): string;
 }
 
@@ -118,11 +133,17 @@ export interface ResolverConfig {
   spotify?: {
     apiUrl?: string;
     baseUrl?: string;
-    getToken?: (options?: ResolveOptions, forceRefresh?: boolean) => Promise<string>;
+    getToken?: (
+      options?: ResolveOptions,
+      forceRefresh?: boolean,
+    ) => Promise<string>;
   };
   musixmatch?: {
     apiUrl?: string;
-    getToken?: (options?: ResolveOptions, forceRefresh?: boolean) => Promise<string>;
+    getToken?: (
+      options?: ResolveOptions,
+      forceRefresh?: boolean,
+    ) => Promise<string>;
   };
   deezer?: {
     apiUrl?: string;

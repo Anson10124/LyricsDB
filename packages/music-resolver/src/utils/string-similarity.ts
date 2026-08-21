@@ -1,15 +1,20 @@
-import type { MatchCandidate, ResolvedLink, ScoreBreakdown, TrackMetadata } from '../types.js';
+import type {
+  MatchCandidate,
+  ResolvedLink,
+  ScoreBreakdown,
+  TrackMetadata,
+} from "../types.js";
 import {
   cleanSearchQuery,
   normalizeArtistName,
   normalizeSongTitle,
   splitArtists,
   type TitleNormalizationResult,
-} from './query.js';
+} from "./query.js";
 
 export function compareTwoStrings(first: string, second: string): number {
-  const firstClean = first.replace(/\s+/g, '');
-  const secondClean = second.replace(/\s+/g, '');
+  const firstClean = first.replace(/\s+/g, "");
+  const secondClean = second.replace(/\s+/g, "");
 
   if (firstClean === secondClean) return 1;
   if (firstClean.length < 2 || secondClean.length < 2) return 0;
@@ -31,7 +36,9 @@ export function compareTwoStrings(first: string, second: string): number {
     }
   }
 
-  return (2.0 * intersectionSize) / (firstClean.length + secondClean.length - 2);
+  return (
+    (2.0 * intersectionSize) / (firstClean.length + secondClean.length - 2)
+  );
 }
 
 // Levenshtein distance similarity (0.0 to 1.0)
@@ -58,7 +65,7 @@ export function levenshteinSimilarity(str1: string, str2: string): number {
       matrix[i]![j] = Math.min(
         matrix[i - 1]![j]! + 1,
         matrix[i]![j - 1]! + 1,
-        matrix[i - 1]![j - 1]! + cost
+        matrix[i - 1]![j - 1]! + cost,
       );
     }
   }
@@ -70,8 +77,18 @@ export function levenshteinSimilarity(str1: string, str2: string): number {
 
 // Token sort ratio: sorts tokens alphabetically to handle order differences (e.g. "A & B" vs "B & A")
 export function tokenSortSimilarity(str1: string, str2: string): number {
-  const tokens1 = cleanSearchQuery(str1).toLowerCase().split(/\s+/).filter(Boolean).sort().join(' ');
-  const tokens2 = cleanSearchQuery(str2).toLowerCase().split(/\s+/).filter(Boolean).sort().join(' ');
+  const tokens1 = cleanSearchQuery(str1)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+  const tokens2 = cleanSearchQuery(str2)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
 
   if (!tokens1 || !tokens2) return 0;
   if (tokens1 === tokens2) return 1;
@@ -98,12 +115,12 @@ export interface ScoredCandidateResult {
   breakdown: ScoreBreakdown;
   isVerified: boolean;
   notAvailable: boolean;
-  matchReason: 'isrc' | 'fuzzy' | 'direct';
+  matchReason: "isrc" | "fuzzy" | "direct";
 }
 
 export function calculateDurationScore(
   targetMs?: number,
-  candidateMs?: number
+  candidateMs?: number,
 ): { score: number; deltaMs?: number; penalty: number } {
   if (!targetMs || !candidateMs || targetMs <= 0 || candidateMs <= 0) {
     return { score: 1.0, penalty: 0 };
@@ -136,7 +153,7 @@ export function calculateDurationScore(
 
 export function scoreCandidate(
   candidate: MatchCandidate,
-  target: TrackMetadata
+  target: TrackMetadata,
 ): ScoredCandidateResult {
   // 1. Exact ISRC Match -> Guaranteed 100% confidence
   if (target.isrc && candidate.isrc) {
@@ -157,17 +174,25 @@ export function scoreCandidate(
         breakdown,
         isVerified: true,
         notAvailable: false,
-        matchReason: 'isrc',
+        matchReason: "isrc",
       };
     }
   }
 
   // 2. Title Normalization & Comparison
   const targetNorm: TitleNormalizationResult = normalizeSongTitle(target.title);
-  const candidateNorm: TitleNormalizationResult = normalizeSongTitle(candidate.title);
+  const candidateNorm: TitleNormalizationResult = normalizeSongTitle(
+    candidate.title,
+  );
 
-  const cleanTitleScore = tokenSortSimilarity(targetNorm.cleanTitle, candidateNorm.cleanTitle);
-  const rawTitleScore = tokenSortSimilarity(targetNorm.rawNormalized, candidateNorm.rawNormalized);
+  const cleanTitleScore = tokenSortSimilarity(
+    targetNorm.cleanTitle,
+    candidateNorm.cleanTitle,
+  );
+  const rawTitleScore = tokenSortSimilarity(
+    targetNorm.rawNormalized,
+    candidateNorm.rawNormalized,
+  );
   const titleScore = Math.max(cleanTitleScore, rawTitleScore);
 
   // 3. Artist Extraction & Comparison
@@ -177,22 +202,27 @@ export function scoreCandidate(
     ...splitArtists(target.artist),
     ...targetNorm.extraArtists,
     ...(target.extraArtists || []),
-  ].map(normalizeArtistName).filter(Boolean);
+  ]
+    .map(normalizeArtistName)
+    .filter(Boolean);
 
   const candidateArtists = [
     ...(candidate.artists || []),
     ...splitArtists(candidate.artist),
     ...candidateNorm.extraArtists,
     ...(candidate.aliases || []),
-  ].map(normalizeArtistName).filter(Boolean);
+  ]
+    .map(normalizeArtistName)
+    .filter(Boolean);
 
   let artistScore = 0;
 
   if (targetArtists.length === 0 || candidateArtists.length === 0) {
     // If no artist info available, fallback to single query or neutral
-    artistScore = target.artist && candidate.artist
-      ? tokenSortSimilarity(target.artist, candidate.artist)
-      : 0.8;
+    artistScore =
+      target.artist && candidate.artist
+        ? tokenSortSimilarity(target.artist, candidate.artist)
+        : 0.8;
   } else {
     // Check overlap of artist tokens
     const targetSet = new Set(targetArtists);
@@ -212,16 +242,21 @@ export function scoreCandidate(
       }
     }
 
-    const overlapScore = matchedCount / Math.max(1, Math.min(targetArtists.length, candidateArtists.length));
+    const overlapScore =
+      matchedCount /
+      Math.max(1, Math.min(targetArtists.length, candidateArtists.length));
     const directJoinedScore = tokenSortSimilarity(
-      targetArtists.join(' '),
-      candidateArtists.join(' ')
+      targetArtists.join(" "),
+      candidateArtists.join(" "),
     );
     artistScore = Math.max(overlapScore, directJoinedScore);
   }
 
   // 4. Duration Comparison
-  const durationResult = calculateDurationScore(target.durationMs, candidate.durationMs);
+  const durationResult = calculateDurationScore(
+    target.durationMs,
+    candidate.durationMs,
+  );
   const durationScore = durationResult.score;
 
   // 5. Penalties & Negative Keyword Filters
@@ -229,9 +264,17 @@ export function scoreCandidate(
   let bonusScore = 0;
 
   // Negative keyword filtering (Karaoke, Cover, Tribute, Instrumental)
-  const isTargetSpecial = targetNorm.isKaraoke || targetNorm.isCover || targetNorm.isTribute || targetNorm.isInstrumental;
+  const isTargetSpecial =
+    targetNorm.isKaraoke ||
+    targetNorm.isCover ||
+    targetNorm.isTribute ||
+    targetNorm.isInstrumental;
   if (!isTargetSpecial) {
-    if (candidateNorm.isKaraoke || candidateNorm.isCover || candidateNorm.isTribute) {
+    if (
+      candidateNorm.isKaraoke ||
+      candidateNorm.isCover ||
+      candidateNorm.isTribute
+    ) {
       penaltyScore += 0.6; // Heavy disqualification for karaoke/tribute bands
     } else if (candidateNorm.isInstrumental && !targetNorm.isInstrumental) {
       penaltyScore += 0.4;
@@ -258,8 +301,13 @@ export function scoreCandidate(
   }
 
   // 6. Weighted Final Score Computation
-  const hasDuration = Boolean(target.durationMs && candidate.durationMs && target.durationMs > 0 && candidate.durationMs > 0);
-  
+  const hasDuration = Boolean(
+    target.durationMs &&
+    candidate.durationMs &&
+    target.durationMs > 0 &&
+    candidate.durationMs > 0,
+  );
+
   let baseScore: number;
   if (hasDuration) {
     // 50% Title, 35% Artist, 15% Duration
@@ -269,7 +317,10 @@ export function scoreCandidate(
     baseScore = 0.6 * titleScore + 0.4 * artistScore;
   }
 
-  const finalScore = Math.max(0, Math.min(1, baseScore + bonusScore - penaltyScore));
+  const finalScore = Math.max(
+    0,
+    Math.min(1, baseScore + bonusScore - penaltyScore),
+  );
 
   const breakdown: ScoreBreakdown = {
     titleScore,
@@ -280,7 +331,10 @@ export function scoreCandidate(
     finalScore,
   };
 
-  const isVerified = finalScore >= RESPONSE_COMPARE_MIN_SCORE && titleScore >= 0.6 && artistScore >= 0.4;
+  const isVerified =
+    finalScore >= RESPONSE_COMPARE_MIN_SCORE &&
+    titleScore >= 0.6 &&
+    artistScore >= 0.4;
   const notAvailable = finalScore < RESPONSE_COMPARE_MIN_INCLUSION_SCORE;
 
   return {
@@ -289,23 +343,27 @@ export function scoreCandidate(
     breakdown,
     isVerified,
     notAvailable,
-    matchReason: 'fuzzy',
+    matchReason: "fuzzy",
   };
 }
 
 export function findBestMatch(
   candidates: MatchCandidate[],
   query: string | TrackMetadata,
-  platform: string
-): { bestMatch: ResolvedLink | null; highestScore: number; matchedIndex: number } {
+  platform: string,
+): {
+  bestMatch: ResolvedLink | null;
+  highestScore: number;
+  matchedIndex: number;
+} {
   let bestMatch: ResolvedLink | null = null;
   let highestScore = 0;
   let matchedIndex = -1;
 
   // Convert raw string query to pseudo TrackMetadata if string was passed
   const target: TrackMetadata =
-    typeof query === 'string'
-      ? { id: 'query', title: query, type: 'song' }
+    typeof query === "string"
+      ? { id: "query", title: query, type: "song" }
       : query;
 
   for (let i = 0; i < candidates.length; i++) {
@@ -331,4 +389,3 @@ export function findBestMatch(
 
   return { bestMatch, highestScore, matchedIndex };
 }
-

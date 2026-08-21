@@ -1,8 +1,8 @@
-import type { LyricLine, LyricWord } from '@applemusic-like-lyrics/lyric';
-import type { SyncedLyricsPayload } from '@repo/types';
-import { convertAmllLinesToCompact } from '../utils/converter.js';
-import { isPlaceholderLyricText } from '../utils/info-lines.js';
-import { parseLrc } from './lrc.js';
+import type { LyricLine, LyricWord } from "@applemusic-like-lyrics/lyric";
+import type { SyncedLyricsPayload } from "@repo/types";
+import { convertAmllLinesToCompact } from "../utils/converter.js";
+import { isPlaceholderLyricText } from "../utils/info-lines.js";
+import { parseLrc } from "./lrc.js";
 
 export interface MusixmatchRichSyncWord {
   c: string; // Text / syllable content
@@ -19,12 +19,12 @@ export interface MusixmatchRichSyncLine {
 // Parses Musixmatch RichSync payload into line-grouped compact tuple format.
 export function parseMusixmatchRichSync(
   rawRichSync: string | MusixmatchRichSyncLine[],
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
   if (!rawRichSync) return [];
 
   let lines: MusixmatchRichSyncLine[];
-  if (typeof rawRichSync === 'string') {
+  if (typeof rawRichSync === "string") {
     if (isPlaceholderLyricText(rawRichSync, metadata)) return [];
     try {
       lines = JSON.parse(rawRichSync) as MusixmatchRichSyncLine[];
@@ -51,10 +51,10 @@ export function parseMusixmatchRichSync(
       // Step 1: Merge isolated space tokens into preceding word token
       const mergedTokens: MusixmatchRichSyncWord[] = [];
       for (const w of line.l) {
-        if (!w || typeof w.c !== 'string') continue;
-        if (w.c === ' ') {
+        if (!w || typeof w.c !== "string") continue;
+        if (w.c === " ") {
           if (mergedTokens.length > 0) {
-            mergedTokens[mergedTokens.length - 1]!.c += ' ';
+            mergedTokens[mergedTokens.length - 1]!.c += " ";
           }
         } else {
           mergedTokens.push({ c: w.c, o: w.o ?? 0 });
@@ -78,8 +78,8 @@ export function parseMusixmatchRichSync(
 
         let text = token.c;
         const isLastInLine = i === mergedTokens.length - 1;
-        if (isLastInLine && !text.endsWith(' ')) {
-          text = text + ' ';
+        if (isLastInLine && !text.endsWith(" ")) {
+          text = text + " ";
         }
 
         words.push({
@@ -94,8 +94,8 @@ export function parseMusixmatchRichSync(
           startTime: lineStartMs,
           endTime: lineEndMs,
           words,
-          translatedLyric: '',
-          romanLyric: '',
+          translatedLyric: "",
+          romanLyric: "",
           isBG: false,
           isDuet: false,
         });
@@ -111,7 +111,7 @@ export function parseMusixmatchRichSync(
 // Parses Musixmatch Subtitles (standard LRC) into line-grouped compact tuple format.
 export function parseMusixmatchSubtitles(
   rawSubtitles: string,
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
   return parseLrc(rawSubtitles, metadata);
 }

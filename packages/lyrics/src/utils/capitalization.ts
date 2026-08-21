@@ -1,11 +1,15 @@
-import type { CompactLyricLine, CompactLyricWord, SyncedLyricsPayload } from '@repo/types';
+import type {
+  CompactLyricLine,
+  CompactLyricWord,
+  SyncedLyricsPayload,
+} from "@repo/types";
 
 function isUpper(ch: string): boolean {
-  return ch >= 'A' && ch <= 'Z';
+  return ch >= "A" && ch <= "Z";
 }
 
 function isLower(ch: string): boolean {
-  return ch >= 'a' && ch <= 'z';
+  return ch >= "a" && ch <= "z";
 }
 
 function toSentenceCase(text: string): string {
@@ -27,9 +31,9 @@ function toSentenceCase(text: string): string {
   }
 
   // Preserve standalone 'I' capitalization (e.g. "i'm" -> "I'm")
-  let result = chars.join('');
+  let result = chars.join("");
   result = result
-    .replace(/\bi\b/g, 'I')
+    .replace(/\bi\b/g, "I")
     .replace(/\bi'm\b/gi, "I'm")
     .replace(/\bi'll\b/gi, "I'll")
     .replace(/\bi've\b/gi, "I've")
@@ -38,7 +42,9 @@ function toSentenceCase(text: string): string {
   return result;
 }
 
-export function normalizeCapitalization(payload: SyncedLyricsPayload): SyncedLyricsPayload {
+export function normalizeCapitalization(
+  payload: SyncedLyricsPayload,
+): SyncedLyricsPayload {
   if (!Array.isArray(payload) || payload.length === 0) return payload;
 
   let lowerCount = 0;
@@ -47,7 +53,7 @@ export function normalizeCapitalization(payload: SyncedLyricsPayload): SyncedLyr
 
   for (const line of payload) {
     if (!Array.isArray(line)) continue;
-    const text = line.map((w) => w[3] || '').join('');
+    const text = line.map((w) => w[3] || "").join("");
     let lineUpper = 0;
     let lineLower = 0;
 
@@ -76,7 +82,7 @@ export function normalizeCapitalization(payload: SyncedLyricsPayload): SyncedLyr
   return payload.map((line: CompactLyricLine) => {
     if (!Array.isArray(line) || line.length === 0) return line;
 
-    const fullLineText = line.map((w) => w[3] || '').join('');
+    const fullLineText = line.map((w) => w[3] || "").join("");
     const sentenceCasedText = toSentenceCase(fullLineText);
 
     // Map new sentence-cased characters back to original word tokens

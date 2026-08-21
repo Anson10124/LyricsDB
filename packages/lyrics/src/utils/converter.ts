@@ -10,8 +10,8 @@ import {
   stringifyYrc,
   type LyricLine,
   type LyricWord,
-} from '@applemusic-like-lyrics/lyric';
-import { TTMLGenerator } from '@applemusic-like-lyrics/ttml';
+} from "@applemusic-like-lyrics/lyric";
+import { TTMLGenerator } from "@applemusic-like-lyrics/ttml";
 import type {
   CompactLyricLine,
   CompactLyricWord,
@@ -19,17 +19,17 @@ import type {
   SupportedLyricFormat,
   SyncedLyricsPayload,
   VocalType,
-} from '@repo/types';
-import { DOMImplementation, XMLSerializer } from '@xmldom/xmldom';
+} from "@repo/types";
+import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
 
-import { stripInfoLines } from './info-lines.js';
-import { fixExplicitLyrics } from './explicit.js';
-import { standardizeSyllables } from './syllable-sanitizer.js';
-import { normalizeCapitalization } from './capitalization.js';
+import { stripInfoLines } from "./info-lines.js";
+import { fixExplicitLyrics } from "./explicit.js";
+import { standardizeSyllables } from "./syllable-sanitizer.js";
+import { normalizeCapitalization } from "./capitalization.js";
 
 export function optimizeLyricsPayload(
   payload: SyncedLyricsPayload,
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
   let result = payload;
   result = stripInfoLines(result, metadata);
@@ -46,7 +46,7 @@ export function optimizeLyricsPayload(
 // ]
 export function convertAmllLinesToCompact(
   rawLines: LyricLine[],
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
   if (!rawLines || !Array.isArray(rawLines)) {
     return [];
@@ -76,8 +76,8 @@ export function convertAmllLinesToCompact(
 
         // Ensure trailing space on final word of the line if missing
         const isLastInLine = i === rawLine.words.length - 1;
-        if (isLastInLine && !text.endsWith(' ')) {
-          text = text + ' ';
+        if (isLastInLine && !text.endsWith(" ")) {
+          text = text + " ";
         }
 
         lineWords.push([vocalType, w.startTime, lengthMs, text]);
@@ -93,7 +93,9 @@ export function convertAmllLinesToCompact(
 }
 
 // Converts our compact tuple payload back to AMLL LyricLine array
-export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLine[] {
+export function convertCompactToAmllLines(
+  payload: SyncedLyricsPayload,
+): LyricLine[] {
   if (!payload || !Array.isArray(payload)) {
     return [];
   }
@@ -128,8 +130,8 @@ export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLi
       words,
       startTime: lineStartTime,
       endTime: lineEndTime,
-      translatedLyric: '',
-      romanLyric: '',
+      translatedLyric: "",
+      romanLyric: "",
       isBG,
       isDuet,
     });
@@ -177,12 +179,19 @@ export function formatXml(xml: string, indent = "  "): string {
       }
     }
 
-    if (token.startsWith("<?") || token.startsWith("<!") || token.startsWith("<!--")) {
+    if (
+      token.startsWith("<?") ||
+      token.startsWith("<!") ||
+      token.startsWith("<!--")
+    ) {
       formatted += `${indent.repeat(pad)}${token}\n`;
     } else if (token.startsWith("</")) {
       pad = Math.max(0, pad - 1);
       formatted += `${indent.repeat(pad)}${token}\n`;
-    } else if (token.startsWith("<") && (token.endsWith("/>") || token.endsWith("/ >"))) {
+    } else if (
+      token.startsWith("<") &&
+      (token.endsWith("/>") || token.endsWith("/ >"))
+    ) {
       formatted += `${indent.repeat(pad)}${token}\n`;
     } else if (token.startsWith("<")) {
       formatted += `${indent.repeat(pad)}${token}\n`;
@@ -195,48 +204,59 @@ export function formatXml(xml: string, indent = "  "): string {
   return formatted.trim();
 }
 
-export type { SupportedLyricFormat, FormattedLyricsResult } from '@repo/types';
+export type { SupportedLyricFormat, FormattedLyricsResult } from "@repo/types";
 
 export function formatLyricsPayload(
-  lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null | undefined,
-  format: string = 'json'
+  lyrics:
+    | SyncedLyricsPayload
+    | string
+    | Record<string, unknown>
+    | null
+    | undefined,
+  format: string = "json",
 ): FormattedLyricsResult {
-  const normFormat = format.toLowerCase().trim().replace(/^\./, '') as SupportedLyricFormat;
+  const normFormat = format
+    .toLowerCase()
+    .trim()
+    .replace(/^\./, "") as SupportedLyricFormat;
 
   if (!lyrics) {
-    return { content: '', contentType: 'text/plain' };
+    return { content: "", contentType: "text/plain" };
   }
 
   // If plain text string
-  if (typeof lyrics === 'string') {
-    if (normFormat === 'json') {
-      return { content: { plain: lyrics }, contentType: 'application/json' };
+  if (typeof lyrics === "string") {
+    if (normFormat === "json") {
+      return { content: { plain: lyrics }, contentType: "application/json" };
     }
-    if (normFormat === 'ttml' || lyrics.trim().startsWith('<')) {
-      return { content: formatXml(lyrics), contentType: 'application/xml; charset=utf-8' };
+    if (normFormat === "ttml" || lyrics.trim().startsWith("<")) {
+      return {
+        content: formatXml(lyrics),
+        contentType: "application/xml; charset=utf-8",
+      };
     }
-    return { content: lyrics, contentType: 'text/plain; charset=utf-8' };
+    return { content: lyrics, contentType: "text/plain; charset=utf-8" };
   }
 
   // If not structured array, fallback
   if (!Array.isArray(lyrics)) {
-    if (normFormat === 'json') {
-      return { content: lyrics, contentType: 'application/json' };
+    if (normFormat === "json") {
+      return { content: lyrics, contentType: "application/json" };
     }
-    return { content: JSON.stringify(lyrics), contentType: 'application/json' };
+    return { content: JSON.stringify(lyrics), contentType: "application/json" };
   }
 
-  if (normFormat === 'json') {
-    return { content: lyrics, contentType: 'application/json' };
+  if (normFormat === "json") {
+    return { content: lyrics, contentType: "application/json" };
   }
 
   const amllLines = convertCompactToAmllLines(lyrics as SyncedLyricsPayload);
 
-  let formatted = '';
-  let contentType = 'text/plain; charset=utf-8';
+  let formatted = "";
+  let contentType = "text/plain; charset=utf-8";
 
   switch (normFormat) {
-    case 'ttml':
+    case "ttml":
       {
         const generator = new TTMLGenerator({
           domImplementation: new DOMImplementation(),
@@ -244,7 +264,7 @@ export function formatLyricsPayload(
         });
         const ttmlLines = amllLines.map((line) => ({
           ...line,
-          text: line.words.map((w) => w.word).join(''),
+          text: line.words.map((w) => w.word).join(""),
           words: line.words.map((w) => ({
             text: w.word,
             startTime: w.startTime,
@@ -252,38 +272,40 @@ export function formatLyricsPayload(
           })),
         }));
         const rawXml = generator.generate({
-          lines: ttmlLines as unknown as Parameters<typeof generator.generate>[0]['lines'],
+          lines: ttmlLines as unknown as Parameters<
+            typeof generator.generate
+          >[0]["lines"],
           metadata: {},
         });
         formatted = formatXml(rawXml);
-        contentType = 'application/xml; charset=utf-8';
+        contentType = "application/xml; charset=utf-8";
       }
       break;
-    case 'lrc':
+    case "lrc":
       formatted = stringifyLrc(amllLines);
       break;
-    case 'lrca2':
+    case "lrca2":
       formatted = stringifyLrcA2(amllLines);
       break;
-    case 'yrc':
+    case "yrc":
       formatted = stringifyYrc(amllLines);
       break;
-    case 'qrc':
+    case "qrc":
       formatted = stringifyQrc(amllLines);
       break;
-    case 'eslrc':
+    case "eslrc":
       formatted = stringifyEslrc(amllLines);
       break;
-    case 'ass':
+    case "ass":
       formatted = stringifyAss(amllLines);
       break;
-    case 'lyl':
+    case "lyl":
       formatted = stringifyLyl(amllLines);
       break;
-    case 'lys':
+    case "lys":
       formatted = stringifyLys(amllLines);
       break;
-    case 'lqe':
+    case "lqe":
       formatted = stringifyLqe(amllLines);
       break;
     default:

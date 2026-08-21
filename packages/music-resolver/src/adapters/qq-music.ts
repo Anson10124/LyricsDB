@@ -4,9 +4,9 @@ import type {
   ResolveOptions,
   ResolvedLink,
   TrackMetadata,
-} from '../types.js';
-import { HttpClient } from '../utils/http.js';
-import { findBestMatch } from '../utils/string-similarity.js';
+} from "../types.js";
+import { HttpClient } from "../utils/http.js";
+import { findBestMatch } from "../utils/string-similarity.js";
 
 export enum QQMusicSearchType {
   Song = 0,
@@ -84,53 +84,56 @@ export interface QQMusicSearchResponse {
 }
 
 function stripHighlight(str?: string): string {
-  if (!str) return '';
-  return str.replace(/<\/?em>/g, '').trim();
+  if (!str) return "";
+  return str.replace(/<\/?em>/g, "").trim();
 }
 
 export class QQMusicAdapter implements MusicAdapter {
-  readonly id = 'qqMusic';
-  readonly name = 'QQ Music';
+  readonly id = "qqMusic";
+  readonly name = "QQ Music";
 
   private apiUrl: string;
 
   constructor(options?: { apiUrl?: string }) {
     this.apiUrl =
-      options?.apiUrl || 'https://c.y.qq.com/soso/fcgi-bin/client_search_cp';
+      options?.apiUrl || "https://c.y.qq.com/soso/fcgi-bin/client_search_cp";
   }
 
   async search(
     query: string,
     metadata: TrackMetadata,
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<ResolvedLink | null> {
     try {
       let searchType = QQMusicSearchType.Song;
-      if (metadata.type === 'album') searchType = QQMusicSearchType.Album;
-      else if (metadata.type === 'artist') searchType = QQMusicSearchType.Singer;
+      if (metadata.type === "album") searchType = QQMusicSearchType.Album;
+      else if (metadata.type === "artist")
+        searchType = QQMusicSearchType.Singer;
 
       const params = new URLSearchParams({
-        p: '1',
-        n: '30',
+        p: "1",
+        n: "30",
         w: query,
-        format: 'json',
+        format: "json",
         t: String(searchType),
       });
 
       const url = `${this.apiUrl}?${params.toString()}`;
       let response = await HttpClient.get<QQMusicSearchResponse>(url, {
         headers: {
-          Referer: 'https://y.qq.com',
+          Referer: "https://y.qq.com",
           ...options?.customHeaders,
         },
         timeout: options?.timeout,
         retries: options?.retries,
       });
 
-      if (typeof response === 'string') {
+      if (typeof response === "string") {
         const text = (response as string).trim();
         // Remove jsonp callback wrapper if present: callback(...) -> {...}
-        const jsonMatch = text.match(/^callback\((.*)\)$/s) || text.match(/^[a-zA-Z0-9_]+\((.*)\)$/s);
+        const jsonMatch =
+          text.match(/^callback\((.*)\)$/s) ||
+          text.match(/^[a-zA-Z0-9_]+\((.*)\)$/s);
         if (jsonMatch && jsonMatch[1]) {
           try {
             response = JSON.parse(jsonMatch[1]) as QQMusicSearchResponse;
@@ -156,10 +159,13 @@ export class QQMusicAdapter implements MusicAdapter {
         for (const song of response.data.song.list) {
           const title = song.songname || stripHighlight(song.songname_hilight);
           const singers: string[] = song.singer
-            ? song.singer.map((s) => s.name || stripHighlight(s.name_hilight)).filter((name): name is string => Boolean(name))
+            ? song.singer
+                .map((s) => s.name || stripHighlight(s.name_hilight))
+                .filter((name): name is string => Boolean(name))
             : [];
-          const artist = singers.join(', ') || undefined;
-          const album = song.albumname || stripHighlight(song.albumname_hilight);
+          const artist = singers.join(", ") || undefined;
+          const album =
+            song.albumname || stripHighlight(song.albumname_hilight);
           const songMid = song.songmid || String(song.songid);
           if (songMid) {
             candidates.push({
@@ -173,13 +179,17 @@ export class QQMusicAdapter implements MusicAdapter {
             });
           }
         }
-      } else if (searchType === QQMusicSearchType.Album && response.data.album?.list) {
+      } else if (
+        searchType === QQMusicSearchType.Album &&
+        response.data.album?.list
+      ) {
         for (const album of response.data.album.list) {
-          const title = album.albumName || stripHighlight(album.albumName_hilight);
+          const title =
+            album.albumName || stripHighlight(album.albumName_hilight);
           const artist =
             album.singerName ||
             stripHighlight(album.singerName_hilight) ||
-            album.singer_list?.map((s) => s.name).join(', ');
+            album.singer_list?.map((s) => s.name).join(", ");
           const albumMid = album.albumMID || String(album.albumID);
           if (albumMid) {
             candidates.push({
@@ -190,9 +200,13 @@ export class QQMusicAdapter implements MusicAdapter {
             });
           }
         }
-      } else if (searchType === QQMusicSearchType.Singer && response.data.singer?.list) {
+      } else if (
+        searchType === QQMusicSearchType.Singer &&
+        response.data.singer?.list
+      ) {
         for (const singer of response.data.singer.list) {
-          const title = singer.singerName || stripHighlight(singer.singerName_hilight);
+          const title =
+            singer.singerName || stripHighlight(singer.singerName_hilight);
           const singerMid = singer.singerMID || String(singer.singerID);
           if (singerMid) {
             candidates.push({

@@ -14,19 +14,19 @@ interface LyricsCodeViewerProps {
 
 interface Token {
   type:
-  | "whitespace"
-  | "tag"
-  | "bracket"
-  | "attr-name"
-  | "attr-value"
-  | "operator"
-  | "lyric-text"
-  | "string"
-  | "number"
-  | "keyword"
-  | "punctuation"
-  | "comment"
-  | "text";
+    | "whitespace"
+    | "tag"
+    | "bracket"
+    | "attr-name"
+    | "attr-value"
+    | "operator"
+    | "lyric-text"
+    | "string"
+    | "number"
+    | "keyword"
+    | "punctuation"
+    | "comment"
+    | "text";
   text: string;
 }
 
@@ -68,7 +68,8 @@ function tokenizeXmlLine(line: string): Token[] {
         let lastIdx = 0;
         while ((attrMatch = attrRegex.exec(rawAttrs)) !== null) {
           const preWhitespace = rawAttrs.slice(lastIdx, attrMatch.index);
-          if (preWhitespace) tokens.push({ type: "whitespace", text: preWhitespace });
+          if (preWhitespace)
+            tokens.push({ type: "whitespace", text: preWhitespace });
 
           tokens.push({ type: "attr-name", text: attrMatch[1]! });
           if (attrMatch[2] !== undefined) {
@@ -183,7 +184,12 @@ function renderToken(token: Token, idx: number) {
   }
 }
 
-export function LyricsCodeViewer({ format, code, track, className }: LyricsCodeViewerProps) {
+export function LyricsCodeViewer({
+  format,
+  code,
+  track,
+  className,
+}: LyricsCodeViewerProps) {
   const [copied, setCopied] = useState(false);
   const [wrapLines, setWrapLines] = useState(false);
 
@@ -222,7 +228,9 @@ export function LyricsCodeViewer({ format, code, track, className }: LyricsCodeV
     const extension = extMap[format] || "txt";
     const title = track?.title || "lyrics";
     const artist = track?.artists?.join(", ") || "";
-    const filename = artist ? `${title} - ${artist}.${extension}` : `${title}.${extension}`;
+    const filename = artist
+      ? `${title} - ${artist}.${extension}`
+      : `${title}.${extension}`;
 
     const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -254,8 +262,9 @@ export function LyricsCodeViewer({ format, code, track, className }: LyricsCodeV
 
   return (
     <div
-      className={`group relative flex h-[520px] w-full flex-col rounded-2xl border border-border/70 bg-zinc-950/90 text-zinc-100 shadow-xl backdrop-blur-md overflow-hidden ${className || ""
-        }`}
+      className={`group relative flex h-[520px] w-full flex-col rounded-2xl border border-border/70 bg-zinc-950/90 text-zinc-100 shadow-xl backdrop-blur-md overflow-hidden ${
+        className || ""
+      }`}
     >
       {/* Top Header Bar */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-2.5 text-xs">
@@ -277,14 +286,17 @@ export function LyricsCodeViewer({ format, code, track, className }: LyricsCodeV
           <button
             type="button"
             onClick={() => setWrapLines((w) => !w)}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${wrapLines
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+              wrapLines
                 ? "bg-primary/20 text-primary border border-primary/30"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5"
-              }`}
+            }`}
             title="Toggle word wrap"
           >
             <WrapText className="size-3.5" />
-            <span className="hidden sm:inline">{wrapLines ? "Wrap On" : "Wrap Off"}</span>
+            <span className="hidden sm:inline">
+              {wrapLines ? "Wrap On" : "Wrap Off"}
+            </span>
           </button>
 
           <button
@@ -337,10 +349,15 @@ export function LyricsCodeViewer({ format, code, track, className }: LyricsCodeV
 
                 {/* Code line content */}
                 <td
-                  className={`align-top pl-2 ${wrapLines ? "whitespace-pre-wrap break-all" : "whitespace-pre"
-                    }`}
+                  className={`align-top pl-2 ${
+                    wrapLines
+                      ? "whitespace-pre-wrap break-all"
+                      : "whitespace-pre"
+                  }`}
                 >
-                  {tokens.map((token, tokenIdx) => renderToken(token, tokenIdx))}
+                  {tokens.map((token, tokenIdx) =>
+                    renderToken(token, tokenIdx),
+                  )}
                 </td>
               </tr>
             ))}

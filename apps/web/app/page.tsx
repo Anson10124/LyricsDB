@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
+import type {
+  SanitizedTrack,
+  SyncedLyricsPayload,
+  TrackRecord,
+} from "@repo/types";
 import { InputBar } from "@/components/input-bar";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import { LyricsView } from "@/components/lyrics-view";
@@ -23,7 +27,9 @@ const initialProgress: TaskProgressState = {
 
 export default function Home() {
   const router = useRouter();
-  const [viewState, setViewState] = useState<"search" | "progress" | "lyrics">("search");
+  const [viewState, setViewState] = useState<"search" | "progress" | "lyrics">(
+    "search",
+  );
   const [progress, setProgress] = useState<TaskProgressState>(initialProgress);
   const [result, setResult] = useState<{
     track: SanitizedTrack<TrackRecord>;
@@ -118,7 +124,7 @@ export default function Home() {
                 ...prev,
                 platformsStatus: "running",
                 searchingPlatforms: Array.from(
-                  new Set([...prev.searchingPlatforms, data.platform])
+                  new Set([...prev.searchingPlatforms, data.platform]),
                 ),
               }));
             }
@@ -129,7 +135,9 @@ export default function Home() {
             setProgress((prev) => ({
               ...prev,
               matchedPlatforms: [
-                ...prev.matchedPlatforms.filter((p) => p.platform !== data.platform),
+                ...prev.matchedPlatforms.filter(
+                  (p) => p.platform !== data.platform,
+                ),
                 { platform: data.platform, id: data.id, score: data.score },
               ],
             }));
@@ -141,7 +149,8 @@ export default function Home() {
               const updatedProviders = [...prev.lyricsSearchingProviders];
               if (data?.provider) {
                 const existingIdx = updatedProviders.findIndex(
-                  (p) => p.provider.toLowerCase() === data.provider.toLowerCase()
+                  (p) =>
+                    p.provider.toLowerCase() === data.provider.toLowerCase(),
                 );
                 if (existingIdx >= 0) {
                   updatedProviders[existingIdx] = {
@@ -159,7 +168,10 @@ export default function Home() {
               return {
                 ...prev,
                 platformsStatus: "done",
-                lyricsStatus: data?.status === "not_found" && prev.lyricsStatus !== "done" ? "failed" : "running",
+                lyricsStatus:
+                  data?.status === "not_found" && prev.lyricsStatus !== "done"
+                    ? "failed"
+                    : "running",
                 lyricsSearchingProviders: updatedProviders,
               };
             });
@@ -169,21 +181,31 @@ export default function Home() {
           case "lyrics_found": {
             setProgress((prev) => {
               const winningProvider = data?.provider?.toLowerCase();
-              const updatedProviders = prev.lyricsSearchingProviders.map((p) => {
-                if (p.provider.toLowerCase() === winningProvider) {
-                  return { ...p, status: "found" as const };
-                }
-                return {
-                  ...p,
-                  status: p.status === "searching" ? ("not_found" as const) : p.status,
-                };
-              });
+              const updatedProviders = prev.lyricsSearchingProviders.map(
+                (p) => {
+                  if (p.provider.toLowerCase() === winningProvider) {
+                    return { ...p, status: "found" as const };
+                  }
+                  return {
+                    ...p,
+                    status:
+                      p.status === "searching"
+                        ? ("not_found" as const)
+                        : p.status,
+                  };
+                },
+              );
 
               if (
                 winningProvider &&
-                !updatedProviders.some((p) => p.provider.toLowerCase() === winningProvider)
+                !updatedProviders.some(
+                  (p) => p.provider.toLowerCase() === winningProvider,
+                )
               ) {
-                updatedProviders.push({ provider: data.provider, status: "found" });
+                updatedProviders.push({
+                  provider: data.provider,
+                  status: "found",
+                });
               }
 
               return {
@@ -203,7 +225,8 @@ export default function Home() {
           case "saving": {
             setProgress((prev) => ({
               ...prev,
-              lyricsStatus: prev.lyricsStatus === "running" ? "done" : prev.lyricsStatus,
+              lyricsStatus:
+                prev.lyricsStatus === "running" ? "done" : prev.lyricsStatus,
               saveStatus: "running",
             }));
             break;
@@ -227,7 +250,11 @@ export default function Home() {
                 ...prev,
                 metaStatus: "done",
                 platformsStatus: "done",
-                lyricsStatus: track?.hasLyrics ? "done" : prev.lyricsStatus === "done" ? "done" : "failed",
+                lyricsStatus: track?.hasLyrics
+                  ? "done"
+                  : prev.lyricsStatus === "done"
+                    ? "done"
+                    : "failed",
                 saveStatus: "done",
               }));
 
@@ -247,10 +274,16 @@ export default function Home() {
             es.close();
             setProgress((prev) => ({
               ...prev,
-              metaStatus: prev.metaStatus === "running" ? "failed" : prev.metaStatus,
-              platformsStatus: prev.platformsStatus === "running" ? "failed" : prev.platformsStatus,
-              lyricsStatus: prev.lyricsStatus === "running" ? "failed" : prev.lyricsStatus,
-              saveStatus: prev.saveStatus === "running" ? "failed" : prev.saveStatus,
+              metaStatus:
+                prev.metaStatus === "running" ? "failed" : prev.metaStatus,
+              platformsStatus:
+                prev.platformsStatus === "running"
+                  ? "failed"
+                  : prev.platformsStatus,
+              lyricsStatus:
+                prev.lyricsStatus === "running" ? "failed" : prev.lyricsStatus,
+              saveStatus:
+                prev.saveStatus === "running" ? "failed" : prev.saveStatus,
             }));
             break;
           }
@@ -294,7 +327,8 @@ export default function Home() {
               </h1>
 
               <p className="text-sm md:text-base text-muted-foreground">
-                Search your favorite song or paste in a link from Spotify, Apple Music, or Deezer to get the lyrics instantly
+                Search your favorite song or paste in a link from Spotify, Apple
+                Music, or Deezer to get the lyrics instantly
               </p>
             </div>
 
@@ -312,8 +346,12 @@ export default function Home() {
             className="flex flex-col items-center w-full"
           >
             <div className="flex flex-col items-center gap-1.5 text-center mb-6">
-              <h2 className="text-xl font-bold tracking-tight text-foreground">Resolving Track</h2>
-              <p className="text-xs text-muted-foreground">Extracting metadata and synchronizing lyrics across providers</p>
+              <h2 className="text-xl font-bold tracking-tight text-foreground">
+                Resolving Track
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Extracting metadata and synchronizing lyrics across providers
+              </p>
             </div>
 
             <TaskRows progress={progress} />

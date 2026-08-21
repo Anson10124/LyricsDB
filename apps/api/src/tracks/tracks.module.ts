@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { ResolverModule } from '../resolver/resolver.module';
-import { TracksController } from './tracks.controller';
-import { TracksService } from './tracks.service';
+import { Module } from "@nestjs/common";
+import { ResolverModule } from "../resolver/resolver.module";
+import { TracksController } from "./tracks.controller";
+import { TracksService } from "./tracks.service";
 
 @Module({
   imports: [ResolverModule],

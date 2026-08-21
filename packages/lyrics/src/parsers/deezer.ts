@@ -1,6 +1,6 @@
-import type { LyricLine, LyricWord } from '@applemusic-like-lyrics/lyric';
-import type { SyncedLyricsPayload } from '@repo/types';
-import { convertAmllLinesToCompact } from '../utils/converter.js';
+import type { LyricLine, LyricWord } from "@applemusic-like-lyrics/lyric";
+import type { SyncedLyricsPayload } from "@repo/types";
+import { convertAmllLinesToCompact } from "../utils/converter.js";
 
 export interface DeezerWordToken {
   start: number;
@@ -25,7 +25,7 @@ export interface DeezerSyncedLine {
 // Parses Deezer synchronizedWordByWordLines into line-grouped compact tuple format.
 export function parseDeezerWordLyrics(
   lines: DeezerWordByWordLine[],
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
   if (!Array.isArray(lines) || lines.length === 0) {
     return [];
@@ -34,10 +34,10 @@ export function parseDeezerWordLyrics(
   try {
     const rawLines: LyricLine[] = lines.map((line) => {
       const words: LyricWord[] = (line.words || []).map((w) => {
-        let text = w.word || '';
+        let text = w.word || "";
         // Ensure trailing space to denote complete word token
-        if (!text.endsWith(' ')) {
-          text = text + ' ';
+        if (!text.endsWith(" ")) {
+          text = text + " ";
         }
         return {
           startTime: w.start,
@@ -50,8 +50,8 @@ export function parseDeezerWordLyrics(
         startTime: line.start,
         endTime: line.end,
         words,
-        translatedLyric: '',
-        romanLyric: '',
+        translatedLyric: "",
+        romanLyric: "",
         isBG: false,
         isDuet: false,
       };
@@ -66,7 +66,7 @@ export function parseDeezerWordLyrics(
 // Parses Deezer synchronizedLines (line-by-line synced) into line-grouped compact tuple format.
 export function parseDeezerSyncedLines(
   lines: DeezerSyncedLine[],
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
   if (!Array.isArray(lines) || lines.length === 0) {
     return [];
@@ -76,9 +76,9 @@ export function parseDeezerSyncedLines(
     const rawLines: LyricLine[] = lines.map((line) => {
       const startTime = line.milliseconds;
       const endTime = line.milliseconds + (line.duration || 0);
-      let text = line.line || '';
-      if (!text.endsWith(' ')) {
-        text = text + ' ';
+      let text = line.line || "";
+      if (!text.endsWith(" ")) {
+        text = text + " ";
       }
 
       return {
@@ -91,8 +91,8 @@ export function parseDeezerSyncedLines(
             word: text,
           },
         ],
-        translatedLyric: line.lineTranslated || '',
-        romanLyric: '',
+        translatedLyric: line.lineTranslated || "",
+        romanLyric: "",
         isBG: false,
         isDuet: false,
       };

@@ -1,7 +1,23 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
-  "globalEnv": ["DATABASE_URL", "NODE_ENV", "PORT"],
+  "globalEnv": [
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "DATABASE_SSL",
+    "DATABASE_PREPARE",
+    "STORAGE_BUCKET",
+    "STORAGE_ENDPOINT",
+    "STORAGE_REGION",
+    "STORAGE_ACCESS_KEY_ID",
+    "STORAGE_SECRET_ACCESS_KEY",
+    "STORAGE_FORCE_PATH_STYLE",
+    "PUBLIC_URL",
+    "SERVICE_URL_API",
+    "SERVICE_URL_WEB",
+    "NODE_ENV",
+    "PORT"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

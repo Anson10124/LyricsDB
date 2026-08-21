@@ -17,24 +17,49 @@ export interface TaskProgressState {
   matchedPlatforms: Array<{ platform: string; id: string; score?: number }>;
   searchingPlatforms: string[];
   lyricsStatus: "pending" | "running" | "done" | "failed";
-  lyricsSearchingProviders: Array<{ provider: string; status: "searching" | "found" | "not_found" }>;
-  lyricsResult?: { provider?: string; lyricsType?: string; hasLyrics?: boolean };
+  lyricsSearchingProviders: Array<{
+    provider: string;
+    status: "searching" | "found" | "not_found";
+  }>;
+  lyricsResult?: {
+    provider?: string;
+    lyricsType?: string;
+    hasLyrics?: boolean;
+  };
   saveStatus: "pending" | "running" | "done" | "failed";
 }
 
-function SpinnerRing({ active, children }: { active?: boolean; children?: React.ReactNode }) {
-  const size = 24, stroke = 2;
+function SpinnerRing({
+  active,
+  children,
+}: {
+  active?: boolean;
+  children?: React.ReactNode;
+}) {
+  const size = 24,
+    stroke = 2;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   return (
-    <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }}>
+    <span
+      className="relative inline-flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size }}
+    >
       <svg
         width={size}
         height={size}
         className="absolute inset-0"
         style={active ? { animation: "spin 1.1s linear infinite" } : undefined}
       >
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" className="text-border/60" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          className="text-border/60"
+          strokeWidth={stroke}
+        />
         {active && (
           <circle
             cx={size / 2}
@@ -49,12 +74,20 @@ function SpinnerRing({ active, children }: { active?: boolean; children?: React.
           />
         )}
       </svg>
-      <span className="relative text-[10.5px] font-semibold tabular-nums text-foreground">{children}</span>
+      <span className="relative text-[10.5px] font-semibold tabular-nums text-foreground">
+        {children}
+      </span>
     </span>
   );
 }
 
-function Badge({ tone, children }: { tone: "red" | "green"; children: React.ReactNode }) {
+function Badge({
+  tone,
+  children,
+}: {
+  tone: "red" | "green";
+  children: React.ReactNode;
+}) {
   return (
     <span
       className={`flex size-5.5 shrink-0 items-center justify-center rounded-full text-white shadow-xs
@@ -67,19 +100,45 @@ function Badge({ tone, children }: { tone: "red" | "green"; children: React.Reac
 }
 
 const XIcon = (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3.5"
+    strokeLinecap="round"
+  >
     <path d="M18 6L6 18M6 6l12 12" />
   </svg>
 );
 
 const CheckIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M20 6L9 17l-5-5" />
   </svg>
 );
 
 const RetryIcon = (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
   </svg>
 );
@@ -120,7 +179,10 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
     meta: `ID: ${p.id.slice(0, 10)}${p.id.length > 10 ? "..." : ""}`,
   }));
 
-  if (progress.searchingPlatforms.length > 0 && progress.platformsStatus === "running") {
+  if (
+    progress.searchingPlatforms.length > 0 &&
+    progress.platformsStatus === "running"
+  ) {
     progress.searchingPlatforms.forEach((p) => {
       if (!progress.matchedPlatforms.some((m) => m.platform === p)) {
         platformDetails.push({
@@ -168,12 +230,16 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
         ) : progress.metaStatus === "failed" ? (
           <Badge tone="red">{XIcon}</Badge>
         ) : (
-          <SpinnerRing active={progress.metaStatus === "running"}>1</SpinnerRing>
+          <SpinnerRing active={progress.metaStatus === "running"}>
+            1
+          </SpinnerRing>
         ),
       label: progress.metaData?.title
         ? `${progress.metaData.title} - ${progress.metaData.artist || ""}`
         : "Extract track metadata",
-      amount: progress.metaData?.durationMs ? formatDuration(progress.metaData.durationMs) : "",
+      amount: progress.metaData?.durationMs
+        ? formatDuration(progress.metaData.durationMs)
+        : "",
       pill:
         progress.metaStatus === "done" ? (
           <span className="inline-flex h-5.5 items-center rounded-full bg-emerald-500/10 px-2 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
@@ -186,9 +252,20 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
         ) : null,
       details: [
         { label: "Title", meta: progress.metaData?.title || "Pending..." },
-        { label: "Artists", meta: progress.metaData?.artists?.join(", ") || progress.metaData?.artist || "Pending..." },
+        {
+          label: "Artists",
+          meta:
+            progress.metaData?.artists?.join(", ") ||
+            progress.metaData?.artist ||
+            "Pending...",
+        },
         ...(progress.metaData?.durationMs
-          ? [{ label: "Duration", meta: formatDuration(progress.metaData.durationMs) }]
+          ? [
+              {
+                label: "Duration",
+                meta: formatDuration(progress.metaData.durationMs),
+              },
+            ]
           : []),
       ],
     },
@@ -200,15 +277,17 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
         ) : progress.platformsStatus === "failed" ? (
           <Badge tone="red">{XIcon}</Badge>
         ) : (
-          <SpinnerRing active={progress.platformsStatus === "running"}>2</SpinnerRing>
+          <SpinnerRing active={progress.platformsStatus === "running"}>
+            2
+          </SpinnerRing>
         ),
       label: "Cross-platform matching",
       amount:
         progress.matchedPlatforms.length > 0
           ? `${progress.matchedPlatforms.length} matched`
           : progress.platformsStatus === "running"
-          ? "searching..."
-          : "",
+            ? "searching..."
+            : "",
       pill:
         progress.platformsStatus === "done" ? (
           <span className="inline-flex h-5.5 items-center rounded-full bg-emerald-500/10 px-2 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
@@ -219,7 +298,10 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
             Matching
           </span>
         ) : null,
-      details: platformDetails.length > 0 ? platformDetails : [{ label: "Platform links", meta: "Searching..." }],
+      details:
+        platformDetails.length > 0
+          ? platformDetails
+          : [{ label: "Platform links", meta: "Searching..." }],
     },
     {
       key: "lyrics",
@@ -229,14 +311,20 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
         ) : progress.lyricsStatus === "failed" ? (
           <Badge tone="red">{XIcon}</Badge>
         ) : (
-          <SpinnerRing active={progress.lyricsStatus === "running"}>3</SpinnerRing>
+          <SpinnerRing active={progress.lyricsStatus === "running"}>
+            3
+          </SpinnerRing>
         ),
       label: "Discover synced lyrics",
-      amount: progress.lyricsResult?.provider ? formatProviderName(progress.lyricsResult.provider) : "",
+      amount: progress.lyricsResult?.provider
+        ? formatProviderName(progress.lyricsResult.provider)
+        : "",
       pill:
         progress.lyricsStatus === "done" ? (
           <span className="inline-flex h-5.5 items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
-            {progress.lyricsResult?.lyricsType ? `${progress.lyricsResult.lyricsType}-sync` : "Found"}
+            {progress.lyricsResult?.lyricsType
+              ? `${progress.lyricsResult.lyricsType}-sync`
+              : "Found"}
           </span>
         ) : progress.lyricsStatus === "failed" ? (
           <span className="inline-flex h-5.5 items-center gap-1.5 rounded-full bg-red-500/10 px-2 text-[11.5px] font-medium text-red-500">
@@ -252,7 +340,13 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
       details:
         lyricsDetails.length > 0
           ? lyricsDetails
-          : [{ label: "Providers (QQ Music, Deezer, NetEase, Musixmatch, LRCLIB)", meta: "Pending..." }],
+          : [
+              {
+                label:
+                  "Providers (QQ Music, Deezer, NetEase, Musixmatch, LRCLIB)",
+                meta: "Pending...",
+              },
+            ],
     },
     {
       key: "save",
@@ -262,7 +356,9 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
         ) : progress.saveStatus === "failed" ? (
           <Badge tone="red">{XIcon}</Badge>
         ) : (
-          <SpinnerRing active={progress.saveStatus === "running"}>4</SpinnerRing>
+          <SpinnerRing active={progress.saveStatus === "running"}>
+            4
+          </SpinnerRing>
         ),
       label: "Store & index track",
       amount: progress.saveStatus === "done" ? "Cached" : "",
@@ -272,10 +368,15 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
             Completed
           </span>
         ) : null,
-      details: [{ label: "Database status", meta: progress.saveStatus === "done" ? "Saved to Postgres" : "Pending..." }],
+      details: [
+        {
+          label: "Database status",
+          meta:
+            progress.saveStatus === "done" ? "Saved to Postgres" : "Pending...",
+        },
+      ],
     },
   ];
-
 
   return (
     <div className="flex w-full max-w-lg flex-col gap-2 min-h-[220px]">
@@ -301,7 +402,9 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
             <button
               type="button"
               aria-expanded={open}
-              onClick={() => setManualOpen((current) => ({ ...current, [row.key]: !open }))}
+              onClick={() =>
+                setManualOpen((current) => ({ ...current, [row.key]: !open }))
+              }
               className="flex h-12 w-full items-center gap-2.5 px-3 text-left cursor-pointer"
             >
               <span className="flex size-6 shrink-0 items-center justify-center">
@@ -310,7 +413,9 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
                 {row.label}
               </span>
-              <span className="text-[12px] text-muted-foreground tabular-nums">{row.amount}</span>
+              <span className="text-[12px] text-muted-foreground tabular-nums">
+                {row.amount}
+              </span>
               {row.pill}
               <span
                 aria-hidden="true"
@@ -344,7 +449,10 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
             >
               <div className="overflow-hidden">
                 <div className="mb-3 grid grid-cols-[24px_1fr] gap-2 px-3">
-                  <span aria-hidden className="mx-auto h-full w-px bg-border/80" />
+                  <span
+                    aria-hidden
+                    className="mx-auto h-full w-px bg-border/80"
+                  />
                   <div className="flex flex-col gap-1.5 pt-0.5">
                     {row.details.map((d, j) => (
                       <div
@@ -352,11 +460,15 @@ export function TaskRows({ progress }: { progress: TaskProgressState }) {
                         className="flex items-center justify-between"
                         style={
                           open
-                            ? { animation: `fade-up 300ms cubic-bezier(0.23,1,0.32,1) ${100 + j * 60}ms both` }
+                            ? {
+                                animation: `fade-up 300ms cubic-bezier(0.23,1,0.32,1) ${100 + j * 60}ms both`,
+                              }
                             : undefined
                         }
                       >
-                        <span className="text-[12px] text-muted-foreground">{d.label}</span>
+                        <span className="text-[12px] text-muted-foreground">
+                          {d.label}
+                        </span>
                         <span className="font-mono text-[11.5px] text-foreground/80 tabular-nums truncate max-w-[200px]">
                           {d.meta}
                         </span>

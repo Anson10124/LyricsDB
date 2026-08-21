@@ -1,17 +1,17 @@
-import type { MetadataType, ResolveOptions, TrackMetadata } from '../types.js';
-import { HttpClient } from '../utils/http.js';
-import { normalizeSongTitle } from '../utils/query.js';
-import { getCheerioDoc, metaTagContent } from '../utils/scraper.js';
-import { BaseMusicParser } from './base.js';
+import type { MetadataType, ResolveOptions, TrackMetadata } from "../types.js";
+import { HttpClient } from "../utils/http.js";
+import { normalizeSongTitle } from "../utils/query.js";
+import { getCheerioDoc, metaTagContent } from "../utils/scraper.js";
+import { BaseMusicParser } from "./base.js";
 
 export const DEEZER_LINK_REGEX =
   /^https:\/\/www\.deezer\.com\/(?:[a-z]{2}\/)?(track|album|playlist|artist|episode|show)\/(\d+)/;
 
 const DEEZER_TYPE_MAP: Record<string, MetadataType> = {
-  'music.song': 'song',
-  'music.album': 'album',
-  'music.playlist': 'playlist',
-  'music.musician': 'artist',
+  "music.song": "song",
+  "music.album": "album",
+  "music.playlist": "playlist",
+  "music.musician": "artist",
 };
 
 interface DeezerApiTrack {
@@ -53,46 +53,50 @@ interface DeezerApiPlaylist {
 }
 
 export class DeezerParser extends BaseMusicParser {
-  readonly id = 'deezer';
-  readonly name = 'Deezer';
+  readonly id = "deezer";
+  readonly name = "Deezer";
 
   match(url: string): boolean {
-    return DEEZER_LINK_REGEX.test(url) || url.includes('deezer.com');
+    return DEEZER_LINK_REGEX.test(url) || url.includes("deezer.com");
   }
 
   parse(url: string): { id: string; type?: MetadataType } {
     const match = url.match(DEEZER_LINK_REGEX);
-    const id = match?.[2] || url.split('/').pop()?.split('?')[0] || '';
+    const id = match?.[2] || url.split("/").pop()?.split("?")[0] || "";
     const rawType = match?.[1];
     let type: MetadataType | undefined;
-    if (rawType === 'track') type = 'song';
-    else if (rawType === 'album') type = 'album';
-    else if (rawType === 'playlist') type = 'playlist';
-    else if (rawType === 'artist') type = 'artist';
-    else if (rawType === 'episode') type = 'podcast';
-    else if (rawType === 'show') type = 'show';
+    if (rawType === "track") type = "song";
+    else if (rawType === "album") type = "album";
+    else if (rawType === "playlist") type = "playlist";
+    else if (rawType === "artist") type = "artist";
+    else if (rawType === "episode") type = "podcast";
+    else if (rawType === "show") type = "show";
 
     return { id, type };
   }
 
-  async fetchMetadata(id: string, url: string, options?: ResolveOptions): Promise<TrackMetadata> {
+  async fetchMetadata(
+    id: string,
+    url: string,
+    options?: ResolveOptions,
+  ): Promise<TrackMetadata> {
     const parsed = this.parse(url);
-    const itemType = parsed.type || 'song';
+    const itemType = parsed.type || "song";
 
     // 1. Try official Deezer Public API
     if (/^\d+$/.test(id)) {
       try {
-        const apiPath = itemType === 'song' ? 'track' : itemType;
+        const apiPath = itemType === "song" ? "track" : itemType;
         const apiUrl = `https://api.deezer.com/${apiPath}/${id}`;
-        
-        if (itemType === 'song') {
+
+        if (itemType === "song") {
           const track = await HttpClient.get<DeezerApiTrack>(apiUrl, {
             timeout: options?.timeout,
             retries: options?.retries,
           });
 
           if (track && track.id && !track.error) {
-            const rawTitle = track.title || track.title_short || '';
+            const rawTitle = track.title || track.title_short || "";
             const normalized = normalizeSongTitle(rawTitle);
             const artists: string[] = [];
             if (track.contributors && track.contributors.length > 0) {
@@ -109,14 +113,14 @@ export class DeezerParser extends BaseMusicParser {
               artists: artists.length > 0 ? artists : undefined,
               extraArtists: normalized.extraArtists,
               album: track.album?.title,
-              type: 'song',
+              type: "song",
               image: track.album?.cover_xl || track.album?.cover_big,
               audio: track.preview,
               durationMs: track.duration ? track.duration * 1000 : undefined,
               isrc: track.isrc,
             };
           }
-        } else if (itemType === 'album') {
+        } else if (itemType === "album") {
           const album = await HttpClient.get<DeezerApiAlbum>(apiUrl, {
             timeout: options?.timeout,
             retries: options?.retries,
@@ -127,11 +131,11 @@ export class DeezerParser extends BaseMusicParser {
               id: String(album.id),
               title: album.title,
               artist: album.artist?.name,
-              type: 'album',
+              type: "album",
               image: album.cover_xl || album.cover_big,
             };
           }
-        } else if (itemType === 'artist') {
+        } else if (itemType === "artist") {
           const artist = await HttpClient.get<DeezerApiArtist>(apiUrl, {
             timeout: options?.timeout,
             retries: options?.retries,
@@ -141,11 +145,11 @@ export class DeezerParser extends BaseMusicParser {
             return {
               id: String(artist.id),
               title: artist.name,
-              type: 'artist',
+              type: "artist",
               image: artist.picture_xl || artist.picture_big,
             };
           }
-        } else if (itemType === 'playlist') {
+        } else if (itemType === "playlist") {
           const playlist = await HttpClient.get<DeezerApiPlaylist>(apiUrl, {
             timeout: options?.timeout,
             retries: options?.retries,
@@ -156,7 +160,7 @@ export class DeezerParser extends BaseMusicParser {
               id: String(playlist.id),
               title: playlist.title,
               artist: playlist.creator?.name,
-              type: 'playlist',
+              type: "playlist",
               image: playlist.picture_big,
             };
           }
@@ -173,11 +177,11 @@ export class DeezerParser extends BaseMusicParser {
     });
 
     const doc = getCheerioDoc(html);
-    const title = metaTagContent(doc, 'og:title') || '';
-    const description = metaTagContent(doc, 'og:description') || '';
-    const image = metaTagContent(doc, 'og:image');
-    const audio = metaTagContent(doc, 'og:audio');
-    const ogType = metaTagContent(doc, 'og:type') || '';
+    const title = metaTagContent(doc, "og:title") || "";
+    const description = metaTagContent(doc, "og:description") || "";
+    const image = metaTagContent(doc, "og:image");
+    const audio = metaTagContent(doc, "og:audio");
+    const ogType = metaTagContent(doc, "og:type") || "";
 
     const type: MetadataType = DEEZER_TYPE_MAP[ogType] || itemType;
     const artist = description.match(/^([^ -]+(?: [^ -]+)*)/)?.[1]?.trim();
@@ -198,7 +202,6 @@ export class DeezerParser extends BaseMusicParser {
 
   override buildSearchQuery(metadata: TrackMetadata): string {
     const baseQuery = super.buildSearchQuery(metadata);
-    return metadata.type === 'playlist' ? `${baseQuery} playlist` : baseQuery;
+    return metadata.type === "playlist" ? `${baseQuery} playlist` : baseQuery;
   }
 }
-

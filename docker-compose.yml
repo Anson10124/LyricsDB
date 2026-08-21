@@ -29,11 +29,21 @@ services:
       PORT: 4000
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lyricsdb}}
+      DIRECT_URL: ${DIRECT_URL:-}
+      DATABASE_SSL: ${DATABASE_SSL:-}
+      DATABASE_PREPARE: ${DATABASE_PREPARE:-}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_REGION: ${STORAGE_REGION:-}
+      STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:-}
+      STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY:-}
+      STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       SERVICE_URL_API: ${SERVICE_URL_API:-}
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
     ports:
       - "${API_PORT:-4000}:4000"
     networks:

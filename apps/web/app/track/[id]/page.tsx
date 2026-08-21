@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowLeft, Music2 } from "lucide-react";
-import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
+import type {
+  SanitizedTrack,
+  SyncedLyricsPayload,
+  TrackRecord,
+} from "@repo/types";
 import { LyricsView } from "@/components/lyrics-view";
 import { getApiBaseUrl } from "@/lib/api-client";
 
@@ -20,7 +24,9 @@ export default function TrackPage({ params }: TrackPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [track, setTrack] = useState<SanitizedTrack<TrackRecord> | null>(null);
-  const [lyrics, setLyrics] = useState<SyncedLyricsPayload | string | null>(null);
+  const [lyrics, setLyrics] = useState<SyncedLyricsPayload | string | null>(
+    null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -30,14 +36,17 @@ export default function TrackPage({ params }: TrackPageProps) {
     async function loadTrackData() {
       try {
         const apiBase = getApiBaseUrl();
-        const trackRes = await fetch(`${apiBase}/api/tracks/${encodeURIComponent(id)}`);
+        const trackRes = await fetch(
+          `${apiBase}/api/tracks/${encodeURIComponent(id)}`,
+        );
         if (!trackRes.ok) {
           if (trackRes.status === 404) {
             throw new Error("Track not found");
           }
           throw new Error("Failed to load track");
         }
-        const trackData = (await trackRes.json()) as SanitizedTrack<TrackRecord>;
+        const trackData =
+          (await trackRes.json()) as SanitizedTrack<TrackRecord>;
 
         if (!isMounted) return;
         setTrack(trackData);
@@ -45,12 +54,16 @@ export default function TrackPage({ params }: TrackPageProps) {
         if (trackData.hasLyrics) {
           try {
             const lyricsRes = await fetch(
-              `${apiBase}/api/tracks/${encodeURIComponent(id)}/lyrics?format=json`
+              `${apiBase}/api/tracks/${encodeURIComponent(id)}/lyrics?format=json`,
             );
             if (lyricsRes.ok) {
               const lyricsData = await lyricsRes.json();
               if (isMounted) {
-                if (lyricsData && typeof lyricsData === "object" && "plain" in lyricsData) {
+                if (
+                  lyricsData &&
+                  typeof lyricsData === "object" &&
+                  "plain" in lyricsData
+                ) {
                   setLyrics(lyricsData.plain);
                 } else {
                   setLyrics(lyricsData);
@@ -89,7 +102,9 @@ export default function TrackPage({ params }: TrackPageProps) {
           className="flex flex-col items-center gap-4 text-center"
         >
           <div className="flex size-12 items-center justify-center rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-sm font-medium text-muted-foreground">Loading track and lyrics...</p>
+          <p className="text-sm font-medium text-muted-foreground">
+            Loading track and lyrics...
+          </p>
         </motion.div>
       )}
 
@@ -105,7 +120,8 @@ export default function TrackPage({ params }: TrackPageProps) {
           </div>
           <h2 className="text-xl font-bold text-foreground">Track Not Found</h2>
           <p className="text-sm text-muted-foreground">
-            The track with ID <span className="font-mono text-xs">{id}</span> could not be found or has not been synchronized yet.
+            The track with ID <span className="font-mono text-xs">{id}</span>{" "}
+            could not be found or has not been synchronized yet.
           </p>
           <Link
             href="/"

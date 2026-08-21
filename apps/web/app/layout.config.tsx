@@ -1,8 +1,8 @@
-import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
+import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
 export const baseOptions: BaseLayoutProps = {
   nav: {
-    title: 'LyricsDB',
+    title: "LyricsDB",
   },
   links: [],
 };

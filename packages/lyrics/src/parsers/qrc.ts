@@ -1,15 +1,19 @@
-import { parseQrc as parseAmllQrc } from '@applemusic-like-lyrics/lyric';
-import type { SyncedLyricsPayload } from '@repo/types';
-import { convertAmllLinesToCompact } from '../utils/converter.js';
-import { extractLyricContent } from '../utils/qrc-decoder.js';
-import { isPlaceholderLyricText } from '../utils/info-lines.js';
+import { parseQrc as parseAmllQrc } from "@applemusic-like-lyrics/lyric";
+import type { SyncedLyricsPayload } from "@repo/types";
+import { convertAmllLinesToCompact } from "../utils/converter.js";
+import { extractLyricContent } from "../utils/qrc-decoder.js";
+import { isPlaceholderLyricText } from "../utils/info-lines.js";
 
 // Parses QQ Music QRC into line-grouped compact tuple format.
 export function parseQrc(
   qrcText: string,
-  metadata?: { title?: string; artist?: string }
+  metadata?: { title?: string; artist?: string },
 ): SyncedLyricsPayload {
-  if (!qrcText || typeof qrcText !== 'string' || isPlaceholderLyricText(qrcText, metadata)) {
+  if (
+    !qrcText ||
+    typeof qrcText !== "string" ||
+    isPlaceholderLyricText(qrcText, metadata)
+  ) {
     return [];
   }
 
@@ -24,4 +28,3 @@ export function parseQrc(
     return [];
   }
 }
-

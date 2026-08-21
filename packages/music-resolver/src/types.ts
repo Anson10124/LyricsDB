@@ -12,4 +12,4 @@ export type {
   ResolverTrackMetadata,
   ScoreBreakdown,
   TrackMetadata,
-} from '@repo/types';
+} from "@repo/types";

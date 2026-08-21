@@ -1,16 +1,40 @@
-import type { FormattedLyricsResult, LyricsType, SyncedLyricsPayload, VocalType } from '@repo/types';
-import { fetchDeezerLyrics, type DeezerLyricsResponse } from './fetchers/deezer.js';
-import { fetchLrclibLyrics } from './fetchers/lrclib.js';
-import { fetchMusixmatchLyrics, type MusixmatchLyricsResponse } from './fetchers/musixmatch.js';
-import { fetchNeteaseLyrics, type NeteaseLyricsResponse } from './fetchers/netease.js';
-import { fetchQQMusicFullLrc, fetchQQMusicLyrics, type QQMusicLyricsResponse } from './fetchers/qq-music.js';
-import { parseDeezerSyncedLines, parseDeezerWordLyrics } from './parsers/deezer.js';
-import { parseLrc } from './parsers/lrc.js';
-import { parseMusixmatchRichSync, parseMusixmatchSubtitles } from './parsers/musixmatch.js';
-import { parseQrc } from './parsers/qrc.js';
-import { parseYrc } from './parsers/yrc.js';
-import { formatLyricsPayload } from './utils/converter.js';
-import { isPlaceholderLyricText } from './utils/info-lines.js';
+import type {
+  FormattedLyricsResult,
+  LyricsType,
+  SyncedLyricsPayload,
+  VocalType,
+} from "@repo/types";
+import {
+  fetchDeezerLyrics,
+  type DeezerLyricsResponse,
+} from "./fetchers/deezer.js";
+import { fetchLrclibLyrics } from "./fetchers/lrclib.js";
+import {
+  fetchMusixmatchLyrics,
+  type MusixmatchLyricsResponse,
+} from "./fetchers/musixmatch.js";
+import {
+  fetchNeteaseLyrics,
+  type NeteaseLyricsResponse,
+} from "./fetchers/netease.js";
+import {
+  fetchQQMusicFullLrc,
+  fetchQQMusicLyrics,
+  type QQMusicLyricsResponse,
+} from "./fetchers/qq-music.js";
+import {
+  parseDeezerSyncedLines,
+  parseDeezerWordLyrics,
+} from "./parsers/deezer.js";
+import { parseLrc } from "./parsers/lrc.js";
+import {
+  parseMusixmatchRichSync,
+  parseMusixmatchSubtitles,
+} from "./parsers/musixmatch.js";
+import { parseQrc } from "./parsers/qrc.js";
+import { parseYrc } from "./parsers/yrc.js";
+import { formatLyricsPayload } from "./utils/converter.js";
+import { isPlaceholderLyricText } from "./utils/info-lines.js";
 
 export interface ResolveLyricsContext {
   title: string;
@@ -26,10 +50,10 @@ export interface ResolveLyricsContext {
   spotifyId?: string;
   musixmatchId?: string;
   onProgress?: (event: {
-    stage: 'lyrics_searching' | 'lyrics_found';
+    stage: "lyrics_searching" | "lyrics_found";
     provider: string;
     lyricsType?: LyricsType;
-    status?: 'searching' | 'found' | 'miss' | 'fallback';
+    status?: "searching" | "found" | "miss" | "fallback";
   }) => void;
 }
 
@@ -53,7 +77,7 @@ export interface CandidateEvaluation {
 
 export function evaluateLyricsCandidate(
   candidate: ResolvedLyricsResult,
-  expectedDurationMs?: number
+  expectedDurationMs?: number,
 ): CandidateEvaluation {
   let isComplete = false;
   let lineCount = 0;
@@ -96,11 +120,14 @@ export function evaluateLyricsCandidate(
       // Without durationMs, check minimum line count and span
       isComplete = lineCount >= 4 && spanMs >= 20000;
     }
-  } else if (typeof candidate.lyrics === 'string') {
+  } else if (typeof candidate.lyrics === "string") {
     const lines = candidate.lyrics
-      .split('\n')
+      .split("\n")
       .map((l) => l.trim())
-      .filter((l) => Boolean(l) && !l.includes('This Lyrics is NOT for Commercial use'));
+      .filter(
+        (l) =>
+          Boolean(l) && !l.includes("This Lyrics is NOT for Commercial use"),
+      );
     lineCount = lines.length;
     wordCount = lines.reduce((acc, l) => acc + l.split(/\s+/).length, 0);
     isComplete = lineCount >= 4;
@@ -112,8 +139,8 @@ export function evaluateLyricsCandidate(
   // Line-by-line: 500
   // Plain text: 100
   let score = 0;
-  if (candidate.lyricsType === 'word') score += 1000;
-  else if (candidate.lyricsType === 'line') score += 500;
+  if (candidate.lyricsType === "word") score += 1000;
+  else if (candidate.lyricsType === "line") score += 500;
   else score += 100;
 
   // Vocal types detail scoring:
@@ -158,15 +185,19 @@ export class LyricsEngine {
   // Tier 2: Line-by-Line / LRC Sources (QQ Music Full LRC, NetEase LRC, Deezer Synced, Musixmatch Subtitles, LRCLIB)
   //         -> If valid complete result found, returns immediately (Tier 3 skipped).
   // Tier 3: Plain text Sources (Deezer Plain, Musixmatch Plain, LRCLIB Plain)
-  async resolveLyrics(context: ResolveLyricsContext): Promise<ResolvedLyricsResult | null> {
+  async resolveLyrics(
+    context: ResolveLyricsContext,
+  ): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
     const metadata = { title: context.title, artist };
 
     // Shared response caches across tiers to avoid duplicate network fetches
     let qqLyricsPromise: Promise<QQMusicLyricsResponse | null> | null = null;
     let deezerLyricsPromise: Promise<DeezerLyricsResponse | null> | null = null;
-    let neteaseLyricsPromise: Promise<NeteaseLyricsResponse | null> | null = null;
-    let musixmatchLyricsPromise: Promise<MusixmatchLyricsResponse | null> | null = null;
+    let neteaseLyricsPromise: Promise<NeteaseLyricsResponse | null> | null =
+      null;
+    let musixmatchLyricsPromise: Promise<MusixmatchLyricsResponse | null> | null =
+      null;
 
     const getQQLyrics = () => {
       if (!qqLyricsPromise && context.qqMusicId) {
@@ -224,10 +255,10 @@ export class LyricsEngine {
     // 1. QQ Music QRC
     if (context.qqMusicId) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'qqmusic',
-        lyricsType: 'word',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "qqmusic",
+        lyricsType: "word",
+        status: "searching",
       });
       tier1Tasks.push(
         (async () => {
@@ -237,55 +268,61 @@ export class LyricsEngine {
               const parsed = parseQrc(res.qrc, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'word',
+                  lyricsType: "word",
                   lyrics: parsed,
-                  source: 'qq-qrc',
-                  provider: 'qqmusic',
+                  source: "qq-qrc",
+                  provider: "qqmusic",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
     // 2. Deezer Word-by-Word
     if (context.deezerId) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'deezer',
-        lyricsType: 'word',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "deezer",
+        lyricsType: "word",
+        status: "searching",
       });
       tier1Tasks.push(
         (async () => {
           try {
             const res = await getDeezerLyrics();
-            if (res?.synchronizedWordByWordLines && res.synchronizedWordByWordLines.length > 0) {
-              const parsed = parseDeezerWordLyrics(res.synchronizedWordByWordLines, metadata);
+            if (
+              res?.synchronizedWordByWordLines &&
+              res.synchronizedWordByWordLines.length > 0
+            ) {
+              const parsed = parseDeezerWordLyrics(
+                res.synchronizedWordByWordLines,
+                metadata,
+              );
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'word',
+                  lyricsType: "word",
                   lyrics: parsed,
-                  source: 'deezer-word',
-                  provider: 'deezer',
+                  source: "deezer-word",
+                  provider: "deezer",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
     // 3. NetEase YRC
     if (context.neteaseId) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'netease',
-        lyricsType: 'word',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "netease",
+        lyricsType: "word",
+        status: "searching",
       });
       tier1Tasks.push(
         (async () => {
@@ -295,16 +332,16 @@ export class LyricsEngine {
               const parsed = parseYrc(res.yrc.lyric, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'word',
+                  lyricsType: "word",
                   lyrics: parsed,
-                  source: 'netease-yrc',
-                  provider: 'netease',
+                  source: "netease-yrc",
+                  provider: "netease",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -317,10 +354,10 @@ export class LyricsEngine {
       context.title
     ) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'musixmatch',
-        lyricsType: 'word',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "musixmatch",
+        lyricsType: "word",
+        status: "searching",
       });
       tier1Tasks.push(
         (async () => {
@@ -330,16 +367,16 @@ export class LyricsEngine {
               const parsed = parseMusixmatchRichSync(res.richsync, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'word',
+                  lyricsType: "word",
                   lyrics: parsed,
-                  source: 'musixmatch-richsync',
-                  provider: 'musixmatch',
+                  source: "musixmatch-richsync",
+                  provider: "musixmatch",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -348,8 +385,11 @@ export class LyricsEngine {
       const tier1Candidates: CandidateEvaluation[] = [];
 
       for (const r of tier1Results) {
-        if (r.status === 'fulfilled' && r.value) {
-          const evalResult = evaluateLyricsCandidate(r.value, context.durationMs);
+        if (r.status === "fulfilled" && r.value) {
+          const evalResult = evaluateLyricsCandidate(
+            r.value,
+            context.durationMs,
+          );
           tier1Candidates.push(evalResult);
         }
       }
@@ -359,10 +399,10 @@ export class LyricsEngine {
         completeTier1.sort((a, b) => b.score - a.score);
         const best = completeTier1[0]!.candidate;
         context.onProgress?.({
-          stage: 'lyrics_found',
+          stage: "lyrics_found",
           provider: best.provider,
           lyricsType: best.lyricsType,
-          status: 'found',
+          status: "found",
         });
         return best;
       }
@@ -376,10 +416,10 @@ export class LyricsEngine {
     // 1. QQ Music Full LRC (Checked via cached response or fcg_query_lyric_new.fcg)
     if (context.qqMusicId) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'qqmusic',
-        lyricsType: 'line',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "qqmusic",
+        lyricsType: "line",
+        status: "searching",
       });
       tier2Tasks.push(
         (async () => {
@@ -389,10 +429,10 @@ export class LyricsEngine {
               const parsed = parseLrc(cachedRes.lrc, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'line',
+                  lyricsType: "line",
                   lyrics: parsed,
-                  source: 'qq-lrc',
-                  provider: 'qqmusic',
+                  source: "qq-lrc",
+                  provider: "qqmusic",
                 };
               }
             }
@@ -401,55 +441,58 @@ export class LyricsEngine {
               const parsed = parseLrc(fullLrc, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'line',
+                  lyricsType: "line",
                   lyrics: parsed,
-                  source: 'qq-full-lrc',
-                  provider: 'qqmusic',
+                  source: "qq-full-lrc",
+                  provider: "qqmusic",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
     // 2. Deezer Synced Lines
     if (context.deezerId) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'deezer',
-        lyricsType: 'line',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "deezer",
+        lyricsType: "line",
+        status: "searching",
       });
       tier2Tasks.push(
         (async () => {
           try {
             const res = await getDeezerLyrics();
             if (res?.synchronizedLines && res.synchronizedLines.length > 0) {
-              const parsed = parseDeezerSyncedLines(res.synchronizedLines, metadata);
+              const parsed = parseDeezerSyncedLines(
+                res.synchronizedLines,
+                metadata,
+              );
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'line',
+                  lyricsType: "line",
                   lyrics: parsed,
-                  source: 'deezer-synced',
-                  provider: 'deezer',
+                  source: "deezer-synced",
+                  provider: "deezer",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
     // 3. NetEase LRC
     if (context.neteaseId) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'netease',
-        lyricsType: 'line',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "netease",
+        lyricsType: "line",
+        status: "searching",
       });
       tier2Tasks.push(
         (async () => {
@@ -459,16 +502,16 @@ export class LyricsEngine {
               const parsed = parseLrc(res.lrc.lyric, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'line',
+                  lyricsType: "line",
                   lyrics: parsed,
-                  source: 'netease-lrc',
-                  provider: 'netease',
+                  source: "netease-lrc",
+                  provider: "netease",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -481,10 +524,10 @@ export class LyricsEngine {
       context.title
     ) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'musixmatch',
-        lyricsType: 'line',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "musixmatch",
+        lyricsType: "line",
+        status: "searching",
       });
       tier2Tasks.push(
         (async () => {
@@ -494,26 +537,26 @@ export class LyricsEngine {
               const parsed = parseMusixmatchSubtitles(res.subtitles, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'line',
+                  lyricsType: "line",
                   lyrics: parsed,
-                  source: 'musixmatch-subtitles',
-                  provider: 'musixmatch',
+                  source: "musixmatch-subtitles",
+                  provider: "musixmatch",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
     // 5. LRCLIB Synced LRC
     if (context.title) {
       context.onProgress?.({
-        stage: 'lyrics_searching',
-        provider: 'lrclib',
-        lyricsType: 'line',
-        status: 'searching',
+        stage: "lyrics_searching",
+        provider: "lrclib",
+        lyricsType: "line",
+        status: "searching",
       });
       tier2Tasks.push(
         (async () => {
@@ -529,16 +572,16 @@ export class LyricsEngine {
               const parsed = parseLrc(res.syncedLyrics, metadata);
               if (parsed.length > 0) {
                 return {
-                  lyricsType: 'line',
+                  lyricsType: "line",
                   lyrics: parsed,
-                  source: 'lrclib',
-                  provider: 'lrclib',
+                  source: "lrclib",
+                  provider: "lrclib",
                 };
               }
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -547,8 +590,11 @@ export class LyricsEngine {
       const tier2Candidates: CandidateEvaluation[] = [];
 
       for (const r of tier2Results) {
-        if (r.status === 'fulfilled' && r.value) {
-          const evalResult = evaluateLyricsCandidate(r.value, context.durationMs);
+        if (r.status === "fulfilled" && r.value) {
+          const evalResult = evaluateLyricsCandidate(
+            r.value,
+            context.durationMs,
+          );
           tier2Candidates.push(evalResult);
         }
       }
@@ -558,10 +604,10 @@ export class LyricsEngine {
         completeTier2.sort((a, b) => b.score - a.score);
         const best = completeTier2[0]!.candidate;
         context.onProgress?.({
-          stage: 'lyrics_found',
+          stage: "lyrics_found",
           provider: best.provider,
           lyricsType: best.lyricsType,
-          status: 'found',
+          status: "found",
         });
         return best;
       }
@@ -580,15 +626,15 @@ export class LyricsEngine {
             const res = await getDeezerLyrics();
             if (res?.text && !isPlaceholderLyricText(res.text, metadata)) {
               return {
-                lyricsType: 'plain',
+                lyricsType: "plain",
                 lyrics: res.text,
-                source: 'deezer-plain',
-                provider: 'deezer',
+                source: "deezer-plain",
+                provider: "deezer",
               };
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -610,15 +656,15 @@ export class LyricsEngine {
               !isPlaceholderLyricText(res.plainLyrics, metadata)
             ) {
               return {
-                lyricsType: 'plain',
+                lyricsType: "plain",
                 lyrics: res.plainLyrics,
-                source: 'musixmatch-plain',
-                provider: 'musixmatch',
+                source: "musixmatch-plain",
+                provider: "musixmatch",
               };
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -640,15 +686,15 @@ export class LyricsEngine {
               !isPlaceholderLyricText(res.plainLyrics, metadata)
             ) {
               return {
-                lyricsType: 'plain',
+                lyricsType: "plain",
                 lyrics: res.plainLyrics,
-                source: 'lrclib-plain',
-                provider: 'lrclib',
+                source: "lrclib-plain",
+                provider: "lrclib",
               };
             }
           } catch {}
           return null;
-        })()
+        })(),
       );
     }
 
@@ -657,8 +703,11 @@ export class LyricsEngine {
       const tier3Candidates: CandidateEvaluation[] = [];
 
       for (const r of tier3Results) {
-        if (r.status === 'fulfilled' && r.value) {
-          const evalResult = evaluateLyricsCandidate(r.value, context.durationMs);
+        if (r.status === "fulfilled" && r.value) {
+          const evalResult = evaluateLyricsCandidate(
+            r.value,
+            context.durationMs,
+          );
           tier3Candidates.push(evalResult);
         }
       }
@@ -667,10 +716,10 @@ export class LyricsEngine {
         tier3Candidates.sort((a, b) => b.score - a.score);
         const best = tier3Candidates[0]!.candidate;
         context.onProgress?.({
-          stage: 'lyrics_found',
+          stage: "lyrics_found",
           provider: best.provider,
           lyricsType: best.lyricsType,
-          status: 'found',
+          status: "found",
         });
         return best;
       }
@@ -680,12 +729,16 @@ export class LyricsEngine {
   }
 
   formatLyrics(
-    lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null | undefined,
-    format: string = 'json'
+    lyrics:
+      | SyncedLyricsPayload
+      | string
+      | Record<string, unknown>
+      | null
+      | undefined,
+    format: string = "json",
   ): FormattedLyricsResult {
     return formatLyricsPayload(lyrics, format);
   }
 }
 
 export const defaultLyricsEngine = new LyricsEngine();
-

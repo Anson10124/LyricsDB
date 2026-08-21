@@ -1,5 +1,5 @@
-import { weapiEncrypt } from '@repo/music-resolver';
-import { isPlaceholderLyricText } from '../utils/info-lines.js';
+import { weapiEncrypt } from "@repo/music-resolver";
+import { isPlaceholderLyricText } from "../utils/info-lines.js";
 
 export interface NeteaseLyricsQueryParams {
   neteaseId?: string;
@@ -23,12 +23,12 @@ export interface NeteaseLyricsResponse {
 
 export async function fetchNeteaseLyrics(
   idOrParams: string | NeteaseLyricsQueryParams,
-  options?: { timeout?: number }
+  options?: { timeout?: number },
 ): Promise<NeteaseLyricsResponse | null> {
   try {
     let id: string | undefined;
 
-    if (typeof idOrParams === 'string') {
+    if (typeof idOrParams === "string") {
       id = idOrParams.trim();
     } else {
       id = idOrParams.neteaseId?.trim();
@@ -46,7 +46,7 @@ export async function fetchNeteaseLyrics(
       yv: 0,
       ytv: 0,
       yrv: 0,
-      csrf_token: '',
+      csrf_token: "",
     };
 
     const encrypted = weapiEncrypt(payload);
@@ -56,17 +56,20 @@ export async function fetchNeteaseLyrics(
     });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), options?.timeout ?? 8000);
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      options?.timeout ?? 8000,
+    );
 
-    const res = await fetch('https://music.163.com/weapi/song/lyric/v1', {
-      method: 'POST',
+    const res = await fetch("https://music.163.com/weapi/song/lyric/v1", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Referer: 'https://music.163.com',
+        "Content-Type": "application/x-www-form-urlencoded",
+        Referer: "https://music.163.com",
         Cookie:
-          'os=pc; osver=Microsoft-Windows-10-Professional-build-19045-64bit; appver=3.1.17.204416; channel=netease;',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          "os=pc; osver=Microsoft-Windows-10-Professional-build-19045-64bit; appver=3.1.17.204416; channel=netease;",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
       },
       body,
       signal: controller.signal,
@@ -83,8 +86,11 @@ export async function fetchNeteaseLyrics(
     }
 
     const metadata =
-      typeof idOrParams === 'object'
-        ? { title: idOrParams.title, artist: idOrParams.artist || idOrParams.artists?.[0] }
+      typeof idOrParams === "object"
+        ? {
+            title: idOrParams.title,
+            artist: idOrParams.artist || idOrParams.artists?.[0],
+          }
         : undefined;
 
     if (json.yrc?.lyric && isPlaceholderLyricText(json.yrc.lyric, metadata)) {
@@ -95,11 +101,17 @@ export async function fetchNeteaseLyrics(
       json.lrc = undefined;
     }
 
-    if (json.tlyric?.lyric && isPlaceholderLyricText(json.tlyric.lyric, metadata)) {
+    if (
+      json.tlyric?.lyric &&
+      isPlaceholderLyricText(json.tlyric.lyric, metadata)
+    ) {
       json.tlyric = undefined;
     }
 
-    if (json.romalrc?.lyric && isPlaceholderLyricText(json.romalrc.lyric, metadata)) {
+    if (
+      json.romalrc?.lyric &&
+      isPlaceholderLyricText(json.romalrc.lyric, metadata)
+    ) {
       json.romalrc = undefined;
     }
 
@@ -112,4 +124,3 @@ export async function fetchNeteaseLyrics(
     return null;
   }
 }
-

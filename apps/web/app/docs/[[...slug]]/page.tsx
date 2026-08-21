@@ -1,15 +1,15 @@
-import { source } from '@/lib/source';
-import { openapi } from '@/lib/openapi';
-import { OpenAPIPage } from '@/components/api-page';
-import { Mermaid } from '@/components/mdx/mermaid';
+import { source } from "@/lib/source";
+import { openapi } from "@/lib/openapi";
+import { OpenAPIPage } from "@/components/api-page";
+import { Mermaid } from "@/components/mdx/mermaid";
 import {
   DocsPage,
   DocsBody,
   DocsDescription,
   DocsTitle,
-} from 'fumadocs-ui/page';
-import { notFound } from 'next/navigation';
-import defaultMdxComponents from 'fumadocs-ui/mdx';
+} from "fumadocs-ui/page";
+import { notFound } from "next/navigation";
+import defaultMdxComponents from "fumadocs-ui/mdx";
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -31,10 +31,16 @@ export default async function Page(props: {
             Mermaid,
             mermaid: Mermaid,
             OpenAPIPage: async (compProps: any) => (
-              <OpenAPIPage {...(await openapi.preloadOpenAPIPage(page))} {...compProps} />
+              <OpenAPIPage
+                {...await openapi.preloadOpenAPIPage(page)}
+                {...compProps}
+              />
             ),
             APIPage: async (compProps: any) => (
-              <OpenAPIPage {...(await openapi.preloadOpenAPIPage(page))} {...compProps} />
+              <OpenAPIPage
+                {...await openapi.preloadOpenAPIPage(page)}
+                {...compProps}
+              />
             ),
           }}
         />

@@ -1,6 +1,6 @@
-import { Global, Module } from '@nestjs/common';
-import { createDatabaseClient, DatabaseClient } from '@repo/database';
-import { DATABASE_CONNECTION } from './database.constants';
+import { Global, Module } from "@nestjs/common";
+import { createDatabaseClient, DatabaseClient } from "@repo/database";
+import { DATABASE_CONNECTION } from "./database.constants";
 
 @Global()
 @Module({

@@ -1,5 +1,5 @@
-import type { EnrichedMusixmatchMetadata, ResolveOptions } from '../types.js';
-import { HttpClient } from './http.js';
+import type { EnrichedMusixmatchMetadata, ResolveOptions } from "../types.js";
+import { HttpClient } from "./http.js";
 
 export interface MusixmatchMatchParams {
   spotifyId?: string;
@@ -12,12 +12,15 @@ export interface MusixmatchMatchParams {
 
 export interface MusixmatchMatcherOptions extends ResolveOptions {
   apiUrl?: string;
-  getToken?: (options?: ResolveOptions, forceRefresh?: boolean) => Promise<string>;
+  getToken?: (
+    options?: ResolveOptions,
+    forceRefresh?: boolean,
+  ) => Promise<string>;
 }
 
 function generateRandomId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz';
-  let result = '';
+  const chars = "abcdefghijklmnopqrstuvwxyz";
+  let result = "";
   for (let i = 0; i < 8; i++) {
     result += chars[Math.floor(Math.random() * chars.length)];
   }
@@ -38,15 +41,15 @@ async function fetchAnonymousTokenFallback(timeout = 8000): Promise<string> {
         };
       }>(url, {
         headers: {
-          authority: 'apic-desktop.musixmatch.com',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          authority: "apic-desktop.musixmatch.com",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
         },
         timeout,
       });
 
       const token = res?.message?.body?.user_token;
-      if (token && token !== 'Upgrade. Paid script.') {
+      if (token && token !== "Upgrade. Paid script.") {
         return token;
       }
     } catch {
@@ -58,7 +61,7 @@ async function fetchAnonymousTokenFallback(timeout = 8000): Promise<string> {
     }
   }
 
-  throw new Error('Failed to acquire Musixmatch token in matcher');
+  throw new Error("Failed to acquire Musixmatch token in matcher");
 }
 
 interface MusixmatchTrackResponse {
@@ -87,7 +90,7 @@ interface MusixmatchTrackResponse {
 
 export async function matchTrackWithMusixmatch(
   params: MusixmatchMatchParams,
-  options?: MusixmatchMatcherOptions
+  options?: MusixmatchMatcherOptions,
 ): Promise<EnrichedMusixmatchMetadata | null> {
   const spotifyId = params.spotifyId?.trim();
   const appleMusicId = params.appleMusicId?.trim();
@@ -100,37 +103,44 @@ export async function matchTrackWithMusixmatch(
     return null;
   }
 
-  const baseUrl = options?.apiUrl || 'https://apic-desktop.musixmatch.com/ws/1.1/matcher.track.get';
+  const baseUrl =
+    options?.apiUrl ||
+    "https://apic-desktop.musixmatch.com/ws/1.1/matcher.track.get";
 
-  const executeMatcherCall = async (token: string): Promise<MusixmatchTrackResponse | null> => {
+  const executeMatcherCall = async (
+    token: string,
+  ): Promise<MusixmatchTrackResponse | null> => {
     const url = new URL(baseUrl);
-    url.searchParams.set('app_id', 'web-desktop-app-v1.0');
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('usertoken', token);
-    url.searchParams.set('t', generateRandomId());
+    url.searchParams.set("app_id", "web-desktop-app-v1.0");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("usertoken", token);
+    url.searchParams.set("t", generateRandomId());
 
     if (spotifyId) {
-      url.searchParams.set('track_spotify_id', spotifyId);
+      url.searchParams.set("track_spotify_id", spotifyId);
     } else if (appleMusicId) {
-      url.searchParams.set('track_itunes_id', appleMusicId);
+      url.searchParams.set("track_itunes_id", appleMusicId);
     } else if (isrc) {
-      url.searchParams.set('track_isrc', isrc);
+      url.searchParams.set("track_isrc", isrc);
     } else if (title) {
-      url.searchParams.set('q_track', title);
+      url.searchParams.set("q_track", title);
       if (artist) {
-        url.searchParams.set('q_artist', artist);
+        url.searchParams.set("q_artist", artist);
       }
       if (params.durationMs && params.durationMs > 0) {
-        url.searchParams.set('q_duration', String(Math.round(params.durationMs / 1000)));
+        url.searchParams.set(
+          "q_duration",
+          String(Math.round(params.durationMs / 1000)),
+        );
       }
     }
 
     try {
       return await HttpClient.get<MusixmatchTrackResponse>(url.toString(), {
         headers: {
-          authority: 'apic-desktop.musixmatch.com',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          authority: "apic-desktop.musixmatch.com",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
         },
         timeout: options?.timeout ?? 8000,
         retries: 0,
@@ -164,12 +174,14 @@ export async function matchTrackWithMusixmatch(
 
     const extractedIsrc =
       tr.track_isrc?.trim() ||
-      (Array.isArray(tr.commontrack_isrcs) && tr.commontrack_isrcs[0]?.[0]?.trim()) ||
+      (Array.isArray(tr.commontrack_isrcs) &&
+        tr.commontrack_isrcs[0]?.[0]?.trim()) ||
       undefined;
 
     const extractedSpotifyId =
       tr.track_spotify_id?.trim() ||
-      (Array.isArray(tr.commontrack_spotify_ids) && tr.commontrack_spotify_ids[0]?.trim()) ||
+      (Array.isArray(tr.commontrack_spotify_ids) &&
+        tr.commontrack_spotify_ids[0]?.trim()) ||
       undefined;
 
     const extractedAppleId =
@@ -182,7 +194,9 @@ export async function matchTrackWithMusixmatch(
       spotifyId: extractedSpotifyId,
       spotifyIds: tr.commontrack_spotify_ids?.filter(Boolean),
       appleMusicId: extractedAppleId,
-      appleMusicIds: tr.commontrack_itunes_ids?.map((id) => String(id)).filter(Boolean),
+      appleMusicIds: tr.commontrack_itunes_ids
+        ?.map((id) => String(id))
+        .filter(Boolean),
       musixmatchId: tr.track_id ? String(tr.track_id) : undefined,
       title: tr.track_name,
       artist: tr.artist_name,

@@ -36,7 +36,7 @@ export function InputBar({ onSearch, isLoading = false }: InputBarProps) {
           "relative flex items-center gap-2 rounded-2xl border px-4 py-2.5 transition-colors duration-300",
           isFocused
             ? "border-primary/50 bg-background/95 ring-2 ring-primary/20"
-            : "border-border/70 bg-card/80 hover:border-border hover:bg-card/95"
+            : "border-border/70 bg-card/80 hover:border-border hover:bg-card/95",
         )}
       >
         <div className="flex shrink-0 items-center justify-center text-muted-foreground">
@@ -93,4 +93,3 @@ export function InputBar({ onSearch, isLoading = false }: InputBarProps) {
     </form>
   );
 }
-

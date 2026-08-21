@@ -1,13 +1,13 @@
-import { AppleMusicAdapter } from './adapters/apple-music.js';
-import { DeezerAdapter } from './adapters/deezer.js';
-import { NeteaseAdapter } from './adapters/netease.js';
-import { QQMusicAdapter } from './adapters/qq-music.js';
-import { SpotifyAdapter } from './adapters/spotify.js';
-import { AppleMusicParser } from './parsers/apple-music.js';
-import { DeezerParser } from './parsers/deezer.js';
-import { NeteaseParser } from './parsers/netease.js';
-import { QQMusicParser } from './parsers/qq-music.js';
-import { SpotifyParser } from './parsers/spotify.js';
+import { AppleMusicAdapter } from "./adapters/apple-music.js";
+import { DeezerAdapter } from "./adapters/deezer.js";
+import { NeteaseAdapter } from "./adapters/netease.js";
+import { QQMusicAdapter } from "./adapters/qq-music.js";
+import { SpotifyAdapter } from "./adapters/spotify.js";
+import { AppleMusicParser } from "./parsers/apple-music.js";
+import { DeezerParser } from "./parsers/deezer.js";
+import { NeteaseParser } from "./parsers/netease.js";
+import { QQMusicParser } from "./parsers/qq-music.js";
+import { SpotifyParser } from "./parsers/spotify.js";
 import type {
   EnrichedMusixmatchMetadata,
   MusicAdapter,
@@ -17,14 +17,18 @@ import type {
   ResolveResult,
   ResolvedLink,
   TrackMetadata,
-} from './types.js';
-import { matchTrackWithMusixmatch } from './utils/musixmatch-matcher.js';
-import { cleanSearchQuery, normalizeSongTitle, splitArtists } from './utils/query.js';
+} from "./types.js";
+import { matchTrackWithMusixmatch } from "./utils/musixmatch-matcher.js";
+import {
+  cleanSearchQuery,
+  normalizeSongTitle,
+  splitArtists,
+} from "./utils/query.js";
 
 export class MusicResolver {
   private parsers = new Map<string, MusicParser>();
   private adapters = new Map<string, MusicAdapter>();
-  private musixmatchConfig?: ResolverConfig['musixmatch'];
+  private musixmatchConfig?: ResolverConfig["musixmatch"];
 
   constructor(config?: ResolverConfig) {
     this.musixmatchConfig = config?.musixmatch;
@@ -34,7 +38,7 @@ export class MusicResolver {
       new AppleMusicParser({
         lookupUrl: config?.appleMusic?.lookupUrl,
         country: config?.appleMusic?.country,
-      })
+      }),
     );
     this.registerParser(new SpotifyParser());
     this.registerParser(new DeezerParser());
@@ -46,29 +50,29 @@ export class MusicResolver {
       new AppleMusicAdapter({
         apiUrl: config?.appleMusic?.apiUrl,
         country: config?.appleMusic?.country,
-      })
+      }),
     );
     this.registerAdapter(
       new SpotifyAdapter({
         apiUrl: config?.spotify?.apiUrl,
         baseUrl: config?.spotify?.baseUrl,
         getToken: config?.spotify?.getToken,
-      })
+      }),
     );
     this.registerAdapter(
       new DeezerAdapter({
         apiUrl: config?.deezer?.apiUrl,
-      })
+      }),
     );
     this.registerAdapter(
       new NeteaseAdapter({
         apiUrl: config?.netease?.apiUrl,
-      })
+      }),
     );
     this.registerAdapter(
       new QQMusicAdapter({
         apiUrl: config?.qqMusic?.apiUrl,
-      })
+      }),
     );
   }
 
@@ -123,15 +127,15 @@ export class MusicResolver {
     metadata: TrackMetadata,
     sourcePlatform: string,
     sourceId: string,
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<EnrichedMusixmatchMetadata | null> {
     try {
       const params: Parameters<typeof matchTrackWithMusixmatch>[0] = {};
 
       const normSource = sourcePlatform.toLowerCase();
-      if (normSource === 'spotify') {
+      if (normSource === "spotify") {
         params.spotifyId = sourceId;
-      } else if (normSource === 'applemusic' || normSource === 'apple') {
+      } else if (normSource === "applemusic" || normSource === "apple") {
         params.appleMusicId = sourceId;
       } else if (metadata.isrc) {
         params.isrc = metadata.isrc;
@@ -169,19 +173,32 @@ export class MusicResolver {
     adapter: MusicAdapter,
     query: string,
     metadata: TrackMetadata,
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<ResolvedLink | null> {
     try {
       let result = await adapter.search(query, metadata, options);
 
       // If primary search yielded no verified match, try fallback with raw title + primary artist
-      if ((!result || !result.isVerified) && metadata.cleanTitle && metadata.cleanTitle !== metadata.title) {
+      if (
+        (!result || !result.isVerified) &&
+        metadata.cleanTitle &&
+        metadata.cleanTitle !== metadata.title
+      ) {
         const fallbackQuery = cleanSearchQuery(
-          metadata.artist ? `${metadata.cleanTitle} ${metadata.artist}` : metadata.cleanTitle
+          metadata.artist
+            ? `${metadata.cleanTitle} ${metadata.artist}`
+            : metadata.cleanTitle,
         );
         if (fallbackQuery !== query) {
-          const fallbackResult = await adapter.search(fallbackQuery, metadata, options);
-          if (fallbackResult && (fallbackResult.score || 0) > (result?.score || 0)) {
+          const fallbackResult = await adapter.search(
+            fallbackQuery,
+            metadata,
+            options,
+          );
+          if (
+            fallbackResult &&
+            (fallbackResult.score || 0) > (result?.score || 0)
+          ) {
             result = fallbackResult;
           }
         }
@@ -197,7 +214,7 @@ export class MusicResolver {
   async resolve(
     url: string,
     targetPlatforms?: string[],
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<ResolveResult> {
     const parser = this.getParserForUrl(url);
     if (!parser) {
@@ -208,12 +225,14 @@ export class MusicResolver {
     const sourceId = parsedInfo.id;
     const resolveOpts: ResolveOptions = {
       ...options,
-      preferredCountry: options?.preferredCountry || (parsedInfo as { storefront?: string }).storefront,
+      preferredCountry:
+        options?.preferredCountry ||
+        (parsedInfo as { storefront?: string }).storefront,
     };
 
     options?.onProgress?.({
-      stage: 'resolving',
-      step: 'extracting_metadata',
+      stage: "resolving",
+      step: "extracting_metadata",
       platform: parser.id,
       id: sourceId,
     });
@@ -222,8 +241,8 @@ export class MusicResolver {
     const metadata = this.normalizeMetadata(rawMetadata);
 
     options?.onProgress?.({
-      stage: 'resolving',
-      step: 'parsed_metadata',
+      stage: "resolving",
+      step: "parsed_metadata",
       data: {
         title: metadata.title,
         artist: metadata.artist,
@@ -236,11 +255,16 @@ export class MusicResolver {
     });
 
     // Cross-platform metadata enrichment via Musixmatch (fills ISRC and Album if missing)
-    const enriched = await this.enrichMetadata(metadata, parser.id, sourceId, resolveOpts);
+    const enriched = await this.enrichMetadata(
+      metadata,
+      parser.id,
+      sourceId,
+      resolveOpts,
+    );
     if (enriched?.isrc && !rawMetadata.isrc) {
       options?.onProgress?.({
-        stage: 'resolving',
-        step: 'enriched_isrc',
+        stage: "resolving",
+        step: "enriched_isrc",
         data: {
           isrc: enriched.isrc,
         },
@@ -258,11 +282,11 @@ export class MusicResolver {
       id: sourceId,
       isVerified: true,
       score: 1,
-      matchReason: 'direct',
+      matchReason: "direct",
     };
 
     options?.onProgress?.({
-      stage: 'platform_matched',
+      stage: "platform_matched",
       platform: parser.id,
       id: sourceId,
       score: 1,
@@ -270,21 +294,29 @@ export class MusicResolver {
 
     // Query all other requested adapters concurrently
     const adapterPromises = platformKeys
-      .filter((platformId) => platformId !== parser.id && this.adapters.has(platformId))
+      .filter(
+        (platformId) =>
+          platformId !== parser.id && this.adapters.has(platformId),
+      )
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
         options?.onProgress?.({
-          stage: 'resolving',
-          step: 'searching_adapter',
+          stage: "resolving",
+          step: "searching_adapter",
           platform: platformId,
         });
 
-        const res = await this.queryAdapterWithFallback(adapter, query, metadata, resolveOpts);
+        const res = await this.queryAdapterWithFallback(
+          adapter,
+          query,
+          metadata,
+          resolveOpts,
+        );
         links[platformId] = res;
 
         if (res?.isVerified || (res?.score || 0) >= 0.8) {
           options?.onProgress?.({
-            stage: 'platform_matched',
+            stage: "platform_matched",
             platform: platformId,
             id: res?.id,
             score: res?.score,
@@ -297,36 +329,36 @@ export class MusicResolver {
     // Fill in platform links from Musixmatch cross-platform mapping if adapter search yielded unverified result
     if (enriched) {
       if (
-        (!links['spotify'] || !links['spotify'].isVerified) &&
+        (!links["spotify"] || !links["spotify"].isVerified) &&
         enriched.spotifyId &&
-        this.adapters.has('spotify') &&
-        parser.id !== 'spotify'
+        this.adapters.has("spotify") &&
+        parser.id !== "spotify"
       ) {
-        links['spotify'] = {
-          platform: 'spotify',
+        links["spotify"] = {
+          platform: "spotify",
           url: `https://open.spotify.com/track/${enriched.spotifyId}`,
           id: enriched.spotifyId,
           isVerified: true,
           score: 0.95,
-          matchReason: 'isrc',
+          matchReason: "isrc",
         };
       }
 
-      const appleKey = links['appleMusic'] ? 'appleMusic' : 'applemusic';
+      const appleKey = links["appleMusic"] ? "appleMusic" : "applemusic";
       if (
         (!links[appleKey] || !links[appleKey]?.isVerified) &&
         enriched.appleMusicId &&
-        this.adapters.has('appleMusic') &&
-        parser.id !== 'appleMusic' &&
-        parser.id !== 'applemusic'
+        this.adapters.has("appleMusic") &&
+        parser.id !== "appleMusic" &&
+        parser.id !== "applemusic"
       ) {
-        links['appleMusic'] = {
-          platform: 'appleMusic',
+        links["appleMusic"] = {
+          platform: "appleMusic",
           url: `https://music.apple.com/song/${enriched.appleMusicId}`,
           id: enriched.appleMusicId,
           isVerified: true,
           score: 0.95,
-          matchReason: 'isrc',
+          matchReason: "isrc",
         };
       }
     }
@@ -335,7 +367,12 @@ export class MusicResolver {
     if (!metadata.album) {
       for (const link of Object.values(links)) {
         const rawAlbum = (link?.raw as { album?: string })?.album;
-        if (link?.isVerified && rawAlbum && typeof rawAlbum === 'string' && rawAlbum.trim()) {
+        if (
+          link?.isVerified &&
+          rawAlbum &&
+          typeof rawAlbum === "string" &&
+          rawAlbum.trim()
+        ) {
           metadata.album = rawAlbum.trim();
           break;
         }
@@ -357,12 +394,12 @@ export class MusicResolver {
     query: string,
     metadata: TrackMetadata,
     targetPlatforms?: string[],
-    options?: ResolveOptions
+    options?: ResolveOptions,
   ): Promise<Record<string, ResolvedLink | null>> {
     const normalizedMeta = this.normalizeMetadata(metadata);
 
     // Enrich metadata if ISRC missing
-    await this.enrichMetadata(normalizedMeta, '', '', options);
+    await this.enrichMetadata(normalizedMeta, "", "", options);
 
     const platformKeys = targetPlatforms ?? Array.from(this.adapters.keys());
     const links: Record<string, ResolvedLink | null> = {};
@@ -371,11 +408,15 @@ export class MusicResolver {
       .filter((platformId) => this.adapters.has(platformId))
       .map(async (platformId) => {
         const adapter = this.adapters.get(platformId)!;
-        links[platformId] = await this.queryAdapterWithFallback(adapter, query, normalizedMeta, options);
+        links[platformId] = await this.queryAdapterWithFallback(
+          adapter,
+          query,
+          normalizedMeta,
+          options,
+        );
       });
 
     await Promise.all(adapterPromises);
     return links;
   }
 }
-

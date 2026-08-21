@@ -1,4 +1,4 @@
-import type { LyricsType, SyncedLyricsPayload } from './lyrics.js';
+import type { LyricsType, SyncedLyricsPayload } from "./lyrics.js";
 
 export interface TrackRecord {
   id: string;
@@ -15,6 +15,7 @@ export interface TrackRecord {
   artworkUrl?: string | null;
   lyricsType?: LyricsType | null;
   lyrics?: SyncedLyricsPayload | string | null;
+  lyricsStoragePath?: string | null;
   lyricsProvider?: string | null;
   isVerified: boolean;
   createdAt: Date | string;
@@ -32,6 +33,9 @@ export interface GetLyricsOptions extends GetOrSyncTrackOptions {
   format?: string;
 }
 
-export type SanitizedTrack<T extends { lyrics?: unknown }> = Omit<T, 'lyrics'> & {
+export type SanitizedTrack<T extends { lyrics?: unknown }> = Omit<
+  T,
+  "lyrics"
+> & {
   hasLyrics: boolean;
 };

@@ -18,7 +18,7 @@ export type CompactLyricWord = [
 // A line of lyrics containing one or more word tokens.
 export type CompactLyricLine = CompactLyricWord[];
 
-export type LyricsType = 'word' | 'line' | 'plain';
+export type LyricsType = "word" | "line" | "plain";
 
 // Array of lines: CompactLyricLine[]
 //
@@ -29,17 +29,17 @@ export type LyricsType = 'word' | 'line' | 'plain';
 export type SyncedLyricsPayload = CompactLyricLine[];
 
 export type SupportedLyricFormat =
-  | 'ttml'
-  | 'lrc'
-  | 'lrca2'
-  | 'yrc'
-  | 'qrc'
-  | 'eslrc'
-  | 'ass'
-  | 'lyl'
-  | 'lys'
-  | 'lqe'
-  | 'json';
+  | "ttml"
+  | "lrc"
+  | "lrca2"
+  | "yrc"
+  | "qrc"
+  | "eslrc"
+  | "ass"
+  | "lyl"
+  | "lys"
+  | "lqe"
+  | "json";
 
 export interface FormattedLyricsResult {
   content: string | SyncedLyricsPayload | Record<string, unknown>;

@@ -10,9 +10,19 @@ import {
 } from "@applemusic-like-lyrics/lyric";
 import type { CompactLyricWord, SyncedLyricsPayload } from "@repo/types";
 
-export type LyricsViewFormat = "synced" | "ttml" | "lrc" | "eslrc" | "yrc" | "qrc" | "ass" | "json";
+export type LyricsViewFormat =
+  | "synced"
+  | "ttml"
+  | "lrc"
+  | "eslrc"
+  | "yrc"
+  | "qrc"
+  | "ass"
+  | "json";
 
-export function convertCompactToAmllLines(payload: SyncedLyricsPayload): LyricLine[] {
+export function convertCompactToAmllLines(
+  payload: SyncedLyricsPayload,
+): LyricLine[] {
   if (!payload || !Array.isArray(payload)) {
     return [];
   }
@@ -99,12 +109,19 @@ export function formatXml(xml: string, indent = "  "): string {
       }
     }
 
-    if (token.startsWith("<?") || token.startsWith("<!") || token.startsWith("<!--")) {
+    if (
+      token.startsWith("<?") ||
+      token.startsWith("<!") ||
+      token.startsWith("<!--")
+    ) {
       formatted += `${indent.repeat(pad)}${token}\n`;
     } else if (token.startsWith("</")) {
       pad = Math.max(0, pad - 1);
       formatted += `${indent.repeat(pad)}${token}\n`;
-    } else if (token.startsWith("<") && (token.endsWith("/>") || token.endsWith("/ >"))) {
+    } else if (
+      token.startsWith("<") &&
+      (token.endsWith("/>") || token.endsWith("/ >"))
+    ) {
       formatted += `${indent.repeat(pad)}${token}\n`;
     } else if (token.startsWith("<")) {
       formatted += `${indent.repeat(pad)}${token}\n`;
@@ -120,7 +137,7 @@ export function formatXml(xml: string, indent = "  "): string {
 export function formatLyricsOnClient(
   payload: SyncedLyricsPayload | null | undefined,
   format: LyricsViewFormat,
-  metadata: { title?: string; artist?: string; album?: string } = {}
+  metadata: { title?: string; artist?: string; album?: string } = {},
 ): string {
   if (!payload || !Array.isArray(payload) || payload.length === 0) {
     return "";
@@ -132,8 +149,14 @@ export function formatLyricsOnClient(
     switch (format) {
       case "ttml": {
         const generator = new TTMLGenerator({
-          domImplementation: typeof document !== "undefined" ? document.implementation : undefined,
-          xmlSerializer: typeof XMLSerializer !== "undefined" ? new XMLSerializer() : undefined,
+          domImplementation:
+            typeof document !== "undefined"
+              ? document.implementation
+              : undefined,
+          xmlSerializer:
+            typeof XMLSerializer !== "undefined"
+              ? new XMLSerializer()
+              : undefined,
         });
         const ttmlLines = amllLines.map((line) => ({
           ...line,
@@ -145,7 +168,9 @@ export function formatLyricsOnClient(
           })),
         }));
         const rawXml = generator.generate({
-          lines: ttmlLines as unknown as Parameters<typeof generator.generate>[0]["lines"],
+          lines: ttmlLines as unknown as Parameters<
+            typeof generator.generate
+          >[0]["lines"],
           metadata: {
             title: metadata.title ? [metadata.title] : undefined,
             artist: metadata.artist ? [metadata.artist] : undefined,

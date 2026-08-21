@@ -1,17 +1,21 @@
-import type { FormattedLyricsResult, SupportedLyricFormat } from './lyrics.js';
-import type { GetOrSyncTrackOptions, SanitizedTrack, TrackRecord } from './track.js';
+import type { FormattedLyricsResult, SupportedLyricFormat } from "./lyrics.js";
+import type {
+  GetOrSyncTrackOptions,
+  SanitizedTrack,
+  TrackRecord,
+} from "./track.js";
 
 export type StreamEventStage =
-  | 'init'
-  | 'cache_hit'
-  | 'cache_miss'
-  | 'resolving'
-  | 'platform_matched'
-  | 'lyrics_searching'
-  | 'lyrics_found'
-  | 'saving'
-  | 'done'
-  | 'error';
+  | "init"
+  | "cache_hit"
+  | "cache_miss"
+  | "resolving"
+  | "platform_matched"
+  | "lyrics_searching"
+  | "lyrics_found"
+  | "saving"
+  | "done"
+  | "error";
 
 export interface ProgressLogEvent {
   stage: StreamEventStage;
@@ -26,7 +30,7 @@ export interface StreamLyricsOptions extends GetOrSyncTrackOptions {
 
 export interface StreamLyricsDonePayload {
   track: SanitizedTrack<TrackRecord>;
-  lyrics?: FormattedLyricsResult['content'];
+  lyrics?: FormattedLyricsResult["content"];
   format?: string;
   contentType?: string;
 }

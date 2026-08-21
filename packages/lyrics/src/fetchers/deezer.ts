@@ -1,5 +1,12 @@
-import { getDeezerJwt, refreshDeezerJwt, type DatabaseClient } from '@repo/database';
-import type { DeezerSyncedLine, DeezerWordByWordLine } from '../parsers/deezer.js';
+import {
+  getDeezerJwt,
+  refreshDeezerJwt,
+  type DatabaseClient,
+} from "@repo/database";
+import type {
+  DeezerSyncedLine,
+  DeezerWordByWordLine,
+} from "../parsers/deezer.js";
 
 export interface DeezerLyricsQueryParams {
   deezerId?: string;
@@ -72,18 +79,25 @@ fragment SynchronizedLines on Lyrics {
 
 export async function fetchDeezerLyrics(
   idOrParams: string | DeezerLyricsQueryParams,
-  options?: DeezerFetchOptions
+  options?: DeezerFetchOptions,
 ): Promise<DeezerLyricsResponse | null> {
-  const deezerId = typeof idOrParams === 'string' ? idOrParams.trim() : idOrParams.deezerId?.trim();
+  const deezerId =
+    typeof idOrParams === "string"
+      ? idOrParams.trim()
+      : idOrParams.deezerId?.trim();
   if (!deezerId) return null;
 
   try {
-    let token = await getDeezerJwt(options?.dbClient, { timeout: options?.timeout });
+    let token = await getDeezerJwt(options?.dbClient, {
+      timeout: options?.timeout,
+    });
     let res = await executeDeezerLyricsQuery(deezerId, token, options?.timeout);
 
     // If 401 Unauthorized, refresh JWT and retry once
     if (res.status === 401) {
-      token = await refreshDeezerJwt(options?.dbClient, { timeout: options?.timeout });
+      token = await refreshDeezerJwt(options?.dbClient, {
+        timeout: options?.timeout,
+      });
       res = await executeDeezerLyricsQuery(deezerId, token, options?.timeout);
     }
 
@@ -110,22 +124,22 @@ export async function fetchDeezerLyrics(
 async function executeDeezerLyricsQuery(
   trackId: string,
   token: string,
-  timeout = 8000
+  timeout = 8000,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch('https://pipe.deezer.com/api', {
-      method: 'POST',
+    const res = await fetch("https://pipe.deezer.com/api", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
       },
       body: JSON.stringify({
-        operationName: 'GetLyrics',
+        operationName: "GetLyrics",
         variables: { trackId },
         query: GET_LYRICS_QUERY,
       }),

@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Music2 } from "lucide-react";
-import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
+import type {
+  SanitizedTrack,
+  SyncedLyricsPayload,
+  TrackRecord,
+} from "@repo/types";
 import {
   formatLyricsOnClient,
   formatXml,
@@ -27,7 +31,8 @@ function formatDuration(ms?: number): string {
 }
 
 export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
-  const [selectedFormat, setSelectedFormat] = useState<LyricsViewFormat>("synced");
+  const [selectedFormat, setSelectedFormat] =
+    useState<LyricsViewFormat>("synced");
 
   const isSyncedPayload = Array.isArray(rawLyrics);
 
@@ -41,11 +46,15 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
     }
     if (selectedFormat === "synced") return "";
 
-    return formatLyricsOnClient(rawLyrics as SyncedLyricsPayload, selectedFormat, {
-      title: track.title,
-      artist: track.artists?.join(", "),
-      album: track.album || undefined,
-    });
+    return formatLyricsOnClient(
+      rawLyrics as SyncedLyricsPayload,
+      selectedFormat,
+      {
+        title: track.title,
+        artist: track.artists?.join(", "),
+        album: track.album || undefined,
+      },
+    );
   }, [rawLyrics, selectedFormat, track]);
 
   return (
@@ -100,9 +109,20 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
           </p>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground/80 flex-wrap pt-1">
-            {track.durationMs ? <span>{formatDuration(track.durationMs)}</span> : null}
-            {track.lyricsProvider ? <span>Provider: <span className="font-semibold uppercase">{track.lyricsProvider}</span></span> : null}
-            {track.isrc ? <span className="font-mono">ISRC: {track.isrc}</span> : null}
+            {track.durationMs ? (
+              <span>{formatDuration(track.durationMs)}</span>
+            ) : null}
+            {track.lyricsProvider ? (
+              <span>
+                Provider:{" "}
+                <span className="font-semibold uppercase">
+                  {track.lyricsProvider}
+                </span>
+              </span>
+            ) : null}
+            {track.isrc ? (
+              <span className="font-mono">ISRC: {track.isrc}</span>
+            ) : null}
           </div>
 
           {/* Streaming Platform links */}
@@ -146,7 +166,16 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
 
       {/* Format Selector Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5">
-        {(["synced", "ttml", "lrc", "eslrc", "ass", "json"] as LyricsViewFormat[]).map((fmt) => (
+        {(
+          [
+            "synced",
+            "ttml",
+            "lrc",
+            "eslrc",
+            "ass",
+            "json",
+          ] as LyricsViewFormat[]
+        ).map((fmt) => (
           <button
             key={fmt}
             type="button"
@@ -167,12 +196,21 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
       {!rawLyrics ? (
         <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2 min-h-[300px]">
           <Music2 className="size-10 stroke-2 text-primary opacity-60" />
-          <p className="text-sm font-medium">We couldn't find lyrics for this track.</p>
+          <p className="text-sm font-medium">
+            We couldn't find lyrics for this track.
+          </p>
         </div>
       ) : selectedFormat === "synced" && isSyncedPayload ? (
-        <AmllPlayer track={track} rawLyrics={rawLyrics as SyncedLyricsPayload} />
+        <AmllPlayer
+          track={track}
+          rawLyrics={rawLyrics as SyncedLyricsPayload}
+        />
       ) : (
-        <LyricsCodeViewer format={selectedFormat} code={formattedText} track={track} />
+        <LyricsCodeViewer
+          format={selectedFormat}
+          code={formattedText}
+          track={track}
+        />
       )}
     </div>
   );

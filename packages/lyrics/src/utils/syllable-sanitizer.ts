@@ -1,4 +1,4 @@
-import type { CompactLyricWord, SyncedLyricsPayload } from '@repo/types';
+import type { CompactLyricWord, SyncedLyricsPayload } from "@repo/types";
 
 // Detects Hanzi and Kana split characters (Korean Hangul is excluded to keep blocks together)
 function isZhJaSplitChar(ch: string): boolean {
@@ -14,9 +14,22 @@ function isZhJaSplitChar(ch: string): boolean {
   return false;
 }
 
-const TRAILING_PUNCTUATION = new Set([',', '.', '?', '!', '"', ':', ';', '”', '’', '…']);
+const TRAILING_PUNCTUATION = new Set([
+  ",",
+  ".",
+  "?",
+  "!",
+  '"',
+  ":",
+  ";",
+  "”",
+  "’",
+  "…",
+]);
 
-export function standardizeSyllables(payload: SyncedLyricsPayload): SyncedLyricsPayload {
+export function standardizeSyllables(
+  payload: SyncedLyricsPayload,
+): SyncedLyricsPayload {
   if (!Array.isArray(payload)) return payload;
 
   const resultLines: SyncedLyricsPayload = [];
@@ -32,7 +45,7 @@ export function standardizeSyllables(payload: SyncedLyricsPayload): SyncedLyrics
 
     for (let i = 0; i < line.length; i++) {
       const token = line[i]!;
-      const text = token[3] ?? '';
+      const text = token[3] ?? "";
 
       // Skip empty tokens
       if (text.length === 0) {
@@ -40,14 +53,14 @@ export function standardizeSyllables(payload: SyncedLyricsPayload): SyncedLyrics
       }
 
       // If lone space token, append space to previous token
-      if (text === ' ') {
+      if (text === " ") {
         if (cleanedLine.length > 0) {
           const prev = cleanedLine[cleanedLine.length - 1]!;
           cleanedLine[cleanedLine.length - 1] = [
             prev[0],
             prev[1],
             prev[2] + token[2],
-            prev[3] + ' ',
+            prev[3] + " ",
           ];
         }
         continue;
@@ -57,7 +70,7 @@ export function standardizeSyllables(payload: SyncedLyricsPayload): SyncedLyrics
       if (
         cleanedLine.length > 0 &&
         text.length <= 2 &&
-        TRAILING_PUNCTUATION.has(text.trim()[0] || '')
+        TRAILING_PUNCTUATION.has(text.trim()[0] || "")
       ) {
         const prev = cleanedLine[cleanedLine.length - 1]!;
         cleanedLine[cleanedLine.length - 1] = [
@@ -107,8 +120,8 @@ export function standardizeSyllables(payload: SyncedLyricsPayload): SyncedLyrics
 
           let tokenText = ch;
           // Add trailing space on final char if original token had space
-          if (idx === chars.length - 1 && text.endsWith(' ')) {
-            tokenText += ' ';
+          if (idx === chars.length - 1 && text.endsWith(" ")) {
+            tokenText += " ";
           }
 
           splitLine.push([vocalType, curStartMs, durMs, tokenText]);

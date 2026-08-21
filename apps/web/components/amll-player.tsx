@@ -3,18 +3,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Play, Pause, RotateCcw } from "lucide-react";
-import type { SanitizedTrack, SyncedLyricsPayload, TrackRecord } from "@repo/types";
+import type {
+  SanitizedTrack,
+  SyncedLyricsPayload,
+  TrackRecord,
+} from "@repo/types";
 import { convertCompactToAmllLines } from "@/lib/lyrics-formatter";
 import "@applemusic-like-lyrics/core/style.css";
 
 const LyricPlayer = dynamic(
   () => import("@applemusic-like-lyrics/react").then((mod) => mod.LyricPlayer),
-  { ssr: false }
+  { ssr: false },
 );
 
 const BackgroundRender = dynamic(
-  () => import("@applemusic-like-lyrics/react").then((mod) => mod.BackgroundRender),
-  { ssr: false }
+  () =>
+    import("@applemusic-like-lyrics/react").then((mod) => mod.BackgroundRender),
+  { ssr: false },
 );
 
 interface AmllPlayerProps {
@@ -28,7 +33,10 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   const [isClient, setIsClient] = useState(false);
 
   const durationMs = track.durationMs || 180000;
-  const lyricLines = useMemo(() => convertCompactToAmllLines(rawLyrics), [rawLyrics]);
+  const lyricLines = useMemo(
+    () => convertCompactToAmllLines(rawLyrics),
+    [rawLyrics],
+  );
 
   const lastFrameTimeRef = useRef<number | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
