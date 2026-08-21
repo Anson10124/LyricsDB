@@ -168,7 +168,7 @@ export function formatLyricsOnClient(
             endTime: w.endTime,
           })),
         }));
-        const rawXml = generator.generate({
+        let rawXml = generator.generate({
           lines: ttmlLines as unknown as Parameters<
             typeof generator.generate
           >[0]["lines"],
@@ -178,6 +178,41 @@ export function formatLyricsOnClient(
             album: metadata.album ? [metadata.album] : undefined,
           },
         });
+
+        // Ensure background vocals have ttm:role="x-bg" and duets have ttm:agent="v2"
+        for (let i = 0; i < amllLines.length; i++) {
+          const line = amllLines[i]!;
+          const key = `L${i + 1}`;
+          if (line.isBG) {
+            const pRegex = new RegExp(
+              `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*)(>)`,
+              "g",
+            );
+            rawXml = rawXml.replace(pRegex, (m, p1, p2) => {
+              if (!p1.includes('ttm:role="x-bg"')) {
+                return `${p1} ttm:role="x-bg"${p2}`;
+              }
+              return m;
+            });
+          }
+          if (line.isDuet) {
+            const pRegex = new RegExp(
+              `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*\\bttm:agent=")v1(")`,
+              "g",
+            );
+            rawXml = rawXml.replace(pRegex, `$1v2$2`);
+          }
+        }
+
+        if (amllLines.some((l) => l.isDuet)) {
+          if (!rawXml.includes('xml:id="v2"')) {
+            rawXml = rawXml.replace(
+              '<ttm:agent type="person" xml:id="v1"/>',
+              '<ttm:agent type="person" xml:id="v1"/>\n      <ttm:agent type="person" xml:id="v2"/>',
+            );
+          }
+        }
+
         return formatXml(rawXml);
       }
       case "lrc":
