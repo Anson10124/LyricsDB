@@ -24,9 +24,10 @@ import {
 import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import { Observable, Subject } from "rxjs";
-import type {
-  FormattedLyricsResult,
-  ProgressLogEvent,
+import {
+  SUPPORTED_LYRIC_FORMATS,
+  type FormattedLyricsResult,
+  type ProgressLogEvent,
 } from "@repo/types";
 import { TracksService } from "./tracks.service";
 import { SanitizedTrackDto } from "./dto/track-response.dto";
@@ -40,21 +41,10 @@ import {
 } from "./dto/track-query.dto";
 import { ClientIp } from "../common/decorators/client-ip.decorator";
 
-const SUPPORTED_FORMATS = [
-  "ttml",
-  "lrc",
-  "lrca2",
-  "yrc",
-  "qrc",
-  "eslrc",
-  "ass",
-  "lyl",
-  "lys",
-  "lqe",
-  "json",
-] as const;
+const SUPPORTED_FORMATS = SUPPORTED_LYRIC_FORMATS;
 
 export { TrackQueryDto };
+
 
 @ApiTags("Tracks")
 @Controller(["api", ""])

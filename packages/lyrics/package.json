@@ -9,6 +9,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./converter": {
+      "types": "./dist/utils/converter.d.ts",
+      "default": "./dist/utils/converter.js"
+    },
+    "./utils/converter": {
+      "types": "./dist/utils/converter.d.ts",
+      "default": "./dist/utils/converter.js"
     }
   },
   "scripts": {

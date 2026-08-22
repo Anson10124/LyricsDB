@@ -1,9 +1,34 @@
+export const SUPPORTED_PLATFORMS = [
+  "spotify",
+  "deezer",
+  "netease",
+  "apple",
+  "qq",
+  "isrc",
+] as const;
+
+export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
+
 export type PlatformId =
   | "spotify"
   | "appleMusic"
   | "deezer"
   | "netease"
   | "qqMusic";
+
+export const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+  spotify: "Spotify",
+  apple: "Apple Music",
+  applemusic: "Apple Music",
+  appleMusic: "Apple Music",
+  deezer: "Deezer",
+  netease: "NetEase",
+  qq: "QQ Music",
+  qqmusic: "QQ Music",
+  musixmatch: "Musixmatch",
+  lrclib: "LRCLIB",
+  isrc: "ISRC",
+};
 
 export type MetadataType =
   | "song"
@@ -14,6 +39,7 @@ export type MetadataType =
   | "show";
 
 import type { ArtworkMetadata } from "./track.js";
+
 
 export interface ResolverTrackMetadata {
   id: string;

@@ -19,9 +19,12 @@
     "@applemusic-like-lyrics/react-full": "^0.4.2",
     "@applemusic-like-lyrics/ttml": "^1.0.1",
     "@base-ui/react": "^1.7.0",
+    "@repo/lyrics": "workspace:*",
+
+    "@repo/music-resolver": "workspace:*",
     "@repo/types": "workspace:*",
-    "@repo/ui": "workspace:*",
     "class-variance-authority": "^0.7.1",
+
     "clsx": "^2.1.1",
     "fumadocs-core": "^16.14.5",
     "fumadocs-mdx": "^15.3.0",

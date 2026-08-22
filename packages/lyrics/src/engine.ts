@@ -930,9 +930,11 @@ export class LyricsEngine {
       | null
       | undefined,
     format: string = "json",
+    metadata: { title?: string; artist?: string; album?: string } = {},
   ): FormattedLyricsResult {
-    return formatLyricsPayload(lyrics, format);
+    return formatLyricsPayload(lyrics, format, metadata);
   }
+
 }
 
 export const defaultLyricsEngine = new LyricsEngine();

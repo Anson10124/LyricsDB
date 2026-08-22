@@ -27,12 +27,15 @@ import type {
   FormattedLyricsResult,
   GetLyricsOptions,
   GetOrSyncTrackOptions,
+  LyricsType,
   ProgressLogEvent,
+  ResolverTrackMetadata,
   SanitizedTrack,
   StreamEventStage,
   StreamLyricsOptions,
   SyncedLyricsPayload,
 } from "@repo/types";
+
 import { ActivityService } from "../activity/activity.service";
 import { DATABASE_CONNECTION } from "../database/database.constants";
 import { ResolverService } from "../resolver/resolver.service";
@@ -46,7 +49,16 @@ export type {
   ProgressLogEvent,
 };
 
+interface VerifiedPlatformIds {
+  spotifyId?: string;
+  deezerId?: string;
+  neteaseId?: string;
+  appleMusicId?: string;
+  qqMusicId?: string;
+}
+
 @Injectable()
+
 export class TracksService {
   // In-flight request deduplication map to prevent thundering herd
   private inFlightRequests = new Map<string, Promise<Track>>();
@@ -287,15 +299,59 @@ export class TracksService {
 
   // Internal method: Resolves link and persists to PostgreSQL
   private async executeSyncAndStore(url: string): Promise<Track> {
+
     const resolved: ResolveResult = await this.resolverService.resolveUrl(url);
     const meta = resolved.metadata;
 
-    const spotifyLink = resolved.links["spotify"];
-    const deezerLink = resolved.links["deezer"];
-    const neteaseLink = resolved.links["netease"];
+    const validIds = this.extractHighConfidencePlatformIds(resolved.links);
+    const existingTrack = await this.findExistingTrackByPlatformLinks(
+      resolved.links,
+    );
+
+    const lyricsData = await this.resolveAndStoreLyrics(
+      meta,
+      validIds,
+      existingTrack,
+    );
+
+    const newTrackData = this.assembleTrackEntity(
+      meta,
+      validIds,
+      lyricsData,
+      existingTrack,
+    );
+
+    return this.safeSaveTrack(newTrackData);
+  }
+
+  private extractHighConfidencePlatformIds(
+    links: Record<string, ResolvedLink | null | undefined>,
+  ): VerifiedPlatformIds {
+    const spotifyLink = links["spotify"];
+    const deezerLink = links["deezer"];
+    const neteaseLink = links["netease"];
     const appleLink =
-      resolved.links["appleMusic"] || resolved.links["applemusic"];
-    const qqLink = resolved.links["qqMusic"] || resolved.links["qqmusic"];
+      links["appleMusic"] || links["applemusic"] || links["apple"];
+    const qqLink = links["qqMusic"] || links["qqmusic"] || links["qq"];
+
+    return {
+      spotifyId: this.getHighConfidencePlatformId(spotifyLink),
+      deezerId: this.getHighConfidencePlatformId(deezerLink),
+      neteaseId: this.getHighConfidencePlatformId(neteaseLink),
+      appleMusicId: this.getHighConfidencePlatformId(appleLink),
+      qqMusicId: this.getHighConfidencePlatformId(qqLink),
+    };
+  }
+
+  private async findExistingTrackByPlatformLinks(
+    links: Record<string, ResolvedLink | null | undefined>,
+  ): Promise<Track | null> {
+    const spotifyLink = links["spotify"];
+    const deezerLink = links["deezer"];
+    const neteaseLink = links["netease"];
+    const appleLink =
+      links["appleMusic"] || links["applemusic"] || links["apple"];
+    const qqLink = links["qqMusic"] || links["qqmusic"] || links["qq"];
 
     const platformLinks: Array<[string, ResolvedLink | null | undefined]> = [
       ["spotify", spotifyLink],
@@ -305,28 +361,46 @@ export class TracksService {
       ["qq", qqLink],
     ];
 
-    // Check if track already exists by any verified platform ID
-    let existingTrack: Track | null = null;
     for (const [platform, link] of platformLinks) {
       const platformId = this.getHighConfidencePlatformId(link);
       if (platformId) {
-        existingTrack = await this.findByPlatformId(platform, platformId);
-        if (existingTrack) break;
+        const existing = await this.findByPlatformId(platform, platformId);
+        if (existing) return existing;
       }
     }
+    return null;
+  }
 
-    // Only save IDs that have high confidence score (>= 0.8 or isVerified)
-    const validSpotifyId = this.getHighConfidencePlatformId(spotifyLink);
-    const validDeezerId = this.getHighConfidencePlatformId(deezerLink);
-    const validNeteaseId = this.getHighConfidencePlatformId(neteaseLink);
-    const validAppleId = this.getHighConfidencePlatformId(appleLink);
-    const validQqId = this.getHighConfidencePlatformId(qqLink);
-
-    // Resolve lyrics if not already present in DB or Object Storage
+  private async resolveAndStoreLyrics(
+    meta: ResolverTrackMetadata,
+    validIds: VerifiedPlatformIds,
+    existingTrack?: Track | null,
+    onProgress?: (event: {
+      stage: "lyrics_searching" | "lyrics_found";
+      provider: string;
+      lyricsType?: LyricsType;
+      status?: "searching" | "found" | "miss" | "fallback";
+    }) => void,
+  ): Promise<{
+    lyricsType: LyricsType | null;
+    lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null;
+    lyricsStoragePath: string | null;
+    lyricsProvider: string | null;
+    resolvedRawLyrics:
+      | SyncedLyricsPayload
+      | string
+      | Record<string, unknown>
+      | null;
+  }> {
     let lyricsType = existingTrack?.lyricsType ?? null;
     let lyrics = existingTrack?.lyrics ?? null;
     let lyricsStoragePath = existingTrack?.lyricsStoragePath ?? null;
     let lyricsProvider = existingTrack?.lyricsProvider ?? null;
+    let resolvedRawLyrics:
+      | SyncedLyricsPayload
+      | string
+      | Record<string, unknown>
+      | null = null;
 
     const hasExistingLyrics = Boolean(
       (lyrics &&
@@ -346,16 +420,20 @@ export class TracksService {
         album: meta.album,
         durationMs: meta.durationMs,
         isrc: meta.isrc || existingTrack?.isrc || undefined,
-        deezerId: validDeezerId || existingTrack?.deezerId || undefined,
-        neteaseId: validNeteaseId || existingTrack?.neteaseId || undefined,
-        qqMusicId: validQqId || existingTrack?.qqMusicId || undefined,
-        appleMusicId: validAppleId || existingTrack?.appleMusicId || undefined,
-        spotifyId: validSpotifyId || existingTrack?.spotifyId || undefined,
+        deezerId: validIds.deezerId || existingTrack?.deezerId || undefined,
+        neteaseId: validIds.neteaseId || existingTrack?.neteaseId || undefined,
+        qqMusicId: validIds.qqMusicId || existingTrack?.qqMusicId || undefined,
+        appleMusicId:
+          validIds.appleMusicId || existingTrack?.appleMusicId || undefined,
+        spotifyId:
+          validIds.spotifyId || existingTrack?.spotifyId || undefined,
+        onProgress,
       });
 
       if (resolvedLyrics) {
         lyricsType = resolvedLyrics.lyricsType;
         lyricsProvider = resolvedLyrics.provider;
+        resolvedRawLyrics = resolvedLyrics.lyrics;
 
         if (this.storageService.isConfigured()) {
           const trackKey = existingTrack?.id || randomUUID();
@@ -369,9 +447,31 @@ export class TracksService {
           lyricsStoragePath = null;
         }
       }
+    } else if (existingTrack) {
+      resolvedRawLyrics = await this.resolveTrackLyrics(existingTrack);
     }
 
-    const newTrackData: NewTrack = {
+    return {
+      lyricsType,
+      lyrics,
+      lyricsStoragePath,
+      lyricsProvider,
+      resolvedRawLyrics,
+    };
+  }
+
+  private assembleTrackEntity(
+    meta: ResolverTrackMetadata,
+    validIds: VerifiedPlatformIds,
+    lyricsData: {
+      lyricsType: LyricsType | null;
+      lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null;
+      lyricsStoragePath: string | null;
+      lyricsProvider: string | null;
+    },
+    existingTrack?: Track | null,
+  ): NewTrack {
+    return {
       ...(existingTrack?.id ? { id: existingTrack.id } : {}),
       title: meta.title,
       artists: meta.artists?.length
@@ -386,20 +486,19 @@ export class TracksService {
         existingTrack?.artwork ||
         (meta.image ? { url: meta.image } : null),
       isrc: meta.isrc || existingTrack?.isrc,
-      spotifyId: validSpotifyId || existingTrack?.spotifyId,
-      deezerId: validDeezerId || existingTrack?.deezerId,
-      neteaseId: validNeteaseId || existingTrack?.neteaseId,
-      appleMusicId: validAppleId || existingTrack?.appleMusicId,
-      qqMusicId: validQqId || existingTrack?.qqMusicId,
-      lyricsType,
-      lyrics,
-      lyricsStoragePath,
-      lyricsProvider,
+      spotifyId: validIds.spotifyId || existingTrack?.spotifyId,
+      deezerId: validIds.deezerId || existingTrack?.deezerId,
+      neteaseId: validIds.neteaseId || existingTrack?.neteaseId,
+      appleMusicId: validIds.appleMusicId || existingTrack?.appleMusicId,
+      qqMusicId: validIds.qqMusicId || existingTrack?.qqMusicId,
+      lyricsType: lyricsData.lyricsType,
+      lyrics: lyricsData.lyrics,
+      lyricsStoragePath: lyricsData.lyricsStoragePath,
+      lyricsProvider: lyricsData.lyricsProvider,
       isVerified: existingTrack?.isVerified ?? false,
     };
-
-    return this.safeSaveTrack(newTrackData);
   }
+
 
   // Concurrency-Safe Database Ingestion & Conflict Handler:
   // 1. Sanity Guard: Validates metadata before writing to PostgreSQL to prevent spam and DB pollution.
@@ -671,112 +770,47 @@ export class TracksService {
       );
 
       const meta = resolved.metadata;
-      const spotifyLink = resolved.links["spotify"];
-      const deezerLink = resolved.links["deezer"];
-      const neteaseLink = resolved.links["netease"];
-      const appleLink =
-        resolved.links["appleMusic"] || resolved.links["applemusic"];
-      const qqLink = resolved.links["qqMusic"] || resolved.links["qqmusic"];
-
-      const platformLinks: Array<[string, ResolvedLink | null | undefined]> = [
-        ["spotify", spotifyLink],
-        ["deezer", deezerLink],
-        ["netease", neteaseLink],
-        ["apple", appleLink],
-        ["qq", qqLink],
-      ];
-
-      let existingTrack: Track | null = null;
-      for (const [platformName, link] of platformLinks) {
-        const platformId = this.getHighConfidencePlatformId(link);
-        if (platformId) {
-          existingTrack = await this.findByPlatformId(platformName, platformId);
-          if (existingTrack) break;
-        }
-      }
-
-      const validSpotifyId = this.getHighConfidencePlatformId(spotifyLink);
-      const validDeezerId = this.getHighConfidencePlatformId(deezerLink);
-      const validNeteaseId = this.getHighConfidencePlatformId(neteaseLink);
-      const validAppleId = this.getHighConfidencePlatformId(appleLink);
-      const validQqId = this.getHighConfidencePlatformId(qqLink);
-
-      // Step 5: Live Lyrics Fetching with onProgress
-      let lyricsType = existingTrack?.lyricsType ?? null;
-      let lyrics = existingTrack?.lyrics ?? null;
-      let lyricsStoragePath = existingTrack?.lyricsStoragePath ?? null;
-      let lyricsProvider = existingTrack?.lyricsProvider ?? null;
-      let resolvedRawLyrics:
-        | SyncedLyricsPayload
-        | string
-        | Record<string, unknown>
-        | null = null;
-
-      const hasExistingLyrics = Boolean(
-        (lyrics &&
-          (Array.isArray(lyrics)
-            ? lyrics.length > 0
-            : typeof lyrics === "string"
-              ? lyrics.trim().length > 0
-              : true)) ||
-        (lyricsStoragePath && lyricsStoragePath.trim().length > 0),
+      const validIds = this.extractHighConfidencePlatformIds(resolved.links);
+      const existingTrack = await this.findExistingTrackByPlatformLinks(
+        resolved.links,
       );
 
-      if (!hasExistingLyrics) {
-        const resolvedLyrics = await this.lyricsEngine.resolveLyrics({
-          title: meta.title,
-          artist: meta.artist,
-          artists: meta.artists,
-          album: meta.album,
-          durationMs: meta.durationMs,
-          isrc: meta.isrc || existingTrack?.isrc || undefined,
-          deezerId: validDeezerId || existingTrack?.deezerId || undefined,
-          neteaseId: validNeteaseId || existingTrack?.neteaseId || undefined,
-          qqMusicId: validQqId || existingTrack?.qqMusicId || undefined,
-          appleMusicId:
-            validAppleId || existingTrack?.appleMusicId || undefined,
-          spotifyId: validSpotifyId || existingTrack?.spotifyId || undefined,
-          onProgress: (lEvent) => {
-            emitEvent({
-              stage: lEvent.stage,
-              data: {
-                provider: lEvent.provider,
-                lyricsType: lEvent.lyricsType,
-                status: lEvent.status,
-              },
-              timestamp: Date.now(),
-            });
-          },
-        });
-
-        if (resolvedLyrics) {
-          lyricsType = resolvedLyrics.lyricsType;
-          lyricsProvider = resolvedLyrics.provider;
-          resolvedRawLyrics = resolvedLyrics.lyrics;
-
-          if (this.storageService.isConfigured()) {
-            const trackKey = existingTrack?.id || randomUUID();
-            lyricsStoragePath = await this.storageService.saveLyrics(
-              trackKey,
-              resolvedLyrics.lyrics,
-            );
-            lyrics = null;
-          } else {
-            lyrics = resolvedLyrics.lyrics;
-            lyricsStoragePath = null;
-          }
-        } else {
+      // Step 5: Live Lyrics Fetching with onProgress
+      const lyricsData = await this.resolveAndStoreLyrics(
+        meta,
+        validIds,
+        existingTrack,
+        (lEvent) => {
           emitEvent({
-            stage: "lyrics_searching",
-            data: { status: "not_found" },
+            stage: lEvent.stage,
+            data: {
+              provider: lEvent.provider,
+              lyricsType: lEvent.lyricsType,
+              status: lEvent.status,
+            },
             timestamp: Date.now(),
           });
-        }
-      } else {
-        resolvedRawLyrics = await this.resolveTrackLyrics(existingTrack!);
+        },
+      );
+
+      if (
+        !lyricsData.resolvedRawLyrics &&
+        !existingTrack?.lyrics &&
+        !existingTrack?.lyricsStoragePath
+      ) {
+        emitEvent({
+          stage: "lyrics_searching",
+          data: { status: "not_found" },
+          timestamp: Date.now(),
+        });
+      } else if (existingTrack?.lyrics || existingTrack?.lyricsStoragePath) {
         emitEvent({
           stage: "lyrics_found",
-          data: { lyricsType, lyricsProvider, status: "cached" },
+          data: {
+            lyricsType: lyricsData.lyricsType,
+            lyricsProvider: lyricsData.lyricsProvider,
+            status: "cached",
+          },
           timestamp: Date.now(),
         });
       }
@@ -788,38 +822,19 @@ export class TracksService {
         timestamp: Date.now(),
       });
 
-      const newTrackData: NewTrack = {
-        ...(existingTrack?.id ? { id: existingTrack.id } : {}),
-        title: meta.title,
-        artists: meta.artists?.length
-          ? meta.artists
-          : meta.artist
-            ? [meta.artist]
-            : [],
-        album: meta.album,
-        durationMs: meta.durationMs || 0,
-        artwork:
-          meta.artwork ||
-          existingTrack?.artwork ||
-          (meta.image ? { url: meta.image } : null),
-        isrc: meta.isrc || existingTrack?.isrc,
-        spotifyId: validSpotifyId || existingTrack?.spotifyId,
-        deezerId: validDeezerId || existingTrack?.deezerId,
-        neteaseId: validNeteaseId || existingTrack?.neteaseId,
-        appleMusicId: validAppleId || existingTrack?.appleMusicId,
-        qqMusicId: validQqId || existingTrack?.qqMusicId,
-        lyricsType,
-        lyrics,
-        lyricsStoragePath,
-        lyricsProvider,
-        isVerified: existingTrack?.isVerified ?? false,
-      };
+      const newTrackData = this.assembleTrackEntity(
+        meta,
+        validIds,
+        lyricsData,
+        existingTrack,
+      );
 
       const finalTrack = await this.safeSaveTrack(newTrackData);
       const sanitized = this.sanitizeTrack(finalTrack);
       let formattedLyrics: FormattedLyricsResult | undefined;
       const lyricsToFormat =
-        resolvedRawLyrics || (await this.resolveTrackLyrics(finalTrack));
+        lyricsData.resolvedRawLyrics ||
+        (await this.resolveTrackLyrics(finalTrack));
       if (lyricsToFormat) {
         formattedLyrics = this.lyricsEngine.formatLyrics(
           lyricsToFormat,
@@ -837,6 +852,7 @@ export class TracksService {
         },
         timestamp: Date.now(),
       });
+
     } catch (err) {
       const message =
         err instanceof Error

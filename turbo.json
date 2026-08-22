@@ -18,8 +18,11 @@
     "SPOTIFY_TOTP_SECRET",
     "CORS_ORIGINS",
     "TRUST_PROXY",
+    "API_INTERNAL_URL",
+    "NEXT_PUBLIC_API_URL",
     "NODE_ENV",
     "PORT"
+
   ],
   "tasks": {
     "build": {
@@ -34,8 +37,10 @@
       "dependsOn": ["^check-types"]
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     }
+
   }
 }

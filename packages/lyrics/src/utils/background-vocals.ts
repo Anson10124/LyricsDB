@@ -56,8 +56,9 @@ function processSingleTokenLine(
   const bgType = getBgVocalType(vocalType);
 
   // Regex to detect (background vocal) inside text
-  const match = text.match(/([（(\[【])([^\r\n）)\]】]+)([）)\]】])/);
+  const match = text.match(/([（([【])([^\r\n）)\]】]+)([）)\]】])/);
   if (!match || match.index === undefined) {
+
     return [[wordToken]];
   }
 
@@ -124,18 +125,9 @@ export function extractBackgroundVocals(
     const baseVocalType = line[0]![0];
     const bgVocalType = getBgVocalType(baseVocalType);
 
-    // Check if entire multi-token line is enclosed in brackets e.g. ["(Hello ", "world) "]
-    const firstToken = line[0]!;
-    const lastToken = line[line.length - 1]!;
-    const startsWithBracket =
-      hasOpeningBracket(firstToken[3]) &&
-      !firstToken[3].replace(/^[（(\[【\s]+/, "");
-    const endsWithBracket =
-      hasClosingBracket(lastToken[3]) &&
-      !lastToken[3].replace(/[）)\]】\s]+$/, "");
-
     // If whole line text starts and ends with bracket and has no inner unmatched brackets
     const trimmedFull = fullText.trim();
+
     const isFullLineBracket =
       OPENING_BRACKETS.some((b) => trimmedFull.startsWith(b)) &&
       CLOSING_BRACKETS.some((b) => trimmedFull.endsWith(b)) &&

@@ -4,22 +4,11 @@ import { count, DatabaseClient, Track, tracks } from "@repo/database";
 import type {
   ActivityEvent,
   ActivityTrackSummary,
-  ArtworkMetadata,
 } from "@repo/types";
+import { formatArtworkUrl } from "@repo/music-resolver";
+
 import { concat, from, interval, map, merge, Observable, Subject } from "rxjs";
 import { DATABASE_CONNECTION } from "../database/database.constants";
-
-function resolveArtworkUrl(artwork?: ArtworkMetadata | null): string | null {
-  if (!artwork) return null;
-  if (artwork.templateUrl) {
-    return artwork.templateUrl
-      .replace("{w}", "600")
-      .replace("{h}", "600")
-      .replace("{c}", "bb")
-      .replace("{f}", "jpg");
-  }
-  return artwork.url || null;
-}
 
 @Injectable()
 export class ActivityService {
@@ -50,9 +39,10 @@ export class ActivityService {
       id: track.id || "",
       title: track.title || "Unknown Title",
       artist,
-      artworkUrl: resolveArtworkUrl(track.artwork),
+      artworkUrl: formatArtworkUrl(track.artwork, 600) || null,
     };
   }
+
 
   public recordTrackAdded(track: Partial<Track>): ActivityEvent | null {
     if (!track || !track.title) {

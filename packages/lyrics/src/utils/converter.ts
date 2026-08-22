@@ -222,6 +222,7 @@ export function formatLyricsPayload(
     | null
     | undefined,
   format: string = "json",
+  metadata: { title?: string; artist?: string; album?: string } = {},
 ): FormattedLyricsResult {
   const normFormat = format
     .toLowerCase()
@@ -264,12 +265,29 @@ export function formatLyricsPayload(
   let contentType = "text/plain; charset=utf-8";
 
   switch (normFormat) {
-    case "ttml":
-      {
+    case "ttml": {
+        const domImplementation =
+          typeof document !== "undefined"
+
+            ? document.implementation
+            : new DOMImplementation();
+        const xmlSerializer =
+          typeof (globalThis as { XMLSerializer?: new () => unknown })
+            .XMLSerializer !== "undefined"
+            ? new (globalThis as unknown as { XMLSerializer: new () => unknown })
+                .XMLSerializer()
+            : new XMLSerializer();
+
         const generator = new TTMLGenerator({
-          domImplementation: new DOMImplementation(),
-          xmlSerializer: new XMLSerializer(),
+          domImplementation,
+          xmlSerializer: xmlSerializer as NonNullable<
+            ConstructorParameters<typeof TTMLGenerator>[0]
+          >["xmlSerializer"],
         });
+
+
+
+
         const ttmlLines = amllLines.map((line) => ({
           ...line,
           text: line.words.map((w) => w.word).join(""),
@@ -283,8 +301,13 @@ export function formatLyricsPayload(
           lines: ttmlLines as unknown as Parameters<
             typeof generator.generate
           >[0]["lines"],
-          metadata: {},
+          metadata: {
+            title: metadata.title ? [metadata.title] : undefined,
+            artist: metadata.artist ? [metadata.artist] : undefined,
+            album: metadata.album ? [metadata.album] : undefined,
+          },
         });
+
 
         // Ensure background vocals have ttm:role="x-bg" and duets have ttm:agent="v2"
         for (let i = 0; i < amllLines.length; i++) {

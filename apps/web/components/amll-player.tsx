@@ -54,6 +54,8 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
 
   const playbackStartTimeRef = useRef<number | null>(null);
   const playbackStartOffsetRef = useRef<number>(0);
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
 
   useEffect(() => {
     setIsClient(true);
@@ -79,7 +81,8 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
     }
 
     playbackStartTimeRef.current = performance.now();
-    playbackStartOffsetRef.current = currentTime;
+    playbackStartOffsetRef.current = currentTimeRef.current;
+
 
     const intervalId = setInterval(() => {
       if (playbackStartTimeRef.current === null) return;

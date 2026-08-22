@@ -28,20 +28,32 @@ export type LyricsType = "word" | "line" | "plain";
 // ]
 export type SyncedLyricsPayload = CompactLyricLine[];
 
-export type SupportedLyricFormat =
-  | "ttml"
-  | "lrc"
-  | "lrca2"
-  | "yrc"
-  | "qrc"
-  | "eslrc"
-  | "ass"
-  | "lyl"
-  | "lys"
-  | "lqe"
-  | "json";
+export const SUPPORTED_LYRIC_FORMATS = [
+  "ttml",
+  "lrc",
+  "lrca2",
+  "yrc",
+  "qrc",
+  "eslrc",
+  "ass",
+  "lyl",
+  "lys",
+  "lqe",
+  "json",
+] as const;
+
+export type SupportedLyricFormat = (typeof SUPPORTED_LYRIC_FORMATS)[number];
+
+export function isSupportedLyricFormat(
+  format: string,
+): format is SupportedLyricFormat {
+  return SUPPORTED_LYRIC_FORMATS.includes(
+    format.toLowerCase().trim() as SupportedLyricFormat,
+  );
+}
 
 export interface FormattedLyricsResult {
   content: string | SyncedLyricsPayload | Record<string, unknown>;
   contentType: string;
 }
+

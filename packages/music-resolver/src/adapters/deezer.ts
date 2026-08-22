@@ -1,38 +1,15 @@
 import type {
+  DeezerSearchResponse,
+  DeezerTrackLookupResponse,
   MatchCandidate,
   MusicAdapter,
   ResolveOptions,
   ResolvedLink,
   TrackMetadata,
-} from "../types.js";
+} from "@repo/types";
 import { HttpClient } from "../utils/http.js";
 import { findBestMatch } from "../utils/string-similarity.js";
 
-interface DeezerSearchResponse {
-  total: number;
-  data: Array<{
-    id: number;
-    title?: string;
-    title_short?: string;
-    name?: string;
-    link: string;
-    duration?: number; // seconds
-    artist?: { name: string };
-    album?: { title: string };
-    isrc?: string;
-  }>;
-}
-
-interface DeezerTrackLookupResponse {
-  id?: number;
-  title?: string;
-  link?: string;
-  duration?: number;
-  isrc?: string;
-  artist?: { name: string };
-  album?: { title: string };
-  error?: { type: string; message: string; code: number };
-}
 
 const DEEZER_SEARCH_TYPES: Record<string, string> = {
   song: "track",

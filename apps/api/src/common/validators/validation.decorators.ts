@@ -3,39 +3,15 @@ import {
   ValidationArguments,
   ValidationOptions,
 } from "class-validator";
-import { normalizePlatform } from "@repo/music-resolver";
+import {
+  ALLOWED_STREAMING_DOMAINS,
+  normalizePlatform,
+} from "@repo/music-resolver";
+import {
+  isSupportedLyricFormat,
+  SUPPORTED_LYRIC_FORMATS,
+} from "@repo/types";
 
-const ALLOWED_STREAMING_DOMAINS = [
-  "spotify.com",
-  "open.spotify.com",
-  "spotify.link",
-  "spotify.app.link",
-  "spoti.fi",
-  "music.apple.com",
-  "itunes.apple.com",
-  "deezer.com",
-  "www.deezer.com",
-  "music.163.com",
-  "163.com",
-  "163cn.tv",
-  "y.qq.com",
-  "qqmusic.qq.com",
-  "c.y.qq.com",
-];
-
-const SUPPORTED_FORMATS = new Set([
-  "ttml",
-  "lrc",
-  "lrca2",
-  "yrc",
-  "qrc",
-  "eslrc",
-  "ass",
-  "lyl",
-  "lys",
-  "lqe",
-  "json",
-]);
 
 /**
  * Validates that platform string is one of the supported providers.
@@ -180,16 +156,17 @@ export function IsValidFormat(validationOptions?: ValidationOptions) {
       target: object.constructor,
       propertyName,
       options: {
-        message: `Format must be one of: ${Array.from(SUPPORTED_FORMATS).join(", ")}`,
+        message: `Format must be one of: ${SUPPORTED_LYRIC_FORMATS.join(", ")}`,
         ...validationOptions,
       },
       validator: {
         validate(value: unknown) {
           if (value === undefined || value === null || value === "") return true;
           if (typeof value !== "string") return false;
-          return SUPPORTED_FORMATS.has(value.toLowerCase().trim());
+          return isSupportedLyricFormat(value);
         },
       },
     });
   };
 }
+

@@ -11,7 +11,7 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { LyricsView } from "@/components/lyrics-view";
-import { getApiBaseUrl } from "@/lib/api-client";
+import { fetchTrackById, fetchTrackLyrics } from "@/lib/api-client";
 
 interface TrackPageProps {
   params: Promise<{ id: string }>;
@@ -35,39 +35,23 @@ export default function TrackPage({ params }: TrackPageProps) {
 
     async function loadTrackData() {
       try {
-        const apiBase = getApiBaseUrl();
-        const trackRes = await fetch(
-          `${apiBase}/api/tracks/${encodeURIComponent(id)}`,
-        );
-        if (!trackRes.ok) {
-          if (trackRes.status === 404) {
-            throw new Error("Track not found");
-          }
-          throw new Error("Failed to load track");
-        }
-        const trackData =
-          (await trackRes.json()) as SanitizedTrack<TrackRecord>;
+        const trackData = await fetchTrackById(id);
 
         if (!isMounted) return;
         setTrack(trackData);
 
         if (trackData.hasLyrics) {
           try {
-            const lyricsRes = await fetch(
-              `${apiBase}/api/tracks/${encodeURIComponent(id)}/lyrics?format=json`,
-            );
-            if (lyricsRes.ok) {
-              const lyricsData = await lyricsRes.json();
-              if (isMounted) {
-                if (
-                  lyricsData &&
-                  typeof lyricsData === "object" &&
-                  "plain" in lyricsData
-                ) {
-                  setLyrics(lyricsData.plain);
-                } else {
-                  setLyrics(lyricsData);
-                }
+            const lyricsData = await fetchTrackLyrics(id, "json");
+            if (isMounted && lyricsData) {
+              if (
+                typeof lyricsData === "object" &&
+                lyricsData !== null &&
+                "plain" in lyricsData
+              ) {
+                setLyrics((lyricsData as { plain: string }).plain);
+              } else {
+                setLyrics(lyricsData as SyncedLyricsPayload);
               }
             }
           } catch {
@@ -84,6 +68,7 @@ export default function TrackPage({ params }: TrackPageProps) {
         }
       }
     }
+
 
     loadTrackData();
 

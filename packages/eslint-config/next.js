@@ -18,10 +18,12 @@ export const nextJsConfig = [
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".source/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
   ]),
+
   {
     ...pluginReact.configs.flat.recommended,
     languageOptions: {
@@ -51,4 +53,13 @@ export const nextJsConfig = [
       "react/react-in-jsx-scope": "off",
     },
   },
+  {
+    files: ["next.config.js", "scripts/**/*.mjs", "scripts/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
 ];
+

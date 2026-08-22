@@ -23,5 +23,7 @@ export * from "./utils/provider-limiter.js";
 export * from "./utils/ssrf-guard.js";
 export * from "./utils/m3u8-parser.js";
 export * from "./utils/apple-animated-artwork.js";
+export * from "./utils/artwork.js";
+
 
 

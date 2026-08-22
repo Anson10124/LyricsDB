@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import {
+  formatPlatformName,
+  PLATFORM_DISPLAY_NAMES,
+} from "@repo/music-resolver/platforms";
+import { formatDuration } from "@/lib/utils";
+
+
 
 export interface TaskProgressState {
+
   metaStatus: "pending" | "running" | "done" | "failed";
   metaData?: {
     title?: string;
@@ -143,35 +151,13 @@ const RetryIcon = (
   </svg>
 );
 
-export const PROVIDER_NAMES: Record<string, string> = {
-  qqmusic: "QQ Music",
-  qq: "QQ Music",
-  deezer: "Deezer",
-  netease: "NetEase",
-  musixmatch: "Musixmatch",
-  lrclib: "LRCLIB",
-  spotify: "Spotify",
-  apple: "Apple Music",
-  applemusic: "Apple Music",
-  appleMusic: "Apple Music",
-};
-
-export function formatProviderName(key?: string): string {
-  if (!key) return "";
-  const lower = key.toLowerCase();
-  return PROVIDER_NAMES[lower] || key.charAt(0).toUpperCase() + key.slice(1);
-}
-
-function formatDuration(ms?: number): string {
-  if (!ms) return "";
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
+export const PROVIDER_NAMES = PLATFORM_DISPLAY_NAMES;
+export const formatProviderName = formatPlatformName;
 
 export function TaskRows({ progress }: { progress: TaskProgressState }) {
+
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
+
 
   // Format platform details
   const platformDetails = progress.matchedPlatforms.map((p) => ({

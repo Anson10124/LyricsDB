@@ -93,8 +93,9 @@ function tokenizeXmlLine(line: string): Token[] {
 function tokenizeJsonLine(line: string): Token[] {
   const tokens: Token[] = [];
   const jsonRegex =
-    /(\s+)|("(?:\\.|[^"\\])*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}[\]:,])|([^"\d{}\[\],:\s]+)/g;
+    /(\s+)|("(?:\\.|[^"\\])*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}[\]:,])|([^"\d{}[],:\s]+)/g;
   let match: RegExpExecArray | null;
+
 
   while ((match = jsonRegex.exec(line)) !== null) {
     if (match[1]) tokens.push({ type: "whitespace", text: match[1] });

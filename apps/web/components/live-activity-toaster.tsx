@@ -3,12 +3,13 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { getApiBaseUrl } from "@/lib/api-client";
+import { getActivityStreamUrl } from "@/lib/api-client";
 
 interface LiveActivityToasterProps {
   enabled?: boolean;
   ignoredTrackIds?: string[];
 }
+
 
 export function LiveActivityToaster({
   enabled = true,
@@ -44,10 +45,10 @@ export function LiveActivityToaster({
     function connect() {
       if (!isMounted) return;
 
-      const apiBase = getApiBaseUrl();
-      const streamUrl = `${apiBase}/api/activity/stream`;
+      const streamUrl = getActivityStreamUrl();
       const es = new EventSource(streamUrl);
       eventSourceRef.current = es;
+
 
       es.onmessage = (messageEvent) => {
         if (!isMounted) return;

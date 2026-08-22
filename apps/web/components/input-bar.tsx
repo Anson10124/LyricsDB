@@ -8,10 +8,9 @@ import {
   Loader2,
   Music2,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration, isStreamingUrl } from "@/lib/utils";
 import {
   type DeezerTrack,
   searchDeezerTracks,
@@ -24,17 +23,6 @@ interface InputBarProps {
   isLoading?: boolean;
 }
 
-function formatDuration(seconds?: number): string {
-  if (!seconds) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function isStreamingUrl(text: string): boolean {
-  const trimmed = text.trim();
-  return /^(https?:\/\/|www\.)/i.test(trimmed);
-}
 
 export function InputBar({
   onSearchUrl,
@@ -404,8 +392,9 @@ export function InputBar({
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
                         <Clock className="size-3 text-muted-foreground/60" />
-                        <span>{formatDuration(track.duration)}</span>
+                        <span>{formatDuration(track.duration, "s")}</span>
                       </div>
+
 
                       <div
                         className={cn(

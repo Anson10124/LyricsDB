@@ -9,6 +9,7 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { formatArtworkUrl } from "@/lib/artwork";
+import { formatDuration } from "@/lib/utils";
 import {
   formatLyricsOnClient,
   formatXml,
@@ -23,15 +24,8 @@ interface LyricsViewProps {
   onReset?: () => void;
 }
 
-function formatDuration(ms?: number): string {
-  if (!ms) return "";
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
 export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
+
   const [selectedFormat, setSelectedFormat] =
     useState<LyricsViewFormat>("synced");
 
@@ -219,8 +213,9 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
         <div className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-xs flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2 min-h-[300px]">
           <Music2 className="size-10 stroke-2 text-primary opacity-60" />
           <p className="text-sm font-medium">
-            We couldn't find lyrics for this track.
+            We couldn&apos;t find lyrics for this track.
           </p>
+
         </div>
       ) : selectedFormat === "synced" && isSyncedPayload ? (
         <AmllPlayer

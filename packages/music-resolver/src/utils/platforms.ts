@@ -1,10 +1,70 @@
-export type SupportedPlatform =
-  | "spotify"
-  | "deezer"
-  | "netease"
-  | "apple"
-  | "qq"
-  | "isrc";
+export const SUPPORTED_PLATFORMS = [
+  "spotify",
+  "deezer",
+  "netease",
+  "apple",
+  "qq",
+  "isrc",
+] as const;
+
+export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
+
+export const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+  spotify: "Spotify",
+  apple: "Apple Music",
+  applemusic: "Apple Music",
+  appleMusic: "Apple Music",
+  deezer: "Deezer",
+  netease: "NetEase",
+  qq: "QQ Music",
+  qqmusic: "QQ Music",
+  musixmatch: "Musixmatch",
+  lrclib: "LRCLIB",
+  isrc: "ISRC",
+};
+
+
+export const ALLOWED_STREAMING_DOMAINS = [
+  "spotify.com",
+  "open.spotify.com",
+  "spotify.link",
+  "spotify.app.link",
+  "spoti.fi",
+  "music.apple.com",
+  "itunes.apple.com",
+  "deezer.com",
+  "www.deezer.com",
+  "music.163.com",
+  "163.com",
+  "163cn.tv",
+  "y.qq.com",
+  "qqmusic.qq.com",
+  "c.y.qq.com",
+] as const;
+
+/**
+ * Returns human-readable platform/provider display name (e.g. "qqmusic" -> "QQ Music").
+ */
+export function formatPlatformName(key?: string): string {
+  if (!key) return "";
+  const lower = key.toLowerCase();
+  return (
+    PLATFORM_DISPLAY_NAMES[lower] ||
+    key.charAt(0).toUpperCase() + key.slice(1)
+  );
+}
+
+/**
+ * Checks if a string looks like an HTTP(S) URL or Spotify URI.
+ */
+export function isStreamingUrl(text: string): boolean {
+  if (!text || typeof text !== "string") return false;
+  const trimmed = text.trim();
+  return (
+    /^(https?:\/\/|www\.)/i.test(trimmed) ||
+    trimmed.startsWith("spotify:track:")
+  );
+}
 
 /**
  * Normalizes user or external platform string identifiers to canonical form.
@@ -22,6 +82,7 @@ export function normalizePlatform(platform: string): string {
   if (p === "isrc") return "isrc";
   return p;
 }
+
 
 /**
  * Builds the canonical public streaming URL for a given platform and track ID.

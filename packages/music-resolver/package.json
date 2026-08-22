@@ -9,6 +9,22 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./artwork": {
+      "types": "./dist/utils/artwork.d.ts",
+      "default": "./dist/utils/artwork.js"
+    },
+    "./platforms": {
+      "types": "./dist/utils/platforms.d.ts",
+      "default": "./dist/utils/platforms.js"
+    },
+    "./utils/artwork": {
+      "types": "./dist/utils/artwork.d.ts",
+      "default": "./dist/utils/artwork.js"
+    },
+    "./utils/platforms": {
+      "types": "./dist/utils/platforms.d.ts",
+      "default": "./dist/utils/platforms.js"
     }
   },
   "scripts": {

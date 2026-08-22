@@ -126,12 +126,15 @@ importers:
       '@base-ui/react':
         specifier: ^1.7.0
         version: 1.7.0(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@repo/lyrics':
+        specifier: workspace:*
+        version: link:../../packages/lyrics
+      '@repo/music-resolver':
+        specifier: workspace:*
+        version: link:../../packages/music-resolver
       '@repo/types':
         specifier: workspace:*
         version: link:../../packages/types
-      '@repo/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

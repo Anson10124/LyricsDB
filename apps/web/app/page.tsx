@@ -15,7 +15,8 @@ import { LiveActivityToaster } from "@/components/live-activity-toaster";
 import type { DeezerTrack } from "@/lib/deezer";
 
 import Link from "next/link";
-import { getApiBaseUrl } from "@/lib/api-client";
+import { getLyricsStreamUrl } from "@/lib/api-client";
+
 
 const initialProgress: TaskProgressState = {
   metaStatus: "pending",
@@ -86,18 +87,10 @@ export default function Home() {
     });
     setResult(null);
 
-    const apiBase = getApiBaseUrl();
-    const queryParams = new URLSearchParams();
-    if (url) {
-      queryParams.set("url", url);
-    } else if (platform && id) {
-      queryParams.set("platform", platform);
-      queryParams.set("id", id);
-    }
-
-    const streamUrl = `${apiBase}/api/lyrics/stream?${queryParams.toString()}`;
+    const streamUrl = getLyricsStreamUrl({ url, platform, id });
     const es = new EventSource(streamUrl);
     eventSourceRef.current = es;
+
 
     es.onmessage = (event) => {
       try {

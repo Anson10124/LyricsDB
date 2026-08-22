@@ -1,8 +1,8 @@
 import type {
-  CompactLyricLine,
   CompactLyricWord,
   SyncedLyricsPayload,
 } from "@repo/types";
+
 import {
   applyCasing,
   fixExplicitText,
@@ -56,8 +56,9 @@ export function decomposeToken(tokenText: string): {
   }
 
   // Extract leading non-alphanumeric / quotes / brackets (excluding * and #)
-  const leadingMatch = text.match(/^["'(\[{<«“‘—-]+/);
+  const leadingMatch = text.match(/^["'([{<«“‘—-]+/);
   const leadingPunct = leadingMatch ? leadingMatch[0] : "";
+
   text = text.slice(leadingPunct.length);
 
   // Extract trailing punctuation / quotes / brackets
