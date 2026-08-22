@@ -5,18 +5,18 @@ import type {
   VocalType,
 } from "@repo/types";
 
-const OPENING_BRACKETS = ["(", "（", "[", "【"];
-const CLOSING_BRACKETS = [")", "）", "]", "】"];
+export const OPENING_BRACKETS = ["(", "（", "[", "【"];
+export const CLOSING_BRACKETS = [")", "）", "]", "】"];
 
-function hasOpeningBracket(text: string): boolean {
+export function hasOpeningBracket(text: string): boolean {
   return OPENING_BRACKETS.some((b) => text.includes(b));
 }
 
-function hasClosingBracket(text: string): boolean {
+export function hasClosingBracket(text: string): boolean {
   return CLOSING_BRACKETS.some((b) => text.includes(b));
 }
 
-function stripBrackets(text: string): string {
+export function stripBrackets(text: string): string {
   let res = text;
   for (const b of OPENING_BRACKETS) {
     res = res.replaceAll(b, "");
@@ -25,6 +25,46 @@ function stripBrackets(text: string): string {
     res = res.replaceAll(b, "");
   }
   return res;
+}
+
+export function cleanEnclosingBrackets(text: string): string {
+  if (!text || typeof text !== "string") return "";
+  const trimmed = text.trim();
+  const startsWithBracket = OPENING_BRACKETS.some((b) => trimmed.startsWith(b));
+  const endsWithBracket = CLOSING_BRACKETS.some((b) => trimmed.endsWith(b));
+
+  if (startsWithBracket && endsWithBracket) {
+    return stripBrackets(trimmed).trim();
+  }
+  return trimmed;
+}
+
+export interface ExtractedBracketText {
+  leadText: string;
+  bgTexts: string[];
+}
+
+export function extractBracketedTextSegments(
+  text: string,
+): ExtractedBracketText {
+  if (!text || typeof text !== "string") {
+    return { leadText: "", bgTexts: [] };
+  }
+
+  const bracketRegex = /([（([【])([^\r\n）)\]】]+)([）)\]】])/g;
+  const bgTexts: string[] = [];
+
+  let match: RegExpExecArray | null;
+  while ((match = bracketRegex.exec(text)) !== null) {
+    const inside = match[2]?.trim();
+    if (inside) {
+      bgTexts.push(inside);
+    }
+  }
+
+  const leadText = text.replace(bracketRegex, "").replace(/\s+/g, " ").trim();
+
+  return { leadText, bgTexts };
 }
 
 function isPureBracketToken(text: string): boolean {
@@ -49,6 +89,20 @@ function ensureTrailingSpace(tokens: CompactLyricWord[]): void {
   }
 }
 
+function attachStringTokens(
+  words: CompactLyricWord[],
+  translation?: string,
+  romaji?: string,
+): CompactLyricLine {
+  const trans = (translation ?? "").trim();
+  const roma = (romaji ?? "").trim();
+
+  if (trans || roma) {
+    return [...words, trans, roma];
+  }
+  return [...words];
+}
+
 function processSingleTokenLine(
   wordToken: CompactLyricWord,
   stringTokens: string[],
@@ -56,10 +110,15 @@ function processSingleTokenLine(
   const [vocalType, startMs, lengthMs, text] = wordToken;
   const bgType = getBgVocalType(vocalType);
 
+  const translation = stringTokens[0] || "";
+  const romaji = stringTokens[1] || "";
+  const splitTrans = extractBracketedTextSegments(translation);
+  const splitRoma = extractBracketedTextSegments(romaji);
+
   // Regex to detect (background vocal) inside text
   const match = text.match(/([（([【])([^\r\n）)\]】]+)([）)\]】])/);
   if (!match || match.index === undefined) {
-    return [[wordToken, ...stringTokens]];
+    return [attachStringTokens([wordToken], translation, romaji)];
   }
 
   const matchIdx = match.index;
@@ -70,25 +129,67 @@ function processSingleTokenLine(
 
   // If the whole line is in brackets e.g. "(Run from the sun)"
   if (!beforeText && !afterText) {
-    return [[[bgType, startMs, lengthMs, bgText + " "], ...stringTokens]];
+    const bgTrans =
+      splitTrans.bgTexts[0] || cleanEnclosingBrackets(translation);
+    const bgRoma = splitRoma.bgTexts[0] || cleanEnclosingBrackets(romaji);
+    return [
+      attachStringTokens(
+        [[bgType, startMs, lengthMs, bgText + " "]],
+        bgTrans,
+        bgRoma,
+      ),
+    ];
   }
 
   const resultLines: CompactLyricLine[] = [];
-  const totalChars = Math.max(1, beforeText.length + bgText.length + afterText.length);
+  const totalChars = Math.max(
+    1,
+    beforeText.length + bgText.length + afterText.length,
+  );
 
   // Calculate approximate start and duration based on character proportions
   if (beforeText || afterText) {
-    const leadTextCombined = (beforeText + (afterText ? " " + afterText : "")).trim() + " ";
+    const leadTextCombined =
+      (beforeText + (afterText ? " " + afterText : "")).trim() + " ";
     const leadDurationMs = Math.round(
       (lengthMs * (beforeText.length + afterText.length)) / totalChars,
     );
-    resultLines.push([[vocalType, startMs, Math.max(1, leadDurationMs), leadTextCombined], ...stringTokens]);
+    const leadTrans =
+      splitTrans.leadText ||
+      (splitTrans.bgTexts.length === 0 ? translation : "");
+    const leadRoma =
+      splitRoma.leadText || (splitRoma.bgTexts.length === 0 ? romaji : "");
+
+    resultLines.push(
+      attachStringTokens(
+        [
+          [
+            vocalType,
+            startMs,
+            Math.max(1, leadDurationMs),
+            leadTextCombined,
+          ],
+        ],
+        leadTrans,
+        leadRoma,
+      ),
+    );
   }
 
   if (bgText) {
-    const bgStartMs = startMs + Math.round((lengthMs * beforeText.length) / totalChars);
+    const bgStartMs =
+      startMs + Math.round((lengthMs * beforeText.length) / totalChars);
     const bgDurationMs = Math.round((lengthMs * bgText.length) / totalChars);
-    resultLines.push([[bgType, bgStartMs, Math.max(1, bgDurationMs), bgText + " "]]);
+    const bgTrans = splitTrans.bgTexts[0] || "";
+    const bgRoma = splitRoma.bgTexts[0] || "";
+
+    resultLines.push(
+      attachStringTokens(
+        [[bgType, bgStartMs, Math.max(1, bgDurationMs), bgText + " "]],
+        bgTrans,
+        bgRoma,
+      ),
+    );
   }
 
   return resultLines;
@@ -111,9 +212,15 @@ export function extractBackgroundVocals(
 
     if (words.length === 0) continue;
 
-    // Check if line contains any brackets
+    const translation = stringTokens[0] || "";
+    const romaji = stringTokens[1] || "";
+
+    // Check if line contains any brackets in words or translations
     const fullText = words.map((w) => w[3] || "").join("");
-    if (!hasOpeningBracket(fullText) && !hasClosingBracket(fullText)) {
+    const hasWordBrackets =
+      hasOpeningBracket(fullText) || hasClosingBracket(fullText);
+
+    if (!hasWordBrackets) {
       outputLines.push(line);
       continue;
     }
@@ -150,7 +257,11 @@ export function extractBackgroundVocals(
       }
       if (bgTokens.length > 0) {
         ensureTrailingSpace(bgTokens);
-        outputLines.push([...bgTokens, ...stringTokens]);
+        const cleanTrans = cleanEnclosingBrackets(translation);
+        const cleanRoma = cleanEnclosingBrackets(romaji);
+        outputLines.push(
+          attachStringTokens(bgTokens, cleanTrans, cleanRoma),
+        );
       }
       continue;
     }
@@ -176,7 +287,6 @@ export function extractBackgroundVocals(
         } else if (hasClose) {
           insideBracket = false;
           if (curBgTokens.length > 0) {
-            // Extend last background token duration if pure closing bracket had time
             const lastBg = curBgTokens[curBgTokens.length - 1]!;
             curBgTokens[curBgTokens.length - 1] = [
               lastBg[0],
@@ -193,7 +303,6 @@ export function extractBackgroundVocals(
       }
 
       if (hasOpen && hasClose) {
-        // Token has both open and close brackets e.g. "(Yeah) "
         const clean = stripBrackets(text);
         if (clean.trim().length > 0) {
           const bgToken: CompactLyricWord = [
@@ -219,7 +328,12 @@ export function extractBackgroundVocals(
         pendingPureBracketToken = null;
 
         if (clean.trim().length > 0) {
-          curBgTokens.push([bgVocalType, actualStartMs, actualLengthMs, clean]);
+          curBgTokens.push([
+            bgVocalType,
+            actualStartMs,
+            actualLengthMs,
+            clean,
+          ]);
         }
         continue;
       }
@@ -253,24 +367,115 @@ export function extractBackgroundVocals(
       bgSegments.push(curBgTokens);
     }
 
+    const splitTrans = extractBracketedTextSegments(translation);
+    const splitRoma = extractBracketedTextSegments(romaji);
+
     if (leadTokens.length > 0) {
       ensureTrailingSpace(leadTokens);
-      outputLines.push([...leadTokens, ...stringTokens]);
+      const leadTrans =
+        splitTrans.leadText ||
+        (bgSegments.length === 0 ? translation : "");
+      const leadRoma =
+        splitRoma.leadText || (bgSegments.length === 0 ? romaji : "");
+      outputLines.push(
+        attachStringTokens(leadTokens, leadTrans, leadRoma),
+      );
     }
 
-    for (const bgSeg of bgSegments) {
+    for (let k = 0; k < bgSegments.length; k++) {
+      const bgSeg = bgSegments[k]!;
       if (bgSeg.length > 0) {
-        outputLines.push(bgSeg);
+        const bgTrans =
+          splitTrans.bgTexts[k] ||
+          (leadTokens.length === 0 && k === 0
+            ? cleanEnclosingBrackets(translation)
+            : "");
+        const bgRoma =
+          splitRoma.bgTexts[k] ||
+          (leadTokens.length === 0 && k === 0
+            ? cleanEnclosingBrackets(romaji)
+            : "");
+        outputLines.push(attachStringTokens(bgSeg, bgTrans, bgRoma));
       }
     }
   }
 
   // Sort lines by startMs
   outputLines.sort((a, b) => {
-    const aStart = (a.find((item) => Array.isArray(item)) as CompactLyricWord | undefined)?.[1] ?? 0;
-    const bStart = (b.find((item) => Array.isArray(item)) as CompactLyricWord | undefined)?.[1] ?? 0;
+    const aStart = (
+      a.find((item) => Array.isArray(item)) as
+        | CompactLyricWord
+        | undefined
+    )?.[1] ?? 0;
+    const bStart = (
+      b.find((item) => Array.isArray(item)) as
+        | CompactLyricWord
+        | undefined
+    )?.[1] ?? 0;
     return aStart - bStart;
   });
+
+  // Post-processing pass: Clean bracketed translations and forward background translations
+  for (let i = 0; i < outputLines.length; i++) {
+    const line = outputLines[i]!;
+    const words = line.filter((w): w is CompactLyricWord => Array.isArray(w));
+    const stringTokens = line.filter((w): w is string => typeof w === "string");
+    if (words.length === 0 || stringTokens.length === 0) continue;
+
+    const trans = stringTokens[0] || "";
+    const roma = stringTokens[1] || "";
+    const isBg = words[0]![0] === 2 || words[0]![0] === 4;
+
+    if (isBg) {
+      const cleanTrans = cleanEnclosingBrackets(trans);
+      const cleanRoma = cleanEnclosingBrackets(roma);
+      outputLines[i] = attachStringTokens(words, cleanTrans, cleanRoma);
+    } else if (
+      hasOpeningBracket(trans) ||
+      hasClosingBracket(trans) ||
+      hasOpeningBracket(roma) ||
+      hasClosingBracket(roma)
+    ) {
+      const splitTrans = extractBracketedTextSegments(trans);
+      const splitRoma = extractBracketedTextSegments(roma);
+
+      const cleanLeadTrans =
+        splitTrans.leadText || (splitTrans.bgTexts.length === 0 ? trans : "");
+      const cleanLeadRoma =
+        splitRoma.leadText || (splitRoma.bgTexts.length === 0 ? roma : "");
+
+      outputLines[i] = attachStringTokens(
+        words,
+        cleanLeadTrans,
+        cleanLeadRoma,
+      );
+
+      // If next line exists and doesn't have translation, forward background translation
+      if (i + 1 < outputLines.length && splitTrans.bgTexts.length > 0) {
+        const nextLine = outputLines[i + 1]!;
+        const nextWords = nextLine.filter((w): w is CompactLyricWord =>
+          Array.isArray(w),
+        );
+        const nextStringTokens = nextLine.filter(
+          (w): w is string => typeof w === "string",
+        );
+
+        if (
+          nextWords.length > 0 &&
+          (!nextStringTokens[0] || nextStringTokens[0].trim() === "")
+        ) {
+          const nextTrans = splitTrans.bgTexts[0]!;
+          const nextRoma =
+            splitRoma.bgTexts[0] || nextStringTokens[1] || "";
+          outputLines[i + 1] = attachStringTokens(
+            nextWords,
+            nextTrans,
+            nextRoma,
+          );
+        }
+      }
+    }
+  }
 
   return outputLines;
 }

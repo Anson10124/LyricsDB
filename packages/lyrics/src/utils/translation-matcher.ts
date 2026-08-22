@@ -5,6 +5,12 @@ import {
 } from "@applemusic-like-lyrics/lyric";
 import { isPlaceholderLyricText } from "./info-lines.js";
 import { extractLyricContent } from "./qrc-decoder.js";
+import {
+  cleanEnclosingBrackets,
+  extractBracketedTextSegments,
+  hasOpeningBracket,
+  hasClosingBracket,
+} from "./background-vocals.js";
 
 export interface TimestampedLine {
   startTime: number;
@@ -288,7 +294,12 @@ function alignSequenceDP<
 >(
   baseLines: LyricLine[],
   candidates: T[],
-  onMatch: (baseLine: LyricLine, candidate: T) => void,
+  onMatch: (
+    baseLine: LyricLine,
+    candidate: T,
+    baseIdx: number,
+    allBaseLines: LyricLine[],
+  ) => void,
 ): void {
   const N = baseLines.length;
   const M = candidates.length;
@@ -402,7 +413,7 @@ function alignSequenceDP<
   matches.reverse();
 
   for (const m of matches) {
-    onMatch(baseLines[m.baseIdx]!, candidates[m.candIdx]!);
+    onMatch(baseLines[m.baseIdx]!, candidates[m.candIdx]!, m.baseIdx, baseLines);
   }
 }
 
@@ -430,9 +441,27 @@ export function alignTranslationsAndRomaji(
     );
 
     if (transCandidates.length > 0) {
-      alignSequenceDP(result, transCandidates, (line, cand) => {
+      alignSequenceDP(result, transCandidates, (line, cand, baseIdx, allLines) => {
         if (!line.translatedLyric) {
-          line.translatedLyric = cand.text;
+          if (line.isBG) {
+            line.translatedLyric = cleanEnclosingBrackets(cand.text);
+          } else if (
+            hasOpeningBracket(cand.text) ||
+            hasClosingBracket(cand.text)
+          ) {
+            const split = extractBracketedTextSegments(cand.text);
+            line.translatedLyric = split.leadText || cand.text;
+
+            // Assign extracted bracketed background translation to attached background lines
+            for (let k = 0; k < split.bgTexts.length; k++) {
+              const targetBgLine = allLines[baseIdx + 1 + k];
+              if (targetBgLine && (targetBgLine.isBG || !targetBgLine.translatedLyric)) {
+                targetBgLine.translatedLyric = split.bgTexts[k]!;
+              }
+            }
+          } else {
+            line.translatedLyric = cand.text;
+          }
         }
       });
     }
@@ -447,9 +476,27 @@ export function alignTranslationsAndRomaji(
     );
 
     if (romajiCandidates.length > 0) {
-      alignSequenceDP(result, romajiCandidates, (line, cand) => {
+      alignSequenceDP(result, romajiCandidates, (line, cand, baseIdx, allLines) => {
         if (!line.romanLyric) {
-          line.romanLyric = cand.text;
+          if (line.isBG) {
+            line.romanLyric = cleanEnclosingBrackets(cand.text);
+          } else if (
+            hasOpeningBracket(cand.text) ||
+            hasClosingBracket(cand.text)
+          ) {
+            const split = extractBracketedTextSegments(cand.text);
+            line.romanLyric = split.leadText || cand.text;
+
+            // Assign extracted bracketed background romaji to attached background lines
+            for (let k = 0; k < split.bgTexts.length; k++) {
+              const targetBgLine = allLines[baseIdx + 1 + k];
+              if (targetBgLine && (targetBgLine.isBG || !targetBgLine.romanLyric)) {
+                targetBgLine.romanLyric = split.bgTexts[k]!;
+              }
+            }
+          } else {
+            line.romanLyric = cand.text;
+          }
 
           if (
             cand.words &&

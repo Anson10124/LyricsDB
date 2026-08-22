@@ -1,10 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { SyncedLyricsPayload } from "@repo/types";
+import type { CompactLyricWord, SyncedLyricsPayload } from "@repo/types";
 import {
   extractBackgroundVocals,
   optimizeLyricsPayload,
   formatLyricsPayload,
+  alignTranslationsAndRomaji,
+  convertCompactToAmllLines,
+  convertAmllLinesToCompact,
 } from "../src/index.js";
 
 describe("Background Vocals Extraction", () => {
@@ -124,6 +127,103 @@ describe("Background Vocals Extraction", () => {
     assert.equal(bgLine.map((w) => w[3]).join(""), "hold on ");
   });
 
+  it("should extract bracketed translation and assign to background vocal line", () => {
+    // User Example from Rap God:
+    // Main: Something's wrong, I can feel it (Six minutes, Slim Shady, you're on)
+    // Translation: 有什么不对劲，我能感觉到（六分钟，Slim Shady，该你出场了）
+    const input: SyncedLyricsPayload = [
+      [
+        [1, 1000, 300, "Something's "],
+        [1, 1300, 300, "wrong, "],
+        [1, 1600, 200, "I "],
+        [1, 1800, 200, "can "],
+        [1, 2000, 300, "feel "],
+        [1, 2300, 300, "it "],
+        [1, 2600, 300, "(Six "],
+        [1, 2900, 300, "minutes, "],
+        [1, 3200, 300, "Slim "],
+        [1, 3500, 300, "Shady, "],
+        [1, 3800, 300, "you're "],
+        [1, 4100, 300, "on) "],
+        "有什么不对劲，我能感觉到（六分钟，Slim Shady，该你出场了）",
+        "Something's wrong, I can feel it (Six minutes, Slim Shady, you're on)",
+      ],
+    ];
+
+    const result = extractBackgroundVocals(input);
+    assert.equal(result.length, 2);
+
+    // Lead line (Type 1)
+    const leadLine = result[0]!;
+    const leadWords = leadLine.filter(
+      (w): w is CompactLyricWord => Array.isArray(w),
+    );
+    const leadStrings = leadLine.filter(
+      (w): w is string => typeof w === "string",
+    );
+    assert.equal(leadWords[0]![0], 1);
+    assert.equal(
+      leadWords.map((w) => w[3]).join(""),
+      "Something's wrong, I can feel it ",
+    );
+    assert.equal(leadStrings[0], "有什么不对劲，我能感觉到");
+    assert.equal(leadStrings[1], "Something's wrong, I can feel it");
+
+    // Background line (Type 2)
+    const bgLine = result[1]!;
+    const bgWords = bgLine.filter(
+      (w): w is CompactLyricWord => Array.isArray(w),
+    );
+    const bgStrings = bgLine.filter((w): w is string => typeof w === "string");
+    assert.equal(bgWords[0]![0], 2);
+    assert.equal(
+      bgWords.map((w) => w[3]).join(""),
+      "Six minutes, Slim Shady, you're on ",
+    );
+    assert.equal(bgStrings[0], "六分钟，Slim Shady，该你出场了");
+    assert.equal(bgStrings[1], "Six minutes, Slim Shady, you're on");
+  });
+
+  it("should clean bracketed translation on lead line and forward to subsequent line if missing translation", () => {
+    const input: SyncedLyricsPayload = [
+      [
+        [1, 1000, 1000, "Something's wrong, I can feel it "],
+        "有什么不对劲，我能感觉到（六分钟，Slim Shady，该你出场了）",
+      ],
+      [
+        [1, 2500, 1500, "Six minutes, Slim Shady, you're on "],
+      ],
+    ];
+
+    const result = extractBackgroundVocals(input);
+    assert.equal(result.length, 2);
+
+    // Lead line 1 has bracketed text removed
+    const line1Strings = result[0]!.filter((w): w is string => typeof w === "string");
+    assert.equal(line1Strings[0], "有什么不对劲，我能感觉到");
+
+    // Line 2 receives the extracted background translation
+    const line2Strings = result[1]!.filter((w): w is string => typeof w === "string");
+    assert.equal(line2Strings[0], "六分钟，Slim Shady，该你出场了");
+  });
+
+  it("should strip enclosing brackets on full-line background translation", () => {
+    const input: SyncedLyricsPayload = [
+      [
+        [1, 1000, 1000, "(Run from the sun) "],
+        "（逃离太阳）",
+        "(Run from the sun)",
+      ],
+    ];
+
+    const result = extractBackgroundVocals(input);
+    assert.equal(result.length, 1);
+
+    const lineStrings = result[0]!.filter((w): w is string => typeof w === "string");
+    assert.equal(lineStrings[0], "逃离太阳");
+    assert.equal(lineStrings[1], "Run from the sun");
+  });
+
   it("should generate correct TTML with ttm:role='x-bg' for extracted background vocals", () => {
     const input: SyncedLyricsPayload = [
       [
@@ -149,5 +249,45 @@ describe("Background Vocals Extraction", () => {
     // Check that TTML has lead line and a background line with ttm:role="x-bg"
     assert.ok(xml.includes('ttm:role="x-bg"'));
     assert.ok(xml.includes("Yeah"));
+  });
+
+  it("should assign background vocal translation when aligning translations with candidate lines (Rap God example)", () => {
+    const rawPayload: SyncedLyricsPayload = [
+      [
+        [1, 9900, 510, "Something's "],
+        [1, 10410, 570, "wrong, "],
+        [1, 10980, 120, "I "],
+        [1, 11100, 240, "can "],
+        [1, 11340, 300, "feel "],
+        [1, 11640, 1320, "it "],
+      ],
+      [
+        [2, 9900, 2040, "Six "],
+        [2, 11940, 180, "minutes, "],
+        [2, 12120, 360, "Slim "],
+        [2, 12480, 270, "Shady, "],
+        [2, 12750, 150, "you're "],
+        [2, 12900, 60, "on "],
+      ],
+    ];
+
+    const translationLrc = "[00:09.90]有什么不对劲，我能感觉到（六分钟，Slim Shady，该你出场了）\n";
+
+    const amllLines = convertCompactToAmllLines(rawPayload);
+    const enriched = alignTranslationsAndRomaji(amllLines, {
+      translation: translationLrc,
+    });
+
+    assert.equal(enriched[0]?.translatedLyric, "有什么不对劲，我能感觉到");
+    assert.equal(enriched[1]?.translatedLyric, "六分钟，Slim Shady，该你出场了");
+
+    const compact = convertAmllLinesToCompact(enriched);
+    assert.equal(compact.length, 2);
+
+    const line1Strings = compact[0]!.filter((w): w is string => typeof w === "string");
+    assert.equal(line1Strings[0], "有什么不对劲，我能感觉到");
+
+    const line2Strings = compact[1]!.filter((w): w is string => typeof w === "string");
+    assert.equal(line2Strings[0], "六分钟，Slim Shady，该你出场了");
   });
 });
