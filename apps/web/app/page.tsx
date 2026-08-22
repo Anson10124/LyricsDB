@@ -11,6 +11,7 @@ import type {
 import { InputBar } from "@/components/input-bar";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import { LyricsView } from "@/components/lyrics-view";
+import { LiveActivityToaster } from "@/components/live-activity-toaster";
 import type { DeezerTrack } from "@/lib/deezer";
 
 import Link from "next/link";
@@ -41,6 +42,7 @@ export default function Home() {
   const isCacheHitRef = useRef<boolean>(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const doneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const userResolvedTrackIdsRef = useRef<Set<string>>(new Set());
 
   const handleReset = () => {
     if (eventSourceRef.current) {
@@ -259,6 +261,10 @@ export default function Home() {
             const track = data?.track;
             const lyrics = data?.lyrics;
 
+            if (track?.id) {
+              userResolvedTrackIdsRef.current.add(track.id);
+            }
+
             setResult({ track, lyrics });
 
             if (isCacheHitRef.current) {
@@ -441,6 +447,11 @@ export default function Home() {
           Docs
         </Link>
       </div>
+
+      <LiveActivityToaster
+        enabled={viewState === "search"}
+        ignoredTrackIds={Array.from(userResolvedTrackIdsRef.current)}
+      />
     </main>
   );
 }

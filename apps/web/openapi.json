@@ -1936,6 +1936,402 @@
           "Lyrics"
         ]
       }
+    },
+    "/api/activity/stream": {
+      "get": {
+        "description": "Server-Sent Events endpoint streaming live events whenever tracks are added to the database. Emits total tracks count upon initialization followed by live added tracks and keep-alive heartbeats.",
+        "operationId": "ActivityController_streamActivity[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream emitting 'init', 'added', and 'heartbeat' payloads",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "init",
+                        "added",
+                        "heartbeat"
+                      ],
+                      "example": "added"
+                    },
+                    "id": {
+                      "type": "string",
+                      "example": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    },
+                    "totalTracks": {
+                      "type": "integer",
+                      "description": "Total number of tracks in database (sent on 'init')",
+                      "example": 42
+                    },
+                    "track": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "6fd7cc30-22d2-4789-9c9e-3029337fd522"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Please Please Please"
+                        },
+                        "artist": {
+                          "type": "string",
+                          "example": "Sabrina Carpenter"
+                        },
+                        "artworkUrl": {
+                          "type": "string",
+                          "example": "https://is1-ssl.mzstatic.com/.../600x600bb.jpg"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "example": 1787262680794
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream real-time database additions via SSE",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/activity/stream": {
+      "get": {
+        "description": "Server-Sent Events endpoint streaming live events whenever tracks are added to the database. Emits total tracks count upon initialization followed by live added tracks and keep-alive heartbeats.",
+        "operationId": "ActivityController_streamActivity[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream emitting 'init', 'added', and 'heartbeat' payloads",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "init",
+                        "added",
+                        "heartbeat"
+                      ],
+                      "example": "added"
+                    },
+                    "id": {
+                      "type": "string",
+                      "example": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    },
+                    "totalTracks": {
+                      "type": "integer",
+                      "description": "Total number of tracks in database (sent on 'init')",
+                      "example": 42
+                    },
+                    "track": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "6fd7cc30-22d2-4789-9c9e-3029337fd522"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Please Please Please"
+                        },
+                        "artist": {
+                          "type": "string",
+                          "example": "Sabrina Carpenter"
+                        },
+                        "artworkUrl": {
+                          "type": "string",
+                          "example": "https://is1-ssl.mzstatic.com/.../600x600bb.jpg"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "example": 1787262680794
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream real-time database additions via SSE",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/api/live/stream": {
+      "get": {
+        "description": "Server-Sent Events endpoint streaming live events whenever tracks are added to the database. Emits total tracks count upon initialization followed by live added tracks and keep-alive heartbeats.",
+        "operationId": "ActivityController_streamActivity[2]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream emitting 'init', 'added', and 'heartbeat' payloads",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "init",
+                        "added",
+                        "heartbeat"
+                      ],
+                      "example": "added"
+                    },
+                    "id": {
+                      "type": "string",
+                      "example": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    },
+                    "totalTracks": {
+                      "type": "integer",
+                      "description": "Total number of tracks in database (sent on 'init')",
+                      "example": 42
+                    },
+                    "track": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "6fd7cc30-22d2-4789-9c9e-3029337fd522"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Please Please Please"
+                        },
+                        "artist": {
+                          "type": "string",
+                          "example": "Sabrina Carpenter"
+                        },
+                        "artworkUrl": {
+                          "type": "string",
+                          "example": "https://is1-ssl.mzstatic.com/.../600x600bb.jpg"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "example": 1787262680794
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream real-time database additions via SSE",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/live/stream": {
+      "get": {
+        "description": "Server-Sent Events endpoint streaming live events whenever tracks are added to the database. Emits total tracks count upon initialization followed by live added tracks and keep-alive heartbeats.",
+        "operationId": "ActivityController_streamActivity[3]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream emitting 'init', 'added', and 'heartbeat' payloads",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "init",
+                        "added",
+                        "heartbeat"
+                      ],
+                      "example": "added"
+                    },
+                    "id": {
+                      "type": "string",
+                      "example": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    },
+                    "totalTracks": {
+                      "type": "integer",
+                      "description": "Total number of tracks in database (sent on 'init')",
+                      "example": 42
+                    },
+                    "track": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "6fd7cc30-22d2-4789-9c9e-3029337fd522"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Please Please Please"
+                        },
+                        "artist": {
+                          "type": "string",
+                          "example": "Sabrina Carpenter"
+                        },
+                        "artworkUrl": {
+                          "type": "string",
+                          "example": "https://is1-ssl.mzstatic.com/.../600x600bb.jpg"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "example": 1787262680794
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream real-time database additions via SSE",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/api/activity": {
+      "get": {
+        "description": "Alias for /api/activity/stream",
+        "operationId": "ActivityController_streamActivityRoot[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Stream real-time activity (root alias)",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/activity": {
+      "get": {
+        "description": "Alias for /api/activity/stream",
+        "operationId": "ActivityController_streamActivityRoot[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Stream real-time activity (root alias)",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/api/live": {
+      "get": {
+        "description": "Alias for /api/activity/stream",
+        "operationId": "ActivityController_streamActivityRoot[2]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Stream real-time activity (root alias)",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/live": {
+      "get": {
+        "description": "Alias for /api/activity/stream",
+        "operationId": "ActivityController_streamActivityRoot[3]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Stream real-time activity (root alias)",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/api/activity/count": {
+      "get": {
+        "operationId": "ActivityController_getCount[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Total track count"
+          }
+        },
+        "summary": "Get total number of tracks in the database",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/activity/count": {
+      "get": {
+        "operationId": "ActivityController_getCount[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Total track count"
+          }
+        },
+        "summary": "Get total number of tracks in the database",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/api/live/count": {
+      "get": {
+        "operationId": "ActivityController_getCount[2]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Total track count"
+          }
+        },
+        "summary": "Get total number of tracks in the database",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/live/count": {
+      "get": {
+        "operationId": "ActivityController_getCount[3]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Total track count"
+          }
+        },
+        "summary": "Get total number of tracks in the database",
+        "tags": [
+          "Activity"
+        ]
+      }
     }
   },
   "info": {
@@ -1964,6 +2360,10 @@
     {
       "name": "Resolver",
       "description": "Cross-platform track link resolution and matching"
+    },
+    {
+      "name": "Activity",
+      "description": "Real-time SSE event streaming and monitoring for track requests and database activity"
     },
     {
       "name": "System",

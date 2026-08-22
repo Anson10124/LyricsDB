@@ -33,6 +33,7 @@ import type {
   StreamLyricsOptions,
   SyncedLyricsPayload,
 } from "@repo/types";
+import { ActivityService } from "../activity/activity.service";
 import { DATABASE_CONNECTION } from "../database/database.constants";
 import { ResolverService } from "../resolver/resolver.service";
 import { StorageService } from "../storage/storage.service";
@@ -56,6 +57,7 @@ export class TracksService {
     private readonly resolverService: ResolverService,
     private readonly storageService: StorageService,
     private readonly ipRateLimiter: IpRateLimiterService,
+    private readonly activityService: ActivityService,
   ) {}
 
   // Universal Read-Through Endpoint:
@@ -446,7 +448,10 @@ export class TracksService {
           .insert(tracks)
           .values(sanitizedData)
           .returning();
-        if (saved[0]) return saved[0];
+        if (saved[0]) {
+          this.activityService.recordTrackAdded(saved[0]);
+          return saved[0];
+        }
       }
     } catch (err: unknown) {
       // Concurrency race condition handling:

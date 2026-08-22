@@ -136,6 +136,10 @@ async function bootstrap() {
     )
     .addTag("Resolver", "Cross-platform track link resolution and matching")
     .addTag(
+      "Activity",
+      "Real-time SSE event streaming and monitoring for track requests and database activity",
+    )
+    .addTag(
       "System",
       "Server health, provider circuit breakers, and rate limit status endpoints",
     );

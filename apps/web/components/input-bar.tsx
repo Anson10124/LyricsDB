@@ -207,7 +207,7 @@ export function InputBar({
   }, [shouldShowDropdown, onOpenChange]);
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-2xl px-4 z-30">
+    <div ref={containerRef} className="relative w-full max-w-2xl px-4 mb-6 z-30">
       <form onSubmit={handleSubmit}>
         <motion.div
           layout

@@ -11,6 +11,8 @@ import { TracksModule } from "./tracks/tracks.module";
 import { CustomThrottlerGuard } from "./common/guards/throttler.guard";
 import { RateLimiterModule } from "./common/rate-limiter/rate-limiter.module";
 
+import { ActivityModule } from "./activity/activity.module";
+
 @Module({
   imports: [
     RateLimiterModule,
@@ -30,6 +32,7 @@ import { RateLimiterModule } from "./common/rate-limiter/rate-limiter.module";
     ResolverModule,
     StorageModule,
     TracksModule,
+    ActivityModule,
   ],
   controllers: [AppController, SystemController],
   providers: [
