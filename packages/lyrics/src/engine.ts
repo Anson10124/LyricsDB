@@ -164,6 +164,13 @@ export function evaluateLyricsCandidate(
   // Word token density bonus (up to 100 pts):
   score += Math.min(100, Math.round(wordCount / 5));
 
+  // Deezer word-by-word penalty:
+  // Deezer word-by-word sync quality is less reliable than other word-by-word sources (QQ Music, Musixmatch, NetEase),
+  // but still superior to line-by-line sync. Penalizing by 200 points ranks it lowest among word sources while keeping it above line sync.
+  if (candidate.provider === "deezer" && candidate.lyricsType === "word") {
+    score -= 200;
+  }
+
   // If candidate is incomplete/truncated, penalize heavily
   if (!isComplete) {
     score -= 2000;
