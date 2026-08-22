@@ -1,5 +1,6 @@
 # Dependencies & Package Stores
 node_modules
+**/node_modules
 .pnp
 .pnp.js
 .pnpm-store
@@ -10,15 +11,23 @@ node_modules
 
 # Build Outputs & Caches
 .turbo
+**/.turbo
 .next
+**/.next
 out
+**/out
 build
+**/build
 dist
+**/dist
+.source
+**/.source
 .vercel
 *.tsbuildinfo
 .eslintcache
 .prettiercache
 coverage
+**/coverage
 
 # Environment & Config
 .env

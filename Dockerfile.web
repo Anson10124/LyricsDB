@@ -11,6 +11,9 @@ WORKDIR /app
 # Copy package manifests first for layer caching
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY apps/web/package.json ./apps/web/
+COPY packages/database/package.json ./packages/database/
+COPY packages/lyrics/package.json ./packages/lyrics/
+COPY packages/music-resolver/package.json ./packages/music-resolver/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
@@ -22,6 +25,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 # Copy source files
 COPY apps/web ./apps/web
 COPY packages ./packages
+
 
 # Run postinstall scripts now that source files are present
 RUN pnpm --filter web run postinstall
