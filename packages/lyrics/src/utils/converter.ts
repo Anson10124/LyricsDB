@@ -28,11 +28,25 @@ import { extractBackgroundVocals } from "./background-vocals.js";
 import { standardizeSyllables } from "./syllable-sanitizer.js";
 import { normalizeCapitalization } from "./capitalization.js";
 import { alignAndUnmaskLyrics } from "./matcher.js";
+import {
+  optimizeTiming,
+  type OptimizeTimingOptions,
+} from "./timing-optimizer.js";
+
+export {
+  optimizeTiming,
+  cleanUnintentionalOverlaps,
+  syncMainAndBackgroundLines,
+  convertExcessiveBackgroundLines,
+  tryAdvanceStartTime,
+  type OptimizeTimingOptions,
+} from "./timing-optimizer.js";
 
 export function optimizeLyricsPayload(
   payload: SyncedLyricsPayload,
   metadata?: { title?: string; artist?: string },
   references?: Array<SyncedLyricsPayload | string | null | undefined>,
+  timingOptions?: OptimizeTimingOptions,
 ): SyncedLyricsPayload {
   let result = payload;
   result = stripInfoLines(result, metadata);
@@ -44,6 +58,7 @@ export function optimizeLyricsPayload(
   result = extractBackgroundVocals(result);
   result = standardizeSyllables(result);
   result = normalizeCapitalization(result);
+  result = optimizeTiming(result, timingOptions);
   return result;
 }
 
@@ -306,10 +321,14 @@ export function formatLyricsPayload(
       if (metadata.artist) amllMeta.push(["artist", [metadata.artist]]);
       if (metadata.album) amllMeta.push(["album", [metadata.album]]);
 
-      const ttmlResult = toTTMLResult(amllLines as any, amllMeta, {
-        translationLanguage: "zh-Hans",
-        romanizationLanguage: "ja-Latn",
-      });
+      const ttmlResult = toTTMLResult(
+        amllLines as unknown as Parameters<typeof toTTMLResult>[0],
+        amllMeta,
+        {
+          translationLanguage: "zh-Hans",
+          romanizationLanguage: "ja-Latn",
+        },
+      );
 
       let rawXml = generator.generate(ttmlResult);
 

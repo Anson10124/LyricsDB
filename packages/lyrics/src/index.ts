@@ -17,5 +17,6 @@ export * from "./utils/syllable-sanitizer.js";
 export * from "./utils/capitalization.js";
 export * from "./utils/matcher.js";
 export * from "./utils/background-vocals.js";
+export * from "./utils/timing-optimizer.js";
 export * from "./utils/translation-matcher.js";
 export * from "./engine.js";
