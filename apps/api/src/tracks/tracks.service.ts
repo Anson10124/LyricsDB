@@ -386,6 +386,8 @@ export class TracksService {
     lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null;
     lyricsStoragePath: string | null;
     lyricsProvider: string | null;
+    hasTranslation: boolean;
+    hasRomaji: boolean;
     resolvedRawLyrics:
       | SyncedLyricsPayload
       | string
@@ -396,6 +398,8 @@ export class TracksService {
     let lyrics = existingTrack?.lyrics ?? null;
     let lyricsStoragePath = existingTrack?.lyricsStoragePath ?? null;
     let lyricsProvider = existingTrack?.lyricsProvider ?? null;
+    let hasTranslation = existingTrack?.hasTranslation ?? false;
+    let hasRomaji = existingTrack?.hasRomaji ?? false;
     let resolvedRawLyrics:
       | SyncedLyricsPayload
       | string
@@ -434,6 +438,8 @@ export class TracksService {
         lyricsType = resolvedLyrics.lyricsType;
         lyricsProvider = resolvedLyrics.provider;
         resolvedRawLyrics = resolvedLyrics.lyrics;
+        hasTranslation = Boolean(resolvedLyrics.hasTranslation);
+        hasRomaji = Boolean(resolvedLyrics.hasRomaji);
 
         if (this.storageService.isConfigured()) {
           const trackKey = existingTrack?.id || randomUUID();
@@ -456,6 +462,8 @@ export class TracksService {
       lyrics,
       lyricsStoragePath,
       lyricsProvider,
+      hasTranslation,
+      hasRomaji,
       resolvedRawLyrics,
     };
   }
@@ -468,6 +476,8 @@ export class TracksService {
       lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null;
       lyricsStoragePath: string | null;
       lyricsProvider: string | null;
+      hasTranslation?: boolean;
+      hasRomaji?: boolean;
     },
     existingTrack?: Track | null,
   ): NewTrack {
@@ -495,6 +505,10 @@ export class TracksService {
       lyrics: lyricsData.lyrics,
       lyricsStoragePath: lyricsData.lyricsStoragePath,
       lyricsProvider: lyricsData.lyricsProvider,
+      hasTranslation:
+        lyricsData.hasTranslation ?? existingTrack?.hasTranslation ?? false,
+      hasRomaji:
+        lyricsData.hasRomaji ?? existingTrack?.hasRomaji ?? false,
       isVerified: existingTrack?.isVerified ?? false,
     };
   }

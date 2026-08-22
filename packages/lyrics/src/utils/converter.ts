@@ -11,7 +11,7 @@ import {
   type LyricLine,
   type LyricWord,
 } from "@applemusic-like-lyrics/lyric";
-import { TTMLGenerator } from "@applemusic-like-lyrics/ttml";
+import { TTMLGenerator, toTTMLResult } from "@applemusic-like-lyrics/ttml";
 import type {
   CompactLyricLine,
   CompactLyricWord,
@@ -49,8 +49,8 @@ export function optimizeLyricsPayload(
 
 // Converts AMLL LyricLine array to our compact line-grouped format:
 // [
-//   [ [1, startMs, lengthMs, "word "], ... ], // Line 1
-//   [ [1, startMs, lengthMs, "word "], ... ]  // Line 2
+//   [ [1, startMs, lengthMs, "word "], ..., "translation", "romaji" ], // Line 1
+//   [ [1, startMs, lengthMs, "word "], ..., "", "" ]  // Line 2
 // ]
 export function convertAmllLinesToCompact(
   rawLines: LyricLine[],
@@ -76,6 +76,8 @@ export function convertAmllLinesToCompact(
 
     if (rawLine.words && rawLine.words.length > 0) {
       const lineWords: CompactLyricWord[] = [];
+      const lineTranslation = rawLine.translatedLyric || "";
+      const lineRomaji = rawLine.romanLyric || "";
 
       for (let i = 0; i < rawLine.words.length; i++) {
         const w = rawLine.words[i]!;
@@ -92,7 +94,11 @@ export function convertAmllLinesToCompact(
       }
 
       if (lineWords.length > 0) {
-        lines.push(lineWords);
+        if (lineTranslation || lineRomaji) {
+          lines.push([...lineWords, lineTranslation, lineRomaji]);
+        } else {
+          lines.push(lineWords);
+        }
       }
     }
   }
@@ -113,17 +119,28 @@ export function convertCompactToAmllLines(
   for (const line of payload) {
     if (!Array.isArray(line) || line.length === 0) continue;
 
-    const firstWord = line[0];
-    if (!firstWord) continue;
+    const wordsOnly = line.filter((item): item is CompactLyricWord =>
+      Array.isArray(item),
+    );
+    const stringTokens = line.filter(
+      (item): item is string => typeof item === "string",
+    );
 
+    if (wordsOnly.length === 0) continue;
+
+    const firstWord = wordsOnly[0]!;
     const vocalType = firstWord[0];
     const isBG = vocalType === 2 || vocalType === 4;
     const isDuet = vocalType === 3 || vocalType === 4;
 
-    const words: LyricWord[] = line.map((w: CompactLyricWord) => {
+    const lineTranslation = stringTokens[0] || "";
+    const lineRomaji = stringTokens[1] || "";
+
+    const words: LyricWord[] = wordsOnly.map((w: CompactLyricWord) => {
       const startTime = w[1];
-      const endTime = w[1] + w[2];
-      const word = w[3];
+      const endTime = w[1] + (w[2] || 0);
+      const word = w[3] || "";
+
       return {
         startTime,
         endTime,
@@ -138,8 +155,8 @@ export function convertCompactToAmllLines(
       words,
       startTime: lineStartTime,
       endTime: lineEndTime,
-      translatedLyric: "",
-      romanLyric: "",
+      translatedLyric: lineTranslation,
+      romanLyric: lineRomaji,
       isBG,
       isDuet,
     });
@@ -266,86 +283,73 @@ export function formatLyricsPayload(
 
   switch (normFormat) {
     case "ttml": {
-        const domImplementation =
-          typeof document !== "undefined"
+      const domImplementation =
+        typeof document !== "undefined"
+          ? document.implementation
+          : new DOMImplementation();
+      const xmlSerializer =
+        typeof (globalThis as { XMLSerializer?: new () => unknown })
+          .XMLSerializer !== "undefined"
+          ? new (globalThis as unknown as { XMLSerializer: new () => unknown })
+              .XMLSerializer()
+          : new XMLSerializer();
 
-            ? document.implementation
-            : new DOMImplementation();
-        const xmlSerializer =
-          typeof (globalThis as { XMLSerializer?: new () => unknown })
-            .XMLSerializer !== "undefined"
-            ? new (globalThis as unknown as { XMLSerializer: new () => unknown })
-                .XMLSerializer()
-            : new XMLSerializer();
+      const generator = new TTMLGenerator({
+        domImplementation,
+        xmlSerializer: xmlSerializer as NonNullable<
+          ConstructorParameters<typeof TTMLGenerator>[0]
+        >["xmlSerializer"],
+      });
 
-        const generator = new TTMLGenerator({
-          domImplementation,
-          xmlSerializer: xmlSerializer as NonNullable<
-            ConstructorParameters<typeof TTMLGenerator>[0]
-          >["xmlSerializer"],
-        });
+      const amllMeta: [string, string[]][] = [];
+      if (metadata.title) amllMeta.push(["title", [metadata.title]]);
+      if (metadata.artist) amllMeta.push(["artist", [metadata.artist]]);
+      if (metadata.album) amllMeta.push(["album", [metadata.album]]);
 
+      const ttmlResult = toTTMLResult(amllLines as any, amllMeta, {
+        translationLanguage: "zh-Hans",
+        romanizationLanguage: "ja-Latn",
+      });
 
+      let rawXml = generator.generate(ttmlResult);
 
-
-        const ttmlLines = amllLines.map((line) => ({
-          ...line,
-          text: line.words.map((w) => w.word).join(""),
-          words: line.words.map((w) => ({
-            text: w.word,
-            startTime: w.startTime,
-            endTime: w.endTime,
-          })),
-        }));
-        let rawXml = generator.generate({
-          lines: ttmlLines as unknown as Parameters<
-            typeof generator.generate
-          >[0]["lines"],
-          metadata: {
-            title: metadata.title ? [metadata.title] : undefined,
-            artist: metadata.artist ? [metadata.artist] : undefined,
-            album: metadata.album ? [metadata.album] : undefined,
-          },
-        });
-
-
-        // Ensure background vocals have ttm:role="x-bg" and duets have ttm:agent="v2"
-        for (let i = 0; i < amllLines.length; i++) {
-          const line = amllLines[i]!;
-          const key = `L${i + 1}`;
-          if (line.isBG) {
-            const pRegex = new RegExp(
-              `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*)(>)`,
-              "g",
-            );
-            rawXml = rawXml.replace(pRegex, (m, p1, p2) => {
-              if (!p1.includes('ttm:role="x-bg"')) {
-                return `${p1} ttm:role="x-bg"${p2}`;
-              }
-              return m;
-            });
-          }
-          if (line.isDuet) {
-            const pRegex = new RegExp(
-              `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*\\bttm:agent=")v1(")`,
-              "g",
-            );
-            rawXml = rawXml.replace(pRegex, `$1v2$2`);
-          }
+      // Ensure background vocals have ttm:role="x-bg" and duets have ttm:agent="v2"
+      for (let i = 0; i < amllLines.length; i++) {
+        const line = amllLines[i]!;
+        const key = `L${i + 1}`;
+        if (line.isBG) {
+          const pRegex = new RegExp(
+            `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*)(>)`,
+            "g",
+          );
+          rawXml = rawXml.replace(pRegex, (m, p1, p2) => {
+            if (!p1.includes('ttm:role="x-bg"')) {
+              return `${p1} ttm:role="x-bg"${p2}`;
+            }
+            return m;
+          });
         }
-
-        if (amllLines.some((l) => l.isDuet)) {
-          if (!rawXml.includes('xml:id="v2"')) {
-            rawXml = rawXml.replace(
-              '<ttm:agent type="person" xml:id="v1"/>',
-              '<ttm:agent type="person" xml:id="v1"/>\n      <ttm:agent type="person" xml:id="v2"/>',
-            );
-          }
+        if (line.isDuet) {
+          const pRegex = new RegExp(
+            `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*\\bttm:agent=")v1(")`,
+            "g",
+          );
+          rawXml = rawXml.replace(pRegex, `$1v2$2`);
         }
-
-        formatted = formatXml(rawXml);
-        contentType = "application/xml; charset=utf-8";
       }
+
+      if (amllLines.some((l) => l.isDuet)) {
+        if (!rawXml.includes('xml:id="v2"')) {
+          rawXml = rawXml.replace(
+            '<ttm:agent type="person" xml:id="v1"/>',
+            '<ttm:agent type="person" xml:id="v1"/>\n      <ttm:agent type="person" xml:id="v2"/>',
+          );
+        }
+      }
+
+      formatted = formatXml(rawXml);
+      contentType = "application/xml; charset=utf-8";
+    }
       break;
     case "lrc":
       formatted = stringifyLrc(amllLines);

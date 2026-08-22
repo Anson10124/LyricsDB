@@ -50,6 +50,10 @@ export const tracks = pgTable(
     lyricsStoragePath: text("lyrics_storage_path"),
     lyricsProvider: varchar("lyrics_provider", { length: 100 }),
 
+    // Translation and Romaji (Romanization) Metadata
+    hasTranslation: boolean("has_translation").default(false).notNull(),
+    hasRomaji: boolean("has_romaji").default(false).notNull(),
+
     // Verification Flag (defaults to false for human review)
     isVerified: boolean("is_verified").default(false).notNull(),
 

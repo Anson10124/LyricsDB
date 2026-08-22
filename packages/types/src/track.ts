@@ -37,6 +37,8 @@ export interface TrackRecord {
   lyrics?: SyncedLyricsPayload | string | null;
   lyricsStoragePath?: string | null;
   lyricsProvider?: string | null;
+  hasTranslation?: boolean;
+  hasRomaji?: boolean;
   isVerified: boolean;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -58,4 +60,6 @@ export type SanitizedTrack<T extends { lyrics?: unknown }> = Omit<
   "lyrics"
 > & {
   hasLyrics: boolean;
+  hasTranslation?: boolean;
+  hasRomaji?: boolean;
 };

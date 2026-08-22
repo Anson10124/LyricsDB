@@ -34,10 +34,16 @@ import {
 } from "./parsers/musixmatch.js";
 import { parseQrc } from "./parsers/qrc.js";
 import { parseYrc } from "./parsers/yrc.js";
-import { formatLyricsPayload, optimizeLyricsPayload } from "./utils/converter.js";
+import {
+  convertAmllLinesToCompact,
+  convertCompactToAmllLines,
+  formatLyricsPayload,
+  optimizeLyricsPayload,
+} from "./utils/converter.js";
 import { isPlaceholderLyricText } from "./utils/info-lines.js";
 import { containsMaskedTokens, fixExplicitText } from "./utils/explicit.js";
 import { alignAndUnmaskLyrics } from "./utils/matcher.js";
+import { alignTranslationsAndRomaji } from "./utils/translation-matcher.js";
 
 export interface ResolveLyricsContext {
   title: string;
@@ -65,6 +71,8 @@ export interface ResolvedLyricsResult {
   lyrics: SyncedLyricsPayload | string;
   source: string;
   provider: string;
+  hasTranslation?: boolean;
+  hasRomaji?: boolean;
 }
 
 export interface CandidateEvaluation {
@@ -99,7 +107,7 @@ export function evaluateLyricsCandidate(
     for (const line of payload) {
       if (!Array.isArray(line)) continue;
       for (const wordToken of line) {
-        if (!wordToken) continue;
+        if (!wordToken || !Array.isArray(wordToken)) continue;
         const [vocalType, startMs, lengthMs] = wordToken;
         if (vocalType) vocalTypes.add(vocalType);
         wordCount++;
@@ -282,6 +290,90 @@ async function unmaskCandidate(
   return {
     ...candidate,
     lyrics: lyricsResult,
+  };
+}
+
+async function enrichCandidateWithTranslationsAndRomaji(
+  candidate: ResolvedLyricsResult,
+  metadata: { title: string; artist?: string },
+  getters: {
+    getNeteaseLyrics: () => Promise<NeteaseLyricsResponse | null>;
+    getQQLyrics: () => Promise<QQMusicLyricsResponse | null>;
+  },
+): Promise<ResolvedLyricsResult> {
+  if (!Array.isArray(candidate.lyrics)) {
+    return candidate;
+  }
+
+  let translationSource: string | null = null;
+  let romajiSource: string | null = null;
+  let referenceLrc: string | null = null;
+
+  try {
+    const [neRes, qqRes] = await Promise.allSettled([
+      getters.getNeteaseLyrics(),
+      getters.getQQLyrics(),
+    ]);
+
+    // 1. Check NetEase for tlyric and romalrc (NetEase translations often have exact line matching with its lrc)
+    if (neRes.status === "fulfilled" && neRes.value) {
+      if (neRes.value.tlyric?.lyric && !translationSource) {
+        translationSource = neRes.value.tlyric.lyric;
+        referenceLrc = neRes.value.lrc?.lyric || neRes.value.yrc?.lyric || null;
+      }
+      if (neRes.value.romalrc?.lyric && !romajiSource) {
+        romajiSource = neRes.value.romalrc.lyric;
+        if (!referenceLrc) {
+          referenceLrc = neRes.value.lrc?.lyric || neRes.value.yrc?.lyric || null;
+        }
+      }
+    }
+
+    // 2. Check QQ Music for tlyric and romaQrc
+    if (qqRes.status === "fulfilled" && qqRes.value) {
+      if (qqRes.value.tlyric && !translationSource) {
+        translationSource = qqRes.value.tlyric;
+        referenceLrc = qqRes.value.lrc || qqRes.value.qrc || null;
+      }
+      if (qqRes.value.romaQrc && !romajiSource) {
+        romajiSource = qqRes.value.romaQrc;
+        if (!referenceLrc) {
+          referenceLrc = qqRes.value.lrc || qqRes.value.qrc || null;
+        }
+      }
+    }
+  } catch {
+    // Ignore error collecting translation sources
+  }
+
+  if (!translationSource && !romajiSource) {
+    return {
+      ...candidate,
+      hasTranslation: false,
+      hasRomaji: false,
+    };
+  }
+
+  const amllLines = convertCompactToAmllLines(
+    candidate.lyrics as SyncedLyricsPayload,
+  );
+  const enrichedLines = alignTranslationsAndRomaji(amllLines, {
+    translation: translationSource,
+    romaji: romajiSource,
+    referenceLrc,
+    metadata,
+  });
+
+  const compactPayload = convertAmllLinesToCompact(enrichedLines, metadata);
+
+  const hasTranslation = enrichedLines.some((l) => Boolean(l.translatedLyric));
+  const hasRomaji = enrichedLines.some((l) => Boolean(l.romanLyric));
+
+  return {
+    ...candidate,
+    lyrics: compactPayload,
+    hasTranslation,
+    hasRomaji,
   };
 }
 
@@ -545,6 +637,11 @@ export class LyricsEngine {
           getQQLyrics,
         });
 
+        best = await enrichCandidateWithTranslationsAndRomaji(best, metadata, {
+          getNeteaseLyrics,
+          getQQLyrics,
+        });
+
         context.onProgress?.({
           stage: "lyrics_found",
           provider: best.provider,
@@ -777,6 +874,11 @@ export class LyricsEngine {
           getQQLyrics,
         });
 
+        best = await enrichCandidateWithTranslationsAndRomaji(best, metadata, {
+          getNeteaseLyrics,
+          getQQLyrics,
+        });
+
         context.onProgress?.({
           stage: "lyrics_found",
           provider: best.provider,
@@ -905,6 +1007,11 @@ export class LyricsEngine {
         best = await unmaskCandidate(best, otherRefs, context, metadata, {
           getMusixmatchLyrics,
           getDeezerLyrics,
+          getNeteaseLyrics,
+          getQQLyrics,
+        });
+
+        best = await enrichCandidateWithTranslationsAndRomaji(best, metadata, {
           getNeteaseLyrics,
           getQQLyrics,
         });

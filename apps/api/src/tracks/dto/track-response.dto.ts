@@ -123,6 +123,22 @@ export class SanitizedTrackDto {
   hasLyrics!: boolean;
 
   @ApiProperty({
+    example: true,
+    description:
+      "Whether translated lyrics (e.g. Chinese translation) are available for this track",
+    required: false,
+  })
+  hasTranslation?: boolean;
+
+  @ApiProperty({
+    example: true,
+    description:
+      "Whether romanized lyrics (e.g. Romaji / Pinyin) are available for this track",
+    required: false,
+  })
+  hasRomaji?: boolean;
+
+  @ApiProperty({
     example: "2026-08-20T22:31:20.790Z",
     description: "Timestamp when this track was first indexed into PostgreSQL",
   })

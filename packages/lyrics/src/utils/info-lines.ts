@@ -1,4 +1,8 @@
-import type { CompactLyricLine, SyncedLyricsPayload } from "@repo/types";
+import type {
+  CompactLyricLine,
+  CompactLyricWord,
+  SyncedLyricsPayload,
+} from "@repo/types";
 
 // Dictionary of keywords commonly found in credit / metadata lines at the start/end of lyrics
 const CREDIT_KEYWORDS = [
@@ -184,6 +188,7 @@ export function isPlaceholderLyricText(
 function getLineText(line: CompactLyricLine): string {
   if (!Array.isArray(line)) return "";
   return line
+    .filter((w): w is CompactLyricWord => Array.isArray(w))
     .map((w) => w[3] || "")
     .join("")
     .trim();

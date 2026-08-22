@@ -40,11 +40,19 @@ export function standardizeSyllables(
       continue;
     }
 
+    const words = line.filter((w): w is CompactLyricWord => Array.isArray(w));
+    const stringTokens = line.filter((w): w is string => typeof w === "string");
+
+    if (words.length === 0) {
+      resultLines.push(line);
+      continue;
+    }
+
     // Step 1: Remove empty tokens & merge orphan spaces and punctuation into previous token
     const cleanedLine: CompactLyricWord[] = [];
 
-    for (let i = 0; i < line.length; i++) {
-      const token = line[i]!;
+    for (let i = 0; i < words.length; i++) {
+      const token = words[i]!;
       const text = token[3] ?? "";
 
       // Skip empty tokens
@@ -133,7 +141,7 @@ export function standardizeSyllables(
       }
     }
 
-    resultLines.push(splitLine);
+    resultLines.push([...splitLine, ...stringTokens]);
   }
 
   return resultLines;

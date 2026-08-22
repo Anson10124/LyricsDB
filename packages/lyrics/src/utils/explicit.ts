@@ -309,9 +309,9 @@ export function containsMaskedTokens(
   if (Array.isArray(lyrics)) {
     for (const line of lyrics) {
       if (!Array.isArray(line)) continue;
-      for (const wordToken of line) {
-        if (!wordToken || typeof wordToken[3] !== "string") continue;
-        if (isMaskedToken(wordToken[3])) return true;
+      for (const token of line) {
+        if (!token || !Array.isArray(token) || typeof token[3] !== "string") continue;
+        if (isMaskedToken(token[3])) return true;
       }
     }
   }
@@ -470,8 +470,9 @@ export function fixExplicitLyrics(
   return payload.map((line: CompactLyricLine) => {
     if (!Array.isArray(line)) return line;
 
-    return line.map((wordToken: CompactLyricWord) => {
-      const [type, startMs, lengthMs, text] = wordToken;
+    return line.map((token) => {
+      if (typeof token === "string") return token;
+      const [type, startMs, lengthMs, text] = token;
       let cleanText = fixExplicitText(text);
 
       // If text was unmasked or is a standalone profanity but lacks trailing space,
@@ -485,7 +486,7 @@ export function fixExplicitLyrics(
         }
       }
 
-      if (cleanText === text) return wordToken;
+      if (cleanText === text) return token;
       return [type, startMs, lengthMs, cleanText] as CompactLyricWord;
     });
   });

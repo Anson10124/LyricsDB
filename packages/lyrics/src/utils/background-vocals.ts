@@ -51,6 +51,7 @@ function ensureTrailingSpace(tokens: CompactLyricWord[]): void {
 
 function processSingleTokenLine(
   wordToken: CompactLyricWord,
+  stringTokens: string[],
 ): CompactLyricLine[] {
   const [vocalType, startMs, lengthMs, text] = wordToken;
   const bgType = getBgVocalType(vocalType);
@@ -58,8 +59,7 @@ function processSingleTokenLine(
   // Regex to detect (background vocal) inside text
   const match = text.match(/([（([【])([^\r\n）)\]】]+)([）)\]】])/);
   if (!match || match.index === undefined) {
-
-    return [[wordToken]];
+    return [[wordToken, ...stringTokens]];
   }
 
   const matchIdx = match.index;
@@ -70,7 +70,7 @@ function processSingleTokenLine(
 
   // If the whole line is in brackets e.g. "(Run from the sun)"
   if (!beforeText && !afterText) {
-    return [[[bgType, startMs, lengthMs, bgText + " "]]];
+    return [[[bgType, startMs, lengthMs, bgText + " "], ...stringTokens]];
   }
 
   const resultLines: CompactLyricLine[] = [];
@@ -82,7 +82,7 @@ function processSingleTokenLine(
     const leadDurationMs = Math.round(
       (lengthMs * (beforeText.length + afterText.length)) / totalChars,
     );
-    resultLines.push([[vocalType, startMs, Math.max(1, leadDurationMs), leadTextCombined]]);
+    resultLines.push([[vocalType, startMs, Math.max(1, leadDurationMs), leadTextCombined], ...stringTokens]);
   }
 
   if (bgText) {
@@ -106,23 +106,28 @@ export function extractBackgroundVocals(
   for (const line of payload) {
     if (!Array.isArray(line) || line.length === 0) continue;
 
+    const words = line.filter((w): w is CompactLyricWord => Array.isArray(w));
+    const stringTokens = line.filter((w): w is string => typeof w === "string");
+
+    if (words.length === 0) continue;
+
     // Check if line contains any brackets
-    const fullText = line.map((w) => w[3] || "").join("");
+    const fullText = words.map((w) => w[3] || "").join("");
     if (!hasOpeningBracket(fullText) && !hasClosingBracket(fullText)) {
       outputLines.push(line);
       continue;
     }
 
     // Special case: Single word token line with parenthesized background part
-    if (line.length === 1 && line[0]) {
-      const splitLines = processSingleTokenLine(line[0]);
+    if (words.length === 1 && words[0]) {
+      const splitLines = processSingleTokenLine(words[0], stringTokens);
       for (const sl of splitLines) {
         outputLines.push(sl);
       }
       continue;
     }
 
-    const baseVocalType = line[0]![0];
+    const baseVocalType = words[0]![0];
     const bgVocalType = getBgVocalType(baseVocalType);
 
     // If whole line text starts and ends with bracket and has no inner unmatched brackets
@@ -136,7 +141,7 @@ export function extractBackgroundVocals(
 
     if (isFullLineBracket) {
       const bgTokens: CompactLyricWord[] = [];
-      for (const token of line) {
+      for (const token of words) {
         if (isPureBracketToken(token[3])) continue;
         const clean = stripBrackets(token[3]);
         if (clean.trim().length > 0) {
@@ -145,7 +150,7 @@ export function extractBackgroundVocals(
       }
       if (bgTokens.length > 0) {
         ensureTrailingSpace(bgTokens);
-        outputLines.push(bgTokens);
+        outputLines.push([...bgTokens, ...stringTokens]);
       }
       continue;
     }
@@ -157,8 +162,8 @@ export function extractBackgroundVocals(
     let insideBracket = false;
     let pendingPureBracketToken: CompactLyricWord | null = null;
 
-    for (let i = 0; i < line.length; i++) {
-      const token = line[i]!;
+    for (let i = 0; i < words.length; i++) {
+      const token = words[i]!;
       const [, startMs, lengthMs, text] = token;
 
       const hasOpen = hasOpeningBracket(text);
@@ -250,7 +255,7 @@ export function extractBackgroundVocals(
 
     if (leadTokens.length > 0) {
       ensureTrailingSpace(leadTokens);
-      outputLines.push(leadTokens);
+      outputLines.push([...leadTokens, ...stringTokens]);
     }
 
     for (const bgSeg of bgSegments) {
@@ -261,7 +266,11 @@ export function extractBackgroundVocals(
   }
 
   // Sort lines by startMs
-  outputLines.sort((a, b) => (a[0]?.[1] ?? 0) - (b[0]?.[1] ?? 0));
+  outputLines.sort((a, b) => {
+    const aStart = (a.find((item) => Array.isArray(item)) as CompactLyricWord | undefined)?.[1] ?? 0;
+    const bStart = (b.find((item) => Array.isArray(item)) as CompactLyricWord | undefined)?.[1] ?? 0;
+    return aStart - bStart;
+  });
 
   return outputLines;
 }

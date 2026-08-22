@@ -2803,6 +2803,16 @@
             "example": true,
             "description": "Whether synchronized or plain text lyrics exist in the database for this track"
           },
+          "hasTranslation": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether translated lyrics (e.g. Chinese translation) are available for this track"
+          },
+          "hasRomaji": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether romanized lyrics (e.g. Romaji / Pinyin) are available for this track"
+          },
           "createdAt": {
             "type": "string",
             "example": "2026-08-20T22:31:20.790Z",

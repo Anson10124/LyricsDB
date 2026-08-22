@@ -28,8 +28,8 @@ export type CompactLyricWord = [
   text: string,
 ];
 
-// A line containing one or more word/syllable tokens
-export type CompactLyricLine = CompactLyricWord[];
+// A line containing word tokens, followed optionally by line translation and line romaji strings
+export type CompactLyricLine = (CompactLyricWord | string)[];
 
 // Array of lines representing the complete synchronized lyric payload
 export type SyncedLyricsPayload = CompactLyricLine[];
@@ -37,6 +37,29 @@ export type SyncedLyricsPayload = CompactLyricLine[];
 
 ### Example Synchronized JSON Response
 
+#### Track with Chinese Translation & Romaji (e.g. Japanese / Chinese Tracks)
+```json
+[
+  [
+    [1, 18500, 380, "君"],
+    [1, 18880, 410, "の "],
+    [1, 19290, 500, "声"],
+    [1, 19790, 610, "が "],
+    "你的声音",
+    "kimi no koe ga"
+  ],
+  [
+    [1, 22400, 600, "消"],
+    [1, 23000, 500, "え"],
+    [1, 23500, 450, "て"],
+    [1, 23950, 1050, "ゆく "],
+    "渐渐消逝",
+    "kiete yuku"
+  ]
+]
+```
+
+#### English / Untranslated Track
 ```json
 [
   [
@@ -52,11 +75,6 @@ export type SyncedLyricsPayload = CompactLyricLine[];
     [1, 23200, 490, "let "],
     [1, 23700, 570, "you "],
     [1, 24300, 980, "down "]
-  ],
-  [
-    [2, 26100, 400, "(Give "],
-    [2, 26500, 450, "you "],
-    [2, 26950, 600, "up) "]
   ]
 ]
 ```
@@ -70,9 +88,9 @@ export type SyncedLyricsPayload = CompactLyricLine[];
   - `4`: **Secondary Background** (duet background vocals).
 - **`startMs`**: Start offset from song playback start in milliseconds.
 - **`lengthMs`**: Duration of the syllable or word in milliseconds.
-- **`text`**: Syllable or word text:
-  - If `text` ends with a space (e.g. `"Never "`), it represents a complete word boundary.
-  - If `text` does not have a trailing space (e.g. `"Ne"` followed by `"ver "`), it represents a syllable within a single word.
+- **`text`**: Syllable or word text.
+- **`translation`** *(optional)*: Line-level Chinese translation attached to the first token of the line (or empty string if none).
+- **`romaji`** *(optional)*: Romanized lyric / Romaji / Pinyin attached to tokens for ruby annotation and subtitle rendering (or empty string if none).
 
 ### Plain Text JSON Fallback
 

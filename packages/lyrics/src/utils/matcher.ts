@@ -116,7 +116,11 @@ export function extractReferenceDocument(
       const lineWords: NormalizedWord[] = [];
       let fullLineText = "";
 
-      for (const wordToken of compactLine) {
+      const words = compactLine.filter((item): item is CompactLyricWord =>
+        Array.isArray(item),
+      );
+
+      for (const wordToken of words) {
         if (!wordToken || typeof wordToken[3] !== "string") continue;
         const [, tokenStartMs, tokenLenMs, rawWordText] = wordToken;
 
@@ -504,12 +508,15 @@ export function alignAndUnmaskLyrics(
     // Pre-normalize target lines
     for (const line of targetPayload) {
       if (!Array.isArray(line)) continue;
+      const words = line.filter((item): item is CompactLyricWord =>
+        Array.isArray(item),
+      );
       const lineWords: NormalizedWord[] = [];
       let fullText = "";
       let startMs: number | undefined;
       let endMs: number | undefined;
 
-      for (const wToken of line) {
+      for (const wToken of words) {
         if (!wToken || typeof wToken[3] !== "string") continue;
         const [, tokenStartMs, tokenLenMs, rawText] = wToken;
         if (startMs === undefined) startMs = tokenStartMs;
@@ -548,10 +555,13 @@ export function alignAndUnmaskLyrics(
         continue;
       }
 
+      const words = line.filter((item): item is CompactLyricWord => Array.isArray(item));
+      const stringTokens = line.filter((item): item is string => typeof item === "string");
+
       const newLine: CompactLyricWord[] = [];
 
-      for (let wIdx = 0; wIdx < line.length; wIdx++) {
-        const token = line[wIdx]!;
+      for (let wIdx = 0; wIdx < words.length; wIdx++) {
+        const token = words[wIdx]!;
         const [vocalType, startMs, lengthMs, text] = token;
 
         if (!isMaskedToken(text)) {
@@ -617,7 +627,7 @@ export function alignAndUnmaskLyrics(
         }
       }
 
-      unmaskedPayload.push(newLine);
+      unmaskedPayload.push([...newLine, ...stringTokens]);
     }
 
     return { lyrics: unmaskedPayload, unmaskedCount };

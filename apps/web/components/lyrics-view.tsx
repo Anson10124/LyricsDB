@@ -123,6 +123,16 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
                 </span>
               </span>
             ) : null}
+            {track.hasTranslation ? (
+              <span className="rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                Translation
+              </span>
+            ) : null}
+            {track.hasRomaji ? (
+              <span className="rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                Romaji
+              </span>
+            ) : null}
             {track.isrc ? (
               <span className="font-mono">ISRC: {track.isrc}</span>
             ) : null}
@@ -175,6 +185,8 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             "ttml",
             "lrc",
             "eslrc",
+            "yrc",
+            "qrc",
             "ass",
             "json",
             "metadata",

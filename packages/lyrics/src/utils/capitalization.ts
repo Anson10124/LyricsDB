@@ -53,7 +53,8 @@ export function normalizeCapitalization(
 
   for (const line of payload) {
     if (!Array.isArray(line)) continue;
-    const text = line.map((w) => w[3] || "").join("");
+    const words = line.filter((w): w is CompactLyricWord => Array.isArray(w));
+    const text = words.map((w) => w[3] || "").join("");
     let lineUpper = 0;
     let lineLower = 0;
 
@@ -82,12 +83,17 @@ export function normalizeCapitalization(
   return payload.map((line: CompactLyricLine) => {
     if (!Array.isArray(line) || line.length === 0) return line;
 
-    const fullLineText = line.map((w) => w[3] || "").join("");
+    const words = line.filter((w): w is CompactLyricWord => Array.isArray(w));
+    const stringTokens = line.filter((w): w is string => typeof w === "string");
+
+    if (words.length === 0) return line;
+
+    const fullLineText = words.map((w) => w[3] || "").join("");
     const sentenceCasedText = toSentenceCase(fullLineText);
 
     // Map new sentence-cased characters back to original word tokens
     let charPos = 0;
-    return line.map((wordToken: CompactLyricWord) => {
+    const newWords = words.map((wordToken: CompactLyricWord) => {
       const [type, startMs, lengthMs, oldText] = wordToken;
       const len = oldText.length;
 
@@ -100,5 +106,7 @@ export function normalizeCapitalization(
 
       return [type, startMs, lengthMs, newText] as CompactLyricWord;
     });
+
+    return [...newWords, ...stringTokens];
   });
 }
