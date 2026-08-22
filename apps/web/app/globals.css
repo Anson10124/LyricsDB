@@ -242,3 +242,19 @@ body {
 .animate-slide-out-bottom {
   animation: slide-out-bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+.-DaA0W_bottomControls {
+  opacity: 0 !important;
+}
+
+.GOs7HW_menuButton {
+  opacity: 0 !important;
+}
+
+.UjzbJG_controls button:first-child {
+  opacity: 0 !important;
+}
+
+.UjzbJG_controls button:last-child {
+  opacity: 0 !important;
+}
