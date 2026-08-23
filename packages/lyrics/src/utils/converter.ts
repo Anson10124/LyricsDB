@@ -330,7 +330,73 @@ export function formatLyricsPayload(
         },
       );
 
-      let rawXml = generator.generate(ttmlResult);
+      generator.generate(ttmlResult);
+      const doc = (generator as unknown as { doc?: Document }).doc;
+
+      if (doc) {
+        const pElements = Array.from(doc.getElementsByTagName("p"));
+        for (let lineIdx = 0; lineIdx < pElements.length; lineIdx++) {
+          const p = pElements[lineIdx]!;
+          const amllLine = amllLines[lineIdx];
+          if (!amllLine || !amllLine.words) continue;
+
+          // Remove loose whitespace text nodes inside <p>
+          const childNodes = Array.from(p.childNodes);
+          for (const node of childNodes) {
+            if (node.nodeType === 3 && (node.textContent || "").trim() === "") {
+              p.removeChild(node);
+            }
+          }
+
+          // Find lyric spans (exclude translation and romanization spans)
+          const allSpans = Array.from(p.getElementsByTagName("span"));
+          const lyricSpans = allSpans.filter((span) => {
+            const role =
+              span.getAttribute("ttm:role") ||
+              span.getAttributeNS("http://www.w3.org/ns/ttml#metadata", "role");
+            return role !== "x-translation" && role !== "x-roman";
+          });
+
+          for (let wIdx = 0; wIdx < lyricSpans.length; wIdx++) {
+            const span = lyricSpans[wIdx]!;
+            const origWord = amllLine.words[wIdx];
+            if (!origWord) continue;
+
+            const rawWord = origWord.word || "";
+            const hasTrailingSpace = rawWord.endsWith(" ");
+            const isLastLyricWord = wIdx === lyricSpans.length - 1;
+
+            const rubyBase = span.getElementsByTagName("span")[0];
+            const targetEl =
+              rubyBase &&
+              (rubyBase.getAttribute("tts:ruby") === "base" ||
+                rubyBase.getAttributeNS(
+                  "http://www.w3.org/ns/ttml#styling",
+                  "ruby",
+                ) === "base")
+                ? rubyBase
+                : span;
+
+            const currentText = (targetEl.textContent || "").trimEnd();
+
+            if (hasTrailingSpace && !isLastLyricWord) {
+              targetEl.textContent = currentText + " ";
+            } else {
+              targetEl.textContent = currentText;
+            }
+          }
+        }
+      }
+
+      const serializer = xmlSerializer as {
+        serializeToString: (doc: unknown) => string;
+      };
+
+      let rawXml = serializer.serializeToString(
+        doc ||
+          (generator as unknown as { doc: Document }).doc ||
+          generator.generate(ttmlResult),
+      );
 
       // Ensure background vocals have ttm:role="x-bg" and duets have ttm:agent="v2"
       for (let i = 0; i < amllLines.length; i++) {
@@ -341,12 +407,15 @@ export function formatLyricsPayload(
             `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*)(>)`,
             "g",
           );
-          rawXml = rawXml.replace(pRegex, (m, p1, p2) => {
-            if (!p1.includes('ttm:role="x-bg"')) {
-              return `${p1} ttm:role="x-bg"${p2}`;
-            }
-            return m;
-          });
+          rawXml = rawXml.replace(
+            pRegex,
+            (m: string, p1: string, p2: string) => {
+              if (!p1.includes('ttm:role="x-bg"')) {
+                return `${p1} ttm:role="x-bg"${p2}`;
+              }
+              return m;
+            },
+          );
         }
         if (line.isDuet) {
           const pRegex = new RegExp(
