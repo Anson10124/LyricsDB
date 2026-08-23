@@ -290,4 +290,57 @@ describe("Background Vocals Extraction", () => {
     const line2Strings = compact[1]!.filter((w): w is string => typeof w === "string");
     assert.equal(line2Strings[0], "六分钟，Slim Shady，该你出场了");
   });
+
+  it("should split single translation/romaji line across multiple split primary lines (1-to-N cross-provider matching)", () => {
+    // Primary lyrics (e.g. QQ Music): 2 separate lines
+    const rawPayload: SyncedLyricsPayload = [
+      [
+        [1, 12835, 337, "心"],
+        [1, 13172, 119, "を"],
+        [1, 13291, 240, "動"],
+        [1, 13531, 244, "か"],
+        [1, 13775, 156, "し"],
+        [1, 13931, 55, "て "],
+      ],
+      [
+        [1, 14231, 264, "風"],
+        [1, 14495, 144, "を"],
+        [1, 14639, 107, "切"],
+        [1, 14747, 107, "っ"],
+        [1, 14854, 133, "て"],
+        [1, 14987, 230, "駆"],
+        [1, 15217, 254, "け"],
+        [1, 15471, 224, "抜"],
+        [1, 15695, 144, "け"],
+        [1, 15839, 209, "て "],
+      ],
+    ];
+
+    // Translation source (e.g. NetEase): 1 combined line
+    const translationLrc = "[00:12.83]且任心潮澎湃 迎着风飞驰而去\n";
+    const romajiLrc = "[00:12.83]ko ko ro wo u go ka shi te ka ze wo ki tte ka ke nu ke te\n";
+
+    const amllLines = convertCompactToAmllLines(rawPayload);
+    const enriched = alignTranslationsAndRomaji(amllLines, {
+      translation: translationLrc,
+      romaji: romajiLrc,
+    });
+
+    assert.equal(enriched[0]?.translatedLyric, "且任心潮澎湃");
+    assert.equal(enriched[0]?.romanLyric, "ko ko ro wo u go ka shi te");
+
+    assert.equal(enriched[1]?.translatedLyric, "迎着风飞驰而去");
+    assert.equal(enriched[1]?.romanLyric, "ka ze wo ki tte ka ke nu ke te");
+
+    const compact = convertAmllLinesToCompact(enriched);
+    assert.equal(compact.length, 2);
+
+    const line1Strings = compact[0]!.filter((w): w is string => typeof w === "string");
+    assert.equal(line1Strings[0], "且任心潮澎湃");
+    assert.equal(line1Strings[1], "ko ko ro wo u go ka shi te");
+
+    const line2Strings = compact[1]!.filter((w): w is string => typeof w === "string");
+    assert.equal(line2Strings[0], "迎着风飞驰而去");
+    assert.equal(line2Strings[1], "ka ze wo ki tte ka ke nu ke te");
+  });
 });
