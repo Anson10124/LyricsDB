@@ -268,6 +268,4 @@ export async function fetchAppleArtworkMetadata(
   }
 }
 
-// Alias for backward compatibility
-export const fetchAppleAnimatedArtwork = fetchAppleArtworkMetadata;
 

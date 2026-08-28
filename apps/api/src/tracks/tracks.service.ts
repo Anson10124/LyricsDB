@@ -580,34 +580,24 @@ export class TracksService {
             err.message.includes("violates unique constraint")));
 
       if (isUniqueConflict) {
+        const conditions = [
+          sanitizedData.spotifyId ? eq(tracks.spotifyId, sanitizedData.spotifyId) : undefined,
+          sanitizedData.appleMusicId ? eq(tracks.appleMusicId, sanitizedData.appleMusicId) : undefined,
+          sanitizedData.deezerId ? eq(tracks.deezerId, sanitizedData.deezerId) : undefined,
+          sanitizedData.neteaseId ? eq(tracks.neteaseId, sanitizedData.neteaseId) : undefined,
+          sanitizedData.qqMusicId ? eq(tracks.qqMusicId, sanitizedData.qqMusicId) : undefined,
+          sanitizedData.isrc ? eq(tracks.isrc, sanitizedData.isrc) : undefined,
+        ].filter((c): c is NonNullable<typeof c> => Boolean(c));
+
         let existing: Track | null = null;
-        if (sanitizedData.spotifyId)
-          existing = await this.findByPlatformId(
-            "spotify",
-            sanitizedData.spotifyId,
-          );
-        if (!existing && sanitizedData.appleMusicId)
-          existing = await this.findByPlatformId(
-            "apple",
-            sanitizedData.appleMusicId,
-          );
-        if (!existing && sanitizedData.deezerId)
-          existing = await this.findByPlatformId(
-            "deezer",
-            sanitizedData.deezerId,
-          );
-        if (!existing && sanitizedData.neteaseId)
-          existing = await this.findByPlatformId(
-            "netease",
-            sanitizedData.neteaseId,
-          );
-        if (!existing && sanitizedData.qqMusicId)
-          existing = await this.findByPlatformId(
-            "qq",
-            sanitizedData.qqMusicId,
-          );
-        if (!existing && sanitizedData.isrc)
-          existing = await this.findByPlatformId("isrc", sanitizedData.isrc);
+        if (conditions.length > 0) {
+          const res = await this.db
+            .select()
+            .from(tracks)
+            .where(or(...conditions))
+            .limit(1);
+          existing = res[0] || null;
+        }
 
         if (existing) {
           const updated = await this.db

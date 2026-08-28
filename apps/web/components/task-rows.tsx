@@ -151,7 +151,6 @@ const RetryIcon = (
   </svg>
 );
 
-export const PROVIDER_NAMES = PLATFORM_DISPLAY_NAMES;
 export const formatProviderName = formatPlatformName;
 
 export function TaskRows({ progress }: { progress: TaskProgressState }) {

@@ -115,3 +115,37 @@ export async function requestSpotifyTokenWithSecret(
 
   return null;
 }
+
+export async function fetchAnonymousSpotifyToken(options?: {
+  timeout?: number;
+  baseUrl?: string;
+}): Promise<string> {
+  const timeout = options?.timeout ?? 8000;
+  const baseUrl = options?.baseUrl ?? "https://open.spotify.com";
+
+  try {
+    const res = await requestSpotifyTokenWithSecret(
+      baseUrl,
+      DEFAULT_SPOTIFY_SECRET,
+      DEFAULT_SPOTIFY_VERSION,
+      timeout,
+    );
+    if (res?.accessToken) return res.accessToken;
+  } catch {
+    // Fallback to Stage 2 bundle scrape
+  }
+
+  const { secret, version } = await scrapeSpotifySecrets(baseUrl, timeout);
+  const scraped = await requestSpotifyTokenWithSecret(
+    baseUrl,
+    secret,
+    version,
+    timeout,
+  );
+
+  if (!scraped?.accessToken) {
+    throw new Error("Failed to fetch Spotify anonymous token after bundle scrape");
+  }
+
+  return scraped.accessToken;
+}

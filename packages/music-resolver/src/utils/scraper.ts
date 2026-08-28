@@ -15,17 +15,3 @@ export function metaTagContent(
   return decode(content).trim();
 }
 
-export function linkedDataScript(
-  doc: cheerio.CheerioAPI,
-  searchInBody = false,
-): Record<string, unknown> | undefined {
-  const context = searchInBody ? undefined : "head";
-  const content = doc('script[type="application/ld+json"]', context).text();
-  if (!content) return undefined;
-
-  try {
-    return JSON.parse(content);
-  } catch {
-    return undefined;
-  }
-}

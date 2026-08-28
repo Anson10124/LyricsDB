@@ -26,6 +26,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@repo/music-resolver": "workspace:*",
     "@repo/types": "workspace:*",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.3",

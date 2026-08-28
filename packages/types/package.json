@@ -21,9 +21,5 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "typescript": "5.9.2"
-  },
-  "dependencies": {
-    "@applemusic-like-lyrics/lyric": "^1.0.2",
-    "@applemusic-like-lyrics/ttml": "^1.0.1"
   }
 }

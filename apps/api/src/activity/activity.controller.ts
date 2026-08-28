@@ -10,7 +10,7 @@ import { Observable } from "rxjs";
 import { ActivityService } from "./activity.service";
 
 @ApiTags("Activity")
-@Controller(["api/activity", "activity", "api/live", "live"])
+@Controller(["api/activity", "activity"])
 export class ActivityController {
   constructor(private readonly activityService: ActivityService) {}
 
@@ -72,16 +72,6 @@ export class ActivityController {
   @SkipThrottle()
   @Sse("stream")
   streamActivity(): Observable<MessageEvent> {
-    return this.activityService.getActivityStream();
-  }
-
-  @ApiOperation({
-    summary: "Stream real-time activity (root alias)",
-    description: "Alias for /api/activity/stream",
-  })
-  @SkipThrottle()
-  @Sse("")
-  streamActivityRoot(): Observable<MessageEvent> {
     return this.activityService.getActivityStream();
   }
 

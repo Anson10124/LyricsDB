@@ -98,14 +98,6 @@ export function tokenSortSimilarity(str1: string, str2: string): number {
   return Math.max(dice, lev);
 }
 
-export function scoreMatch(candidateText: string, query: string): number {
-  const normalizedCandidate = cleanSearchQuery(candidateText).toLowerCase();
-  const normalizedQuery = cleanSearchQuery(query).toLowerCase();
-  const direct = compareTwoStrings(normalizedCandidate, normalizedQuery);
-  const tokenSort = tokenSortSimilarity(normalizedCandidate, normalizedQuery);
-  return Math.max(direct, tokenSort);
-}
-
 export const RESPONSE_COMPARE_MIN_SCORE = 0.7;
 export const RESPONSE_COMPARE_MIN_INCLUSION_SCORE = 0.35;
 

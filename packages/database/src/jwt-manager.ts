@@ -1,5 +1,5 @@
-import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { fetchAnonymousSpotifyToken } from "@repo/music-resolver";
 import { db as defaultDb, type DatabaseClient } from "./client.js";
 import { jwts } from "./schema/jwt.js";
 
@@ -8,39 +8,6 @@ const DEEZER_JWT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const SPOTIFY_PROVIDER = "spotify";
 const SPOTIFY_TOKEN_CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (Spotify token lasts 60 min)
-const DEFAULT_SPOTIFY_SECRET =
-  process.env.SPOTIFY_TOTP_SECRET || "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH";
-const DEFAULT_SPOTIFY_VERSION = 59;
-const PLAYER_JS_REGEX =
-  /"(https:\/\/[^" ]+\/(?:mobile-)?web-player\.[0-9a-f]+\.js)"/;
-const SECRETS_REGEX =
-  /\{\s*secret\s*:\s*["']([^"']+)["']\s*,\s*version\s*:\s*(\d+)\s*\}/g;
-
-function generateTotp(serverTime: number, secret: string): string {
-  const secretArray = Array.from(secret, (c) => c.charCodeAt(0));
-  const transformed = secretArray.map(
-    (element, index) => element ^ ((index % 33) + 9),
-  );
-  const hexSecret = Buffer.from(transformed.join(""), "utf8").toString("hex");
-  const secretBytes = Buffer.from(hexSecret, "hex");
-
-  const counter = Math.floor(serverTime / 30);
-  const counterBuffer = Buffer.alloc(8);
-  counterBuffer.writeBigUInt64BE(BigInt(counter));
-
-  const hmac = createHmac("sha1", secretBytes);
-  hmac.update(counterBuffer);
-  const hmacResult = hmac.digest();
-
-  const offset = hmacResult[hmacResult.length - 1]! & 0xf;
-  const code =
-    ((hmacResult[offset]! & 0x7f) << 24) |
-    ((hmacResult[offset + 1]! & 0xff) << 16) |
-    ((hmacResult[offset + 2]! & 0xff) << 8) |
-    (hmacResult[offset + 3]! & 0xff);
-
-  return (code % 10 ** 6).toString().padStart(6, "0");
-}
 
 export async function fetchAnonymousDeezerJwt(options?: {
   timeout?: number;
@@ -141,98 +108,7 @@ export async function refreshDeezerJwt(
   return newToken;
 }
 
-export async function fetchAnonymousSpotifyToken(options?: {
-  timeout?: number;
-}): Promise<string> {
-  const timeout = options?.timeout ?? 8000;
-  const baseUrl = "https://open.spotify.com";
-
-  const requestToken = async (
-    secret: string,
-    version: number,
-  ): Promise<string | null> => {
-    const timeRes = await fetch(`${baseUrl}/api/server-time`, {
-      signal: AbortSignal.timeout(timeout),
-    });
-    if (!timeRes.ok) return null;
-    const { serverTime } = (await timeRes.json()) as { serverTime: number };
-
-    const totp = generateTotp(serverTime, secret);
-    const tokenUrl = new URL(`${baseUrl}/api/token`);
-    tokenUrl.searchParams.set("reason", "init");
-    tokenUrl.searchParams.set("productType", "web-player");
-    tokenUrl.searchParams.set("totp", totp);
-    tokenUrl.searchParams.set("totpServer", totp);
-    tokenUrl.searchParams.set("totpVer", version.toString());
-    tokenUrl.searchParams.set("ts", serverTime.toString());
-
-    const tokenRes = await fetch(tokenUrl.toString(), {
-      headers: {
-        Accept: "application/json",
-        Referer: `${baseUrl}/`,
-        Origin: baseUrl,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-      },
-      signal: AbortSignal.timeout(timeout),
-    });
-
-    if (!tokenRes.ok) return null;
-    const tokenData = (await tokenRes.json()) as { accessToken?: string };
-    return tokenData.accessToken || null;
-  };
-
-  // Stage 1: Try fast-path with default known secret & version
-  try {
-    const fastToken = await requestToken(
-      DEFAULT_SPOTIFY_SECRET,
-      DEFAULT_SPOTIFY_VERSION,
-    );
-    if (fastToken) return fastToken;
-  } catch {
-    // Fallback to Stage 2
-  }
-
-  // Stage 2: Scrape web-player JS bundle for rotated secret
-  const htmlRes = await fetch(baseUrl, {
-    signal: AbortSignal.timeout(timeout),
-  });
-  const html = await htmlRes.text();
-  const jsMatch = html.match(PLAYER_JS_REGEX);
-  if (!jsMatch?.[1]) {
-    throw new Error("Could not find Spotify player JS bundle URL");
-  }
-
-  const jsRes = await fetch(jsMatch[1], {
-    signal: AbortSignal.timeout(timeout),
-  });
-  const js = await jsRes.text();
-
-  let latestVersion = 0;
-  let latestSecret = "";
-  let match;
-  while ((match = SECRETS_REGEX.exec(js)) !== null) {
-    const ver = parseInt(match[2]!, 10);
-    if (ver > latestVersion) {
-      latestVersion = ver;
-      latestSecret = match[1]!;
-    }
-  }
-  SECRETS_REGEX.lastIndex = 0;
-
-  if (!latestSecret) {
-    throw new Error("Failed to extract Spotify TOTP secret from bundle");
-  }
-
-  const scrapedToken = await requestToken(latestSecret, latestVersion);
-  if (!scrapedToken) {
-    throw new Error(
-      "Failed to fetch Spotify anonymous token after bundle scrape",
-    );
-  }
-
-  return scrapedToken;
-}
+export { fetchAnonymousSpotifyToken };
 
 export async function getSpotifyToken(
   dbClient?: DatabaseClient,

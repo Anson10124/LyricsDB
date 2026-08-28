@@ -43,8 +43,6 @@ import { ClientIp } from "../common/decorators/client-ip.decorator";
 
 const SUPPORTED_FORMATS = SUPPORTED_LYRIC_FORMATS;
 
-export { TrackQueryDto };
-
 
 @ApiTags("Tracks")
 @Controller(["api", ""])

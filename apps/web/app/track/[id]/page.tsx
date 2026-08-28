@@ -35,27 +35,23 @@ export default function TrackPage({ params }: TrackPageProps) {
 
     async function loadTrackData() {
       try {
-        const trackData = await fetchTrackById(id);
+        const [trackData, lyricsData] = await Promise.all([
+          fetchTrackById(id),
+          fetchTrackLyrics(id, "json").catch(() => null),
+        ]);
 
         if (!isMounted) return;
         setTrack(trackData);
 
-        if (trackData.hasLyrics) {
-          try {
-            const lyricsData = await fetchTrackLyrics(id, "json");
-            if (isMounted && lyricsData) {
-              if (
-                typeof lyricsData === "object" &&
-                lyricsData !== null &&
-                "plain" in lyricsData
-              ) {
-                setLyrics((lyricsData as { plain: string }).plain);
-              } else {
-                setLyrics(lyricsData as SyncedLyricsPayload);
-              }
-            }
-          } catch {
-            // Lyrics fetch fallback
+        if (lyricsData) {
+          if (
+            typeof lyricsData === "object" &&
+            lyricsData !== null &&
+            "plain" in lyricsData
+          ) {
+            setLyrics((lyricsData as { plain: string }).plain);
+          } else {
+            setLyrics(lyricsData as SyncedLyricsPayload);
           }
         }
       } catch (err) {
