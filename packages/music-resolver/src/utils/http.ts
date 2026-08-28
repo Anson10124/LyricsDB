@@ -52,6 +52,13 @@ export function detectProviderFromUrl(url: string): string | undefined {
   if (lower.includes("lrclib.net")) {
     return "lrclib";
   }
+  if (
+    lower.includes("amll-ttml-db") ||
+    lower.includes("amlldb.bikonoo.com") ||
+    lower.includes("amll.mirror.dimeta.top")
+  ) {
+    return "amlldb";
+  }
   return undefined;
 }
 

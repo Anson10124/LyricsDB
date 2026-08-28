@@ -25,7 +25,7 @@ export function parseTtml(
     });
     const parsed = toAmllLyrics(ttmlResult);
     return convertAmllLinesToCompact(parsed.lines, metadata);
-  } catch (err) {
+  } catch {
     return [];
   }
 }

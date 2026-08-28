@@ -20,6 +20,9 @@ export const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   qqmusic: "QQ Music",
   musixmatch: "Musixmatch",
   lrclib: "LRCLIB",
+  amlldb: "AMLL TTML DB",
+  amll: "AMLL TTML DB",
+  "amll-db": "AMLL TTML DB",
   isrc: "ISRC",
 };
 

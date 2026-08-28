@@ -1,12 +1,7 @@
-import test, { describe, it } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  formatLyricsPayload,
-  convertAmllLinesToCompact,
-  convertCompactToAmllLines,
-} from "../src/utils/converter.js";
+import { formatLyricsPayload } from "../src/utils/converter.js";
 import { parseTtml } from "../src/parsers/ttml.js";
-import { parseYrc } from "../src/parsers/yrc.js";
 import type { SyncedLyricsPayload } from "@repo/types";
 
 describe("TTML Word Spacing & Formatting", () => {

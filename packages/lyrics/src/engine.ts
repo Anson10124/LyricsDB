@@ -24,6 +24,10 @@ import {
   type QQMusicLyricsResponse,
 } from "./fetchers/qq-music.js";
 import {
+  fetchAmllDbLyrics,
+  type AmllDbLyricsResponse,
+} from "./fetchers/amll-db.js";
+import {
   parseDeezerSyncedLines,
   parseDeezerWordLyrics,
 } from "./parsers/deezer.js";
@@ -34,6 +38,7 @@ import {
 } from "./parsers/musixmatch.js";
 import { parseQrc } from "./parsers/qrc.js";
 import { parseYrc } from "./parsers/yrc.js";
+import { parseTtml } from "./parsers/ttml.js";
 import {
   convertAmllLinesToCompact,
   convertCompactToAmllLines,
@@ -172,6 +177,16 @@ export function evaluateLyricsCandidate(
   // Word token density bonus (up to 100 pts):
   score += Math.min(100, Math.round(wordCount / 5));
 
+  // AMLL TTML DB human-reviewed bonus:
+  // AMLL TTML DB lyrics are curated and audited by the AMLL community with high precision,
+  // rich vocal roles (background/duets), translations, and romaji.
+  if (
+    (candidate.provider === "amll-db" || candidate.provider === "amll") &&
+    candidate.lyricsType === "word"
+  ) {
+    score += 150;
+  }
+
   // Deezer word-by-word penalty:
   // Deezer word-by-word sync quality is less reliable than other word-by-word sources (QQ Music, Musixmatch, NetEase),
   // but still superior to line-by-line sync. Penalizing by 200 points ranks it lowest among word sources while keeping it above line sync.
@@ -206,6 +221,7 @@ async function unmaskCandidate(
     getDeezerLyrics: () => Promise<DeezerLyricsResponse | null>;
     getNeteaseLyrics: () => Promise<NeteaseLyricsResponse | null>;
     getQQLyrics: () => Promise<QQMusicLyricsResponse | null>;
+    getAmllDbLyrics?: () => Promise<AmllDbLyricsResponse | null>;
   },
 ): Promise<ResolvedLyricsResult> {
   if (!containsMaskedTokens(candidate.lyrics)) {
@@ -218,11 +234,12 @@ async function unmaskCandidate(
 
   // Check cached provider responses for plain/synced text references
   try {
-    const [mmRes, dzRes, neRes, qqRes] = await Promise.allSettled([
+    const [mmRes, dzRes, neRes, qqRes, amllRes] = await Promise.allSettled([
       getters.getMusixmatchLyrics(),
       getters.getDeezerLyrics(),
       getters.getNeteaseLyrics(),
       getters.getQQLyrics(),
+      getters.getAmllDbLyrics ? getters.getAmllDbLyrics() : Promise.resolve(null),
     ]);
 
     if (mmRes.status === "fulfilled" && mmRes.value) {
@@ -244,6 +261,9 @@ async function unmaskCandidate(
     }
     if (qqRes.status === "fulfilled" && qqRes.value) {
       if (qqRes.value.lrc) references.push(qqRes.value.lrc);
+    }
+    if (amllRes?.status === "fulfilled" && amllRes.value?.ttml) {
+      references.push(amllRes.value.ttml);
     }
   } catch {
     // Ignore error collecting background cached responses
@@ -466,12 +486,76 @@ export class LyricsEngine {
       return musixmatchLyricsPromise || Promise.resolve(null);
     };
 
+    let amllDbLyricsPromise: Promise<AmllDbLyricsResponse | null> | null = null;
+    const getAmllDbLyrics = () => {
+      if (!globalProviderLimiter.isAvailable("amlldb")) {
+        return Promise.resolve(null);
+      }
+      if (
+        !amllDbLyricsPromise &&
+        (context.neteaseId ||
+          context.appleMusicId ||
+          context.qqMusicId ||
+          context.spotifyId)
+      ) {
+        amllDbLyricsPromise = globalProviderLimiter.schedule("amlldb", () =>
+          fetchAmllDbLyrics({
+            neteaseId: context.neteaseId,
+            appleMusicId: context.appleMusicId,
+            qqMusicId: context.qqMusicId,
+            spotifyId: context.spotifyId,
+            title: context.title,
+            artist,
+            artists: context.artists,
+            durationMs: context.durationMs,
+          }),
+        );
+      }
+      return amllDbLyricsPromise || Promise.resolve(null);
+    };
+
     // ==========================================
     // TIER 1: Word-by-Word Sources (Parallel)
     // ==========================================
     const tier1Tasks: Promise<ResolvedLyricsResult | null>[] = [];
 
-    // 1. QQ Music QRC
+    // 1. AMLL TTML DB (Hand-curated Word-by-Word TTML)
+    if (
+      context.neteaseId ||
+      context.appleMusicId ||
+      context.qqMusicId ||
+      context.spotifyId
+    ) {
+      context.onProgress?.({
+        stage: "lyrics_searching",
+        provider: "amll-db",
+        lyricsType: "word",
+        status: "searching",
+      });
+      tier1Tasks.push(
+        (async () => {
+          try {
+            const res = await getAmllDbLyrics();
+            if (res?.ttml) {
+              const parsed = parseTtml(res.ttml, metadata);
+              if (parsed.length > 0) {
+                return {
+                  lyricsType: "word",
+                  lyrics: parsed,
+                  source: "amll-ttml",
+                  provider: "amll-db",
+                };
+              }
+            }
+          } catch {
+            // Ignore error and continue fallback search
+          }
+          return null;
+        })(),
+      );
+    }
+
+    // 2. QQ Music QRC
     if (context.qqMusicId) {
       context.onProgress?.({
         stage: "lyrics_searching",
@@ -635,6 +719,7 @@ export class LyricsEngine {
           getDeezerLyrics,
           getNeteaseLyrics,
           getQQLyrics,
+          getAmllDbLyrics,
         });
 
         best = await enrichCandidateWithTranslationsAndRomaji(best, metadata, {
@@ -872,6 +957,7 @@ export class LyricsEngine {
           getDeezerLyrics,
           getNeteaseLyrics,
           getQQLyrics,
+          getAmllDbLyrics,
         });
 
         best = await enrichCandidateWithTranslationsAndRomaji(best, metadata, {
@@ -1009,6 +1095,7 @@ export class LyricsEngine {
           getDeezerLyrics,
           getNeteaseLyrics,
           getQQLyrics,
+          getAmllDbLyrics,
         });
 
         best = await enrichCandidateWithTranslationsAndRomaji(best, metadata, {

@@ -100,9 +100,9 @@ export class SanitizedTrackDto {
   lyricsType?: "word" | "line" | "plain" | null;
 
   @ApiProperty({
-    example: "qqmusic",
+    example: "amll-db",
     description:
-      "Upstream lyrics provider source (qqmusic, deezer, netease, musixmatch, lrclib)",
+      "Upstream lyrics provider source (amll-db, qqmusic, deezer, netease, musixmatch, lrclib)",
     required: false,
     nullable: true,
   })

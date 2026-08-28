@@ -24,6 +24,7 @@ When resolving lyrics, LyricsDB aggregates and scores candidates across multiple
 
 | Provider | Identifier | Syllable / Word Precision | Line-by-Line | Plain Text |
 | :--- | :--- | :--- | :--- | :--- |
+| **AMLL TTML DB** | `amll-db` | Community-curated TTML (±100ms syllables, duets, BG vocals) | Synchronized TTML/LRC lines | Plain |
 | **QQ Music** | `qqmusic` | QRC XML with millisecond syllables | LRC line timing | Plain |
 | **Deezer** | `deezer` | Synchronized word-by-word lines | Synchronized line timestamps | Plain |
 | **NetEase** | `netease` | YRC syllable-level timed lyrics | LRC line timestamps | Plain |
@@ -41,7 +42,7 @@ graph TD
   REQ["Request Received (URL / Platform ID)"] --> CACHE{"PostgreSQL Cache Check"}
   
   CACHE -- "Cache Hit (~2ms)" --> HIT["Return Cached Track & Lyrics"]
-  CACHE -- "Cache Miss" --> TIER1["TIER 1: Word-by-Word Sources (Parallel)<br/>• QQ Music QRC<br/>• Deezer Word-by-Word<br/>• NetEase YRC<br/>• Musixmatch RichSync"]
+  CACHE -- "Cache Miss" --> TIER1["TIER 1: Word-by-Word Sources (Parallel)<br/>• AMLL TTML DB<br/>• QQ Music QRC<br/>• Deezer Word-by-Word<br/>• NetEase YRC<br/>• Musixmatch RichSync"]
   
   TIER1 --> EVAL1{"Complete Match Found?<br/>(Coverage >= 55%, Quality Score)"}
   EVAL1 -- "Yes (Best Score)" --> SAVE["Save to PostgreSQL & Return Result"]

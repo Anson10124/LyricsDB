@@ -9,6 +9,7 @@ export * from "./fetchers/netease.js";
 export * from "./fetchers/lrclib.js";
 export * from "./fetchers/deezer.js";
 export * from "./fetchers/musixmatch.js";
+export * from "./fetchers/amll-db.js";
 export * from "./utils/qrc-decoder.js";
 export * from "./utils/converter.js";
 export * from "./utils/info-lines.js";

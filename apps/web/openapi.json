@@ -2789,8 +2789,8 @@
           },
           "lyricsProvider": {
             "type": "object",
-            "example": "qqmusic",
-            "description": "Upstream lyrics provider source (qqmusic, deezer, netease, musixmatch, lrclib)",
+            "example": "amll-db",
+            "description": "Upstream lyrics provider source (amll-db, qqmusic, deezer, netease, musixmatch, lrclib)",
             "nullable": true
           },
           "isVerified": {
