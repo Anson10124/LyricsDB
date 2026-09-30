@@ -102,7 +102,7 @@ export class SanitizedTrackDto {
   @ApiProperty({
     example: "amll-db",
     description:
-      "Upstream lyrics provider source (amll-db, qqmusic, deezer, netease, musixmatch, lrclib)",
+      "Upstream lyrics provider source (amll-db, lrc-red, qqmusic, deezer, netease, musixmatch, lrclib)",
     required: false,
     nullable: true,
   })

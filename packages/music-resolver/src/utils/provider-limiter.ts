@@ -143,6 +143,15 @@ const DEFAULT_PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     maxQueueSize: 40,
     consecutiveFailureThreshold: 4,
   },
+  lrcred: {
+    concurrency: 3,
+    rpm: 60,
+    baseCooldownMs: 60_000,
+    maxCooldownMs: 600_000,
+    queueTimeoutMs: 12_000,
+    maxQueueSize: 40,
+    consecutiveFailureThreshold: 4,
+  },
   amlldb: {
     concurrency: 6,
     rpm: 120,

@@ -7,6 +7,7 @@ export * from "./parsers/musixmatch.js";
 export * from "./fetchers/qq-music.js";
 export * from "./fetchers/netease.js";
 export * from "./fetchers/lrclib.js";
+export * from "./fetchers/lrc-red.js";
 export * from "./fetchers/deezer.js";
 export * from "./fetchers/musixmatch.js";
 export * from "./fetchers/amll-db.js";

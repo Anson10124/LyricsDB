@@ -7,7 +7,7 @@ description: LyricsDB is a high-performance lyrics indexing and synchronization 
 
 - **Cross-Platform Link Resolution**: Automatically resolves song metadata and cross-references matching tracks across **Spotify**, **Apple Music**, **Deezer**, **NetEase Cloud Music**, **QQ Music**, and standard **ISRC** codes.
 - **Syllable & Word-by-Word Timed Lyrics**: Extracts precise word- and syllable-level timestamps with support for background vocals and duet roles.
-- **Multi-Tiered Resolution Engine**: Concurrently queries and scores lyrics candidates across multiple upstream providers (QQ Music, Deezer, NetEase, Musixmatch, and LRCLIB) with intelligent fallback from word-level sync to line-level and plain text.
+- **Multi-Tiered Resolution Engine**: Concurrently queries and scores lyrics candidates across multiple upstream providers (AMLL TTML DB, lrc.red for ISRC-based word timing, QQ Music, Deezer, NetEase, Musixmatch, and LRCLIB) with intelligent fallback from word-level sync to line-level and plain text.
 - **Extensive Format Support**: Formats output on-the-fly into **TTML**, **LRC**, **LRCA2**, **YRC**, **QRC**, **ESLRC**, **ASS**, **LYL**, **LYS**, **LQE**, and structured **JSON**.
 - **Real-Time SSE Streaming**: Stream live extraction progress, platform matching, and timing status over Server-Sent Events (`/api/lyrics/stream`).
 - **Instant PostgreSQL Caching**: Automatically indexes and caches resolved tracks and lyrics for sub-millisecond future lookups.

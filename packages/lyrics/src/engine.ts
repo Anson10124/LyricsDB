@@ -10,6 +10,7 @@ import {
   type DeezerLyricsResponse,
 } from "./fetchers/deezer.js";
 import { fetchLrclibLyrics } from "./fetchers/lrclib.js";
+import { fetchLrcRedTtml } from "./fetchers/lrc-red.js";
 import {
   fetchMusixmatchLyrics,
   type MusixmatchLyricsResponse,
@@ -89,6 +90,13 @@ export interface CandidateEvaluation {
   wordCount: number;
   spanMs: number;
   coverageRatio: number;
+}
+
+export function hasWordTiming(payload: SyncedLyricsPayload): boolean {
+  return payload.filter((line) => {
+    const words = line.filter((token) => Array.isArray(token));
+    return words.length > 1 && new Set(words.map((word) => word[1])).size > 1;
+  }).length >= 2;
 }
 
 export function evaluateLyricsCandidate(
@@ -399,7 +407,7 @@ async function enrichCandidateWithTranslationsAndRomaji(
 
 export class LyricsEngine {
   // Resolves lyrics using a Tiered Concurrent Strategy to minimize latency and prevent rate limits:
-  // Tier 1: Word-by-Word Sources (QQ Music QRC, Deezer Word-by-Word, NetEase YRC, Musixmatch RichSync)
+  // Tier 1: Word-by-Word Sources (AMLL TTML DB, lrc.red TTML, QQ Music QRC, Deezer Word-by-Word, NetEase YRC, Musixmatch RichSync)
   //         -> If valid complete result found, returns immediately (Tiers 2 & 3 skipped).
   // Tier 2: Line-by-Line / LRC Sources (QQ Music Full LRC, NetEase LRC, Deezer Synced, Musixmatch Subtitles, LRCLIB)
   //         -> If valid complete result found, returns immediately (Tier 3 skipped).
@@ -555,7 +563,40 @@ export class LyricsEngine {
       );
     }
 
-    // 2. QQ Music QRC
+    // 2. lrc.red TTML (ISRC lookup; word timing only)
+    if (context.isrc && globalProviderLimiter.isAvailable("lrcred")) {
+      context.onProgress?.({
+        stage: "lyrics_searching",
+        provider: "lrc-red",
+        lyricsType: "word",
+        status: "searching",
+      });
+      tier1Tasks.push(
+        (async () => {
+          try {
+            const ttml = await globalProviderLimiter.schedule("lrcred", () =>
+              fetchLrcRedTtml(context.isrc!),
+            );
+            if (ttml) {
+              const parsed = parseTtml(ttml, metadata);
+              if (hasWordTiming(parsed)) {
+                return {
+                  lyricsType: "word",
+                  lyrics: parsed,
+                  source: "lrc-red-ttml",
+                  provider: "lrc-red",
+                };
+              }
+            }
+          } catch {
+            // Ignore error and continue fallback search
+          }
+          return null;
+        })(),
+      );
+    }
+
+    // 3. QQ Music QRC
     if (context.qqMusicId) {
       context.onProgress?.({
         stage: "lyrics_searching",
@@ -707,7 +748,18 @@ export class LyricsEngine {
 
       const completeTier1 = tier1Candidates.filter((c) => c.isComplete);
       if (completeTier1.length > 0) {
-        completeTier1.sort((a, b) => b.score - a.score);
+        const wordSourceRank = (provider: string) =>
+          provider === "amll-db" || provider === "amll"
+            ? 2
+            : provider === "lrc-red"
+              ? 1
+              : 0;
+        completeTier1.sort(
+          (a, b) =>
+            wordSourceRank(b.candidate.provider) -
+              wordSourceRank(a.candidate.provider) ||
+            b.score - a.score,
+        );
         let best = completeTier1[0]!.candidate;
 
         const otherRefs = tier1Candidates

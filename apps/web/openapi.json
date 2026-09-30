@@ -2560,7 +2560,7 @@
           "lyricsProvider": {
             "type": "object",
             "example": "amll-db",
-            "description": "Upstream lyrics provider source (amll-db, qqmusic, deezer, netease, musixmatch, lrclib)",
+            "description": "Upstream lyrics provider source (amll-db, lrc-red, qqmusic, deezer, netease, musixmatch, lrclib)",
             "nullable": true
           },
           "isVerified": {

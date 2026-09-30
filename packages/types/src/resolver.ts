@@ -27,6 +27,7 @@ export const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   qqmusic: "QQ Music",
   musixmatch: "Musixmatch",
   lrclib: "LRCLIB",
+  "lrc-red": "lrc.red",
   amlldb: "AMLL TTML DB",
   amll: "AMLL TTML DB",
   "amll-db": "AMLL TTML DB",
