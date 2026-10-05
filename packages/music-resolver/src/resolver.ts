@@ -21,6 +21,7 @@ import type {
 import { matchTrackWithMusixmatch } from "./utils/musixmatch-matcher.js";
 import { fetchAppleArtworkMetadata } from "./utils/apple-animated-artwork.js";
 import { globalProviderLimiter } from "./utils/provider-limiter.js";
+import { backfillIsrc } from "./utils/isrc.js";
 import {
   cleanSearchQuery,
   normalizeSongTitle,
@@ -32,10 +33,12 @@ export class MusicResolver {
   private adapters = new Map<string, MusicAdapter>();
   private musixmatchConfig?: ResolverConfig["musixmatch"];
   private appleMusicConfig?: ResolverConfig["appleMusic"];
+  private deezerConfig?: ResolverConfig["deezer"];
 
   constructor(config?: ResolverConfig) {
     this.musixmatchConfig = config?.musixmatch;
     this.appleMusicConfig = config?.appleMusic;
+    this.deezerConfig = config?.deezer;
 
     // Register built-in default parsers
     this.registerParser(
@@ -382,6 +385,16 @@ export class MusicResolver {
       }
     }
 
+    await backfillIsrc(
+      metadata,
+      links,
+      {
+        deezer: this.deezerConfig,
+        appleMusic: this.appleMusicConfig,
+      },
+      resolveOpts,
+    );
+
     // If metadata.album is still missing, backfill from verified adapter candidates
     if (!metadata.album) {
       for (const link of Object.values(links)) {
@@ -490,6 +503,15 @@ export class MusicResolver {
       });
 
     await Promise.all(adapterPromises);
+    await backfillIsrc(
+      normalizedMeta,
+      links,
+      {
+        deezer: this.deezerConfig,
+        appleMusic: this.appleMusicConfig,
+      },
+      options,
+    );
     return links;
   }
 }
