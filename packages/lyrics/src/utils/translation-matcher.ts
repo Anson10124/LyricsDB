@@ -27,6 +27,8 @@ export interface RomajiLineMatch {
 
 export interface TranslationSourceOptions {
   translation?: string | null;
+  /** Already parsed timestamps, for formats or signed offsets LRC cannot encode. */
+  translationLines?: TimestampedLine[];
   romaji?: string | null;
   referenceLrc?: string | null;
   metadata?: { title?: string; artist?: string };
@@ -1011,12 +1013,16 @@ export function alignTranslationsAndRomaji(
   }));
 
   // 1. Align Chinese Translation
-  if (sources.translation && typeof sources.translation === "string") {
-    const transCandidates = parseTimestampedLines(
-      sources.translation,
-      sources.metadata,
-      sources.referenceLrc || undefined,
-    );
+  if (
+    sources.translationLines ||
+    (sources.translation && typeof sources.translation === "string")
+  ) {
+    const transCandidates = sources.translationLines ??
+      parseTimestampedLines(
+        sources.translation!,
+        sources.metadata,
+        sources.referenceLrc || undefined,
+      );
 
     if (transCandidates.length > 0) {
       alignSequenceDP(

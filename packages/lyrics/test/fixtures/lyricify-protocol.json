@@ -1,0 +1,57 @@
+{
+  "generatedWith": "Python json/cryptography, independently from the production protocol helpers",
+  "env": {
+    "LYRICIFY_SPOTIFY_USER_ID": "probe-user",
+    "LYRICIFY_SPOTIFY_EMAIL": "probe@example.invalid",
+    "LYRICIFY_SPOTIFY_DISPLAY_NAME": "Probe",
+    "LYRICIFY_SPOTIFY_REGION": "GB"
+  },
+  "record": {
+    "spotifyId": "4cOdK2wGLETKBW3PvgPWqT",
+    "isrc": "GBARL8700014",
+    "title": "Test 世界 🎵",
+    "artists": ["Artist A", "Artist B"],
+    "album": "Test Album",
+    "durationMs": 213573
+  },
+  "account": {
+    "Name": "probe-user",
+    "Email": "probe@example.invalid",
+    "Key": null,
+    "Type": "user",
+    "Spotify": {
+      "DisplayName": "Probe",
+      "Email": "probe@example.invalid",
+      "Id": "probe-user",
+      "Region": "GB"
+    },
+    "PremiumAd": null,
+    "Packed": null
+  },
+  "track": {
+    "Id": "4cOdK2wGLETKBW3PvgPWqT",
+    "SpotifyUri": "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+    "Isrc": "GBARL8700014",
+    "Name": "Test 世界 🎵",
+    "Artists": ["Artist A", "Artist B"],
+    "Album": "Test Album",
+    "TrackLength": 213573,
+    "IsLocal": false
+  },
+  "requestKey": "WWnyQp1gol4wzXvXwVx03IGlsD+1U4oals2sB7iaEBERYECyWJNBek6alvtFeJQ0y5EYPJWIzq+wiylAmWqCv1xL64jFcmH5Mq03gERVpQ7xyok4XnpxOvHoA0Q0eR8ICZsk5zYCcqFmLDlBmpAfJuQ5URSrxcVO7m3yssARVRmYzwKifZqsgvSDur8nrTbkBBu4dwQ+qJxz5kNe4mqyDOmcyR0RlrHexHhu7+aH9MzpKiYIbXuwxKZOXBjuZwyu69YjJkB+qo2pUzVFtn1QDBuJbi9+XTm2L+VTr+QjkA+8D8oWmebHcEl1one6iQMVaw9+XlkaPuJGhFD61SoqdW0R+1UMVUmx8qBzl2UyrxuK0Jv71TyIZ+dSnScfpC0dg81JPbHMRcQfCpOCU6uFUmJJxcoQBPdIuK4vENgbK3z7oLOqcgOIPXenoojOJ91stJYWQCQlRKnbLA+1/wfh3g5v8Ei9kWBbZq49Xf67BzQ7AWQA5HiHxdwGfwZTRktp4rJ0TnKyAwZOquyON7o8wF91yuMR6Xdo/zpPOfWXrfmr7xQDIqkw38j2b42OgD3TUa42Vu8gDQHkD7B2bIV+1Za6DnWUvPJoIMGcIE3jAo3WK+70+GcSthR+1+lJqXXNWymY8JA9nwnspRN/h60+KI5aVmtMP+B4+lASjeNwXVXcmOVm58+2NNga84bQ45jKpGlU17RrSZwrhLkmZbsEGHn5ly84d+9rszmwaOP+Zu2oXM5CobXksV8ubZ/zmjG0vCZJM2HgKLwuTUxKrB3tPRT3OoajRSs7WhO9G9pTUvXInWbyWLYWbsysOEI9lRH3ky23zEIeAuJP3g3uL6cNpaPHwWmbzdh74CKcP0y6HpzcQ1KzX7kP/wCUZn7HbeV5AXzwCV6h+taK3IAUCp/BEg==",
+  "responseKey": "61CE9B3C2F974421",
+  "responseBody": "ac /BeiW0KeEGbWwRtAQJjbmGNhzNzGEnGoSLM/CORvCDyOcWKv/0nApx/CjTrY45PMIlH0duF9kGfeNC2YdBzmKtKVc9Q5Ek5goynMi43gRH4xzyoB8ZSQxbuAd8g7qn3hwuZpk/NHG0yXlWmPyKtJIA== 0",
+  "data": {
+    "Wxriw": {
+      "UnconfirmedSchema": [
+        {
+          "start": 123,
+          "text": "Test 世界"
+        }
+      ]
+    },
+    "Other": null
+  },
+  "bareResponseKey": "D4C6F7A7826E09FF",
+  "bareResponseBody": "yv++uB2caawhZkCd9wJGZ4WT+6tCUyNI407ht8t6CC2mD/if05kC5InxJ20c8VhU1+lok4e7CoyeRaQIqGa7toOQYdkqOVom8E/tNXWTGwAlBAVXDtioH3lyhzhs0ROI/9bjuDwAugI0lXDsYpM2kg=="
+}

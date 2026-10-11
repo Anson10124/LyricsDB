@@ -381,6 +381,7 @@ export class TracksService {
       lyricsType?: LyricsType;
       status?: "searching" | "found" | "miss" | "fallback";
     }) => void,
+    forceRefresh = false,
   ): Promise<{
     lyricsType: LyricsType | null;
     lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null;
@@ -416,7 +417,7 @@ export class TracksService {
       (lyricsStoragePath && lyricsStoragePath.trim().length > 0),
     );
 
-    if (!hasExistingLyrics) {
+    if (!hasExistingLyrics || forceRefresh) {
       const resolvedLyrics = await this.lyricsEngine.resolveLyrics({
         title: meta.title,
         artist: meta.artist,
@@ -453,7 +454,8 @@ export class TracksService {
           lyricsStoragePath = null;
         }
       }
-    } else if (existingTrack) {
+    }
+    if (!resolvedRawLyrics && existingTrack) {
       resolvedRawLyrics = await this.resolveTrackLyrics(existingTrack);
     }
 
@@ -795,6 +797,7 @@ export class TracksService {
             timestamp: Date.now(),
           });
         },
+        Boolean(forceRefresh),
       );
 
       if (

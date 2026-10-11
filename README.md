@@ -130,6 +130,31 @@ STORAGE_FORCE_PATH_STYLE=false
 
 ## Supported Formats
 
+### Lyricify provider
+
+Lyricify uses the existing resolved track metadata and Spotify track ID; Spotify
+developer credentials or OAuth are not required. Enable it by adding account
+identity values to the root `.env`:
+
+```env
+LYRICIFY_SPOTIFY_USER_ID=your_spotify_user_id
+LYRICIFY_SPOTIFY_EMAIL=your_account_email
+# Optional
+LYRICIFY_SPOTIFY_DISPLAY_NAME=your_display_name
+LYRICIFY_SPOTIFY_REGION=GB
+```
+
+The provider is stored and reported as **Lyricify**. Complete Lyricify lyrics rank
+first within their timing tier; word timing remains preferred over line or plain
+lyrics. Only the Lyricify response's `Wxriw` entry is used. Its duet/background
+roles, authored timings, and translations are preserved, while credit lines and
+server metadata are removed. Missing configuration or provider failures fall back
+to the other sources. `LYRICIFY_VERSION` optionally overrides the observed build.
+
+Existing lyrics remain cached. To evaluate the new provider for a cached track,
+use `/api/lyrics/stream?platform=spotify&id=TRACK_ID&forceRefresh=true`. A refresh
+that finds no usable lyrics retains the previous result.
+
 | Format              | Query Param                | Content-Type       | Precision               | Description                                                |
 | :------------------ | :------------------------- | :----------------- | :---------------------- | :--------------------------------------------------------- |
 | **JSON**            | `format=json`              | `application/json` | Syllable / Word / Plain | Compact token array `[vocalType, startMs, lengthMs, text]` |

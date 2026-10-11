@@ -11,6 +11,8 @@ export * from "./fetchers/lrc-red.js";
 export * from "./fetchers/deezer.js";
 export * from "./fetchers/musixmatch.js";
 export * from "./fetchers/amll-db.js";
+export * from "./fetchers/lyricify.js";
+export * from "./parsers/lyricify.js";
 export * from "./utils/qrc-decoder.js";
 export * from "./utils/converter.js";
 export * from "./utils/info-lines.js";

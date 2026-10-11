@@ -17,6 +17,8 @@ export type PlatformId =
   | "qqMusic";
 
 export const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+  lyricify: "Lyricify",
+  Lyricify: "Lyricify",
   spotify: "Spotify",
   apple: "Apple Music",
   applemusic: "Apple Music",

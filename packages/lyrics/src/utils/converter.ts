@@ -47,6 +47,7 @@ export function optimizeLyricsPayload(
   metadata?: { title?: string; artist?: string },
   references?: Array<SyncedLyricsPayload | string | null | undefined>,
   timingOptions?: OptimizeTimingOptions,
+  preserveAuthoredStructure = false,
 ): SyncedLyricsPayload {
   let result = payload;
   result = stripInfoLines(result, metadata);
@@ -55,6 +56,7 @@ export function optimizeLyricsPayload(
     result = unmasked.lyrics as SyncedLyricsPayload;
   }
   result = fixExplicitLyrics(result);
+  if (preserveAuthoredStructure) return result;
   result = extractBackgroundVocals(result);
   result = standardizeSyllables(result);
   result = normalizeCapitalization(result);
@@ -70,6 +72,7 @@ export function optimizeLyricsPayload(
 export function convertAmllLinesToCompact(
   rawLines: LyricLine[],
   metadata?: { title?: string; artist?: string },
+  preserveAuthoredStructure = false,
 ): SyncedLyricsPayload {
   if (!rawLines || !Array.isArray(rawLines)) {
     return [];
@@ -118,7 +121,13 @@ export function convertAmllLinesToCompact(
     }
   }
 
-  return optimizeLyricsPayload(lines, metadata);
+  return optimizeLyricsPayload(
+    lines,
+    metadata,
+    undefined,
+    undefined,
+    preserveAuthoredStructure,
+  );
 }
 
 // Converts our compact tuple payload back to AMLL LyricLine array

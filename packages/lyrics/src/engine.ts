@@ -5,6 +5,8 @@ import type {
   VocalType,
 } from "@repo/types";
 import { globalProviderLimiter } from "@repo/music-resolver";
+import { canFetchLyricify, fetchLyricifyLyrics } from "./fetchers/lyricify.js";
+import { parseLyricifyLyrics } from "./parsers/lyricify.js";
 import {
   fetchDeezerLyrics,
   type DeezerLyricsResponse,
@@ -90,6 +92,34 @@ export interface CandidateEvaluation {
   wordCount: number;
   spanMs: number;
   coverageRatio: number;
+}
+
+/** Completeness remains mandatory before provider preference is considered. */
+export function compareLyricsCandidates(
+  a: CandidateEvaluation,
+  b: CandidateEvaluation,
+): number {
+  const rank = (candidate: ResolvedLyricsResult) => {
+    if (candidate.provider === "Lyricify") return 3;
+    if (candidate.lyricsType !== "word") return 0;
+    if (candidate.provider === "amll-db" || candidate.provider === "amll") return 2;
+    return candidate.provider === "lrc-red" ? 1 : 0;
+  };
+  return (
+    Number(b.isComplete) - Number(a.isComplete) ||
+    rank(b.candidate) - rank(a.candidate) ||
+    b.score - a.score
+  );
+}
+
+function lyricFeatureFlags(lyrics: SyncedLyricsPayload) {
+  const annotations = lyrics.map((line) =>
+    line.filter((item): item is string => typeof item === "string"),
+  );
+  return {
+    hasTranslation: annotations.some((strings) => Boolean(strings[0])),
+    hasRomaji: annotations.some((strings) => Boolean(strings[1])),
+  };
 }
 
 export function hasWordTiming(payload: SyncedLyricsPayload): boolean {
@@ -310,6 +340,9 @@ async function unmaskCandidate(
     lyricsResult = optimizeLyricsPayload(
       lyricsResult as SyncedLyricsPayload,
       metadata,
+      undefined,
+      undefined,
+      candidate.provider === "Lyricify",
     );
   } else if (typeof lyricsResult === "string") {
     lyricsResult = fixExplicitText(lyricsResult);
@@ -377,8 +410,7 @@ async function enrichCandidateWithTranslationsAndRomaji(
   if (!translationSource && !romajiSource) {
     return {
       ...candidate,
-      hasTranslation: false,
-      hasRomaji: false,
+      ...lyricFeatureFlags(candidate.lyrics),
     };
   }
 
@@ -392,10 +424,13 @@ async function enrichCandidateWithTranslationsAndRomaji(
     metadata,
   });
 
-  const compactPayload = convertAmllLinesToCompact(enrichedLines, metadata);
+  const compactPayload = convertAmllLinesToCompact(
+    enrichedLines,
+    metadata,
+    candidate.provider === "Lyricify",
+  );
 
-  const hasTranslation = enrichedLines.some((l) => Boolean(l.translatedLyric));
-  const hasRomaji = enrichedLines.some((l) => Boolean(l.romanLyric));
+  const { hasTranslation, hasRomaji } = lyricFeatureFlags(compactPayload);
 
   return {
     ...candidate,
@@ -417,6 +452,52 @@ export class LyricsEngine {
   ): Promise<ResolvedLyricsResult | null> {
     const artist = context.artist || context.artists?.[0];
     const metadata = { title: context.title, artist };
+
+    const lyricifyQuery = {
+      ...context,
+      artists: context.artists?.length
+        ? context.artists
+        : artist
+          ? [artist]
+          : undefined,
+    };
+    let lyricifyPromise: Promise<ResolvedLyricsResult | null> | null = null;
+    const addLyricifyTask = (
+      tasks: Promise<ResolvedLyricsResult | null>[],
+      lyricsType: LyricsType,
+    ) => {
+      if (
+        !canFetchLyricify(lyricifyQuery) ||
+        !globalProviderLimiter.isAvailable("lyricify")
+      ) return;
+      context.onProgress?.({
+        stage: "lyrics_searching",
+        provider: "Lyricify",
+        lyricsType,
+        status: "searching",
+      });
+      if (!lyricifyPromise) {
+        lyricifyPromise = globalProviderLimiter
+          .schedule("lyricify", async () => {
+            const response = await fetchLyricifyLyrics(lyricifyQuery);
+            const parsed = response && parseLyricifyLyrics(response, {
+              ...metadata,
+              durationMs: context.durationMs,
+            });
+            if (!parsed) return null;
+            const { format, ...candidate } = parsed;
+            return {
+              ...candidate,
+              provider: "Lyricify",
+              source: `lyricify-${format}`,
+            };
+          })
+          .catch(() => null);
+      }
+      tasks.push(lyricifyPromise.then((candidate) =>
+        candidate?.lyricsType === lyricsType ? candidate : null,
+      ));
+    };
 
     // Shared response caches across tiers to avoid duplicate network fetches
     let qqLyricsPromise: Promise<QQMusicLyricsResponse | null> | null = null;
@@ -526,6 +607,7 @@ export class LyricsEngine {
     // TIER 1: Word-by-Word Sources (Parallel)
     // ==========================================
     const tier1Tasks: Promise<ResolvedLyricsResult | null>[] = [];
+    addLyricifyTask(tier1Tasks, "word");
 
     // 1. AMLL TTML DB (Hand-curated Word-by-Word TTML)
     if (
@@ -748,18 +830,7 @@ export class LyricsEngine {
 
       const completeTier1 = tier1Candidates.filter((c) => c.isComplete);
       if (completeTier1.length > 0) {
-        const wordSourceRank = (provider: string) =>
-          provider === "amll-db" || provider === "amll"
-            ? 2
-            : provider === "lrc-red"
-              ? 1
-              : 0;
-        completeTier1.sort(
-          (a, b) =>
-            wordSourceRank(b.candidate.provider) -
-              wordSourceRank(a.candidate.provider) ||
-            b.score - a.score,
-        );
+        completeTier1.sort(compareLyricsCandidates);
         let best = completeTier1[0]!.candidate;
 
         const otherRefs = tier1Candidates
@@ -793,6 +864,7 @@ export class LyricsEngine {
     // TIER 2: Line-by-Line / LRC Sources (Parallel)
     // ==========================================
     const tier2Tasks: Promise<ResolvedLyricsResult | null>[] = [];
+    addLyricifyTask(tier2Tasks, "line");
 
     // 1. QQ Music Full LRC (Checked via cached response or fcg_query_lyric_new.fcg)
     if (context.qqMusicId) {
@@ -997,7 +1069,7 @@ export class LyricsEngine {
 
       const completeTier2 = tier2Candidates.filter((c) => c.isComplete);
       if (completeTier2.length > 0) {
-        completeTier2.sort((a, b) => b.score - a.score);
+        completeTier2.sort(compareLyricsCandidates);
         let best = completeTier2[0]!.candidate;
 
         const otherRefs = tier2Candidates
@@ -1031,6 +1103,7 @@ export class LyricsEngine {
     // TIER 3: Plain Text Sources (Parallel)
     // ==========================================
     const tier3Tasks: Promise<ResolvedLyricsResult | null>[] = [];
+    addLyricifyTask(tier3Tasks, "plain");
 
     // 1. Deezer Plain
     if (context.deezerId) {
@@ -1135,7 +1208,7 @@ export class LyricsEngine {
       }
 
       if (tier3Candidates.length > 0) {
-        tier3Candidates.sort((a, b) => b.score - a.score);
+        tier3Candidates.sort(compareLyricsCandidates);
         let best = tier3Candidates[0]!.candidate;
 
         const otherRefs = tier3Candidates
