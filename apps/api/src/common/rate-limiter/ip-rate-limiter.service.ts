@@ -100,6 +100,19 @@ export class IpRateLimiterService implements OnModuleDestroy {
   }
 
   /**
+   * Like consume(), but returns false instead of throwing when the limit is exceeded.
+   */
+  tryConsume(ip: string, type: RateLimitType): boolean {
+    try {
+      this.consume(ip, type);
+      return true;
+    } catch (err) {
+      if (err instanceof HttpException) return false;
+      throw err;
+    }
+  }
+
+  /**
    * Returns current usage for a specific IP.
    */
   getUsage(ip: string): {

@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -49,6 +50,10 @@ export type {
   ProgressLogEvent,
 };
 
+// A track saved without lyrics (no provider had them, or providers were failing)
+// gets a fresh live attempt on the next request once this long has passed.
+const LYRICS_RETRY_INTERVAL_MS = 60 * 60 * 1000;
+
 interface VerifiedPlatformIds {
   spotifyId?: string;
   deezerId?: string;
@@ -60,6 +65,7 @@ interface VerifiedPlatformIds {
 @Injectable()
 
 export class TracksService {
+  private readonly logger = new Logger(TracksService.name);
   // In-flight request deduplication map to prevent thundering herd
   private inFlightRequests = new Map<string, Promise<Track>>();
   private lyricsEngine = new LyricsEngine();
@@ -105,7 +111,7 @@ export class TracksService {
       const cached = await this.findByPlatformId(targetPlatform, targetId);
       if (cached) {
         this.ipRateLimiter.consume(clientIp, "cached");
-        return cached;
+        return this.retryMissingLyrics(cached, clientIp);
       }
     }
 
@@ -136,23 +142,97 @@ export class TracksService {
         ? `${targetPlatform}:${targetId}`
         : targetUrl;
 
-    if (this.inFlightRequests.has(lockKey)) {
-      return this.inFlightRequests.get(lockKey)!;
-    }
+    // Step 4: Resolve and ingest into PostgreSQL
+    return this.syncDeduped(lockKey, targetUrl);
+  }
 
-    // Step 4: Resolve, ingest into PostgreSQL, and clean up lock
-    const syncPromise = this.executeSyncAndStore(targetUrl)
-      .then((track) => {
-        this.inFlightRequests.delete(lockKey);
-        return track;
-      })
-      .catch((err) => {
-        this.inFlightRequests.delete(lockKey);
-        throw err;
-      });
+  // Coalesces concurrent syncs of the same track onto a single promise
+  private syncDeduped(lockKey: string, url: string): Promise<Track> {
+    const inFlight = this.inFlightRequests.get(lockKey);
+    if (inFlight) return inFlight;
+
+    const syncPromise = this.executeSyncAndStore(url).finally(() => {
+      this.inFlightRequests.delete(lockKey);
+    });
 
     this.inFlightRequests.set(lockKey, syncPromise);
     return syncPromise;
+  }
+
+  private hasLyrics(
+    track: Pick<Track, "lyrics" | "lyricsStoragePath">,
+  ): boolean {
+    const { lyrics, lyricsStoragePath } = track;
+    return Boolean(
+      (lyricsStoragePath && lyricsStoragePath.trim().length > 0) ||
+      (lyrics &&
+        (Array.isArray(lyrics)
+          ? lyrics.length > 0
+          : typeof lyrics === "string"
+            ? lyrics.trim().length > 0
+            : true)),
+    );
+  }
+
+  private shouldRetryLyrics(track: Track): boolean {
+    if (this.hasLyrics(track)) return false;
+    const lastAttempt = new Date(track.updatedAt).getTime();
+    return Date.now() - lastAttempt >= LYRICS_RETRY_INTERVAL_MS;
+  }
+
+  private platformRefFor(
+    track: Track,
+  ): { platform: string; id: string } | null {
+    const candidates: Array<[string, string | null]> = [
+      ["spotify", track.spotifyId],
+      ["apple", track.appleMusicId],
+      ["deezer", track.deezerId],
+      ["netease", track.neteaseId],
+      ["qq", track.qqMusicId],
+    ];
+    for (const [platform, id] of candidates) {
+      if (id) return { platform, id };
+    }
+    return null;
+  }
+
+  // Records a lyrics attempt on a track so retries back off even when the attempt failed
+  private async touchTrack(id: string): Promise<void> {
+    try {
+      await this.db
+        .update(tracks)
+        .set({ updatedAt: new Date() })
+        .where(eq(tracks.id, id));
+    } catch (err) {
+      this.logger.warn(`Failed to record lyrics attempt for track ${id}: ${err}`);
+    }
+  }
+
+  // Cached tracks without lyrics may come from a transient provider outage, so they
+  // get a live re-sync once their last attempt is stale. Any failure (including an
+  // exhausted uncached budget) falls back to the cached row.
+  private async retryMissingLyrics(
+    track: Track,
+    clientIp: string,
+  ): Promise<Track> {
+    if (!this.shouldRetryLyrics(track)) return track;
+
+    const ref = this.platformRefFor(track);
+    if (!ref || !this.ipRateLimiter.tryConsume(clientIp, "uncached")) {
+      return track;
+    }
+
+    try {
+      return await this.syncDeduped(
+        `${ref.platform}:${ref.id}`,
+        buildPlatformUrl(ref.platform, ref.id),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Lyrics retry failed for track ${track.id}: ${message}`);
+      await this.touchTrack(track.id);
+      return track;
+    }
   }
 
   private getHighConfidencePlatformId(
@@ -213,18 +293,12 @@ export class TracksService {
   // Strip raw lyrics from track object for API responses
   public sanitizeTrack<T extends Track>(track: T): SanitizedTrack<T> {
     const { lyrics, ...rest } = track;
-    const hasLyrics = Boolean(
-      (track.lyricsStoragePath && track.lyricsStoragePath.trim().length > 0) ||
-      (lyrics &&
-        (Array.isArray(lyrics)
-          ? lyrics.length > 0
-          : typeof lyrics === "string"
-            ? lyrics.trim().length > 0
-            : true)),
-    );
     return {
       ...rest,
-      hasLyrics,
+      hasLyrics: this.hasLyrics({
+        lyrics,
+        lyricsStoragePath: track.lyricsStoragePath,
+      }),
     };
   }
 
@@ -249,7 +323,10 @@ export class TracksService {
     let track: Track | null = null;
 
     if (options.trackId) {
-      track = await this.findById(options.trackId, clientIp);
+      track = await this.retryMissingLyrics(
+        await this.findById(options.trackId, clientIp),
+        clientIp,
+      );
     } else {
       track = await this.getOrSyncTrack(options, clientIp);
     }
@@ -672,6 +749,18 @@ export class TracksService {
       cachedTrack = await this.findByPlatformId(targetPlatform, targetId);
     }
 
+    // A cached row without lyrics whose last attempt is stale gets a live re-sync,
+    // if the client still has uncached budget; otherwise it is served from cache.
+    let retryingTrack: Track | null = null;
+    if (
+      cachedTrack &&
+      this.shouldRetryLyrics(cachedTrack) &&
+      this.ipRateLimiter.tryConsume(clientIp, "uncached")
+    ) {
+      retryingTrack = cachedTrack;
+      cachedTrack = null;
+    }
+
     if (cachedTrack) {
       // Consume from 60 RPM cached bucket
       this.ipRateLimiter.consume(clientIp, "cached");
@@ -715,7 +804,9 @@ export class TracksService {
     }
 
     // Cache Miss -> Consume from 6 RPM uncached live resolution bucket
-    this.ipRateLimiter.consume(clientIp, "uncached");
+    if (!retryingTrack) {
+      this.ipRateLimiter.consume(clientIp, "uncached");
+    }
 
     if (!forceRefresh) {
       emitEvent({
@@ -861,6 +952,9 @@ export class TracksService {
       });
 
     } catch (err) {
+      if (retryingTrack) {
+        await this.touchTrack(retryingTrack.id);
+      }
       const message =
         err instanceof Error
           ? err.message
