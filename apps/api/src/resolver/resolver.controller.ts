@@ -97,7 +97,7 @@ export class ResolverController {
     description: "Sample resolution result",
   })
   @Get("sample")
-  async getSample() {
-    return this.resolverService.resolveSample();
+  async getSample(@ClientIp() clientIp: string) {
+    return this.resolverService.resolveSample(clientIp);
   }
 }

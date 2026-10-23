@@ -64,14 +64,17 @@ export class ResolverService {
     url: string,
     targetPlatforms?: string[],
     options?: Parameters<MusicResolver["resolve"]>[2],
-    clientIp = "127.0.0.1",
+    clientIp?: string,
   ): Promise<ResolveResult> {
     if (!url || typeof url !== "string") {
       throw new BadRequestException('Query parameter "url" is required.');
     }
 
-    // Direct resolver endpoint is always live uncached resolution (6 RPM per IP)
-    this.ipRateLimiter?.consume(clientIp, "uncached");
+    // Direct resolver endpoint is always live uncached resolution (6 RPM per IP).
+    // Internal callers that already charged the client (e.g. TracksService) omit clientIp.
+    if (clientIp) {
+      this.ipRateLimiter?.consume(clientIp, "uncached");
+    }
 
     try {
       const result = await this.resolver.resolve(
@@ -89,9 +92,9 @@ export class ResolverService {
     }
   }
 
-  async resolveSample(): Promise<ResolveResult> {
+  async resolveSample(clientIp?: string): Promise<ResolveResult> {
     // Sample track: "Never Gonna Give You Up"
     const sampleUrl = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT";
-    return this.resolveUrl(sampleUrl);
+    return this.resolveUrl(sampleUrl, undefined, undefined, clientIp);
   }
 }
