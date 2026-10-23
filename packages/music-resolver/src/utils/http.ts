@@ -121,7 +121,7 @@ export class HttpClient {
     if (provider && !options?.bypassLimiter) {
       return globalProviderLimiter.schedule<T>(
         provider,
-        () => HttpClient.executeRawRequest<T>(method, url, options, provider),
+        () => HttpClient.executeRawRequest<T>(method, url, options),
         options?.priority ?? 0,
       );
     }
@@ -129,11 +129,12 @@ export class HttpClient {
     return HttpClient.executeRawRequest<T>(method, url, options);
   }
 
+  // 429s surface as HttpError (status + retryAfter); the provider limiter's
+  // recordFailure turns them into a cooldown.
   private static async executeRawRequest<T>(
     method: "GET" | "POST" | "PUT" | "DELETE",
     url: string,
     options?: HttpOptions,
-    provider?: string,
   ): Promise<T> {
     assertSafeUrl(url);
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
@@ -185,15 +186,6 @@ export class HttpClient {
             url,
             retryAfter,
           );
-
-          if (provider && response.status === 429) {
-            const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined;
-            globalProviderLimiter.triggerCooldown(
-              provider,
-              retryAfterSec || 60,
-              `HTTP 429 received from ${url}`,
-            );
-          }
 
           throw httpError;
         }

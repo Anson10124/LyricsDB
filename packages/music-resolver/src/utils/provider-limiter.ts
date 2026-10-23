@@ -243,21 +243,16 @@ class SingleProviderLimiter {
     };
   }
 
-  async schedule<T>(
-    task: () => Promise<T>,
-    priority = 0,
-    bypassQueueIfDisabled = false,
-  ): Promise<T> {
+  async schedule<T>(task: () => Promise<T>, priority = 0): Promise<T> {
     this.totalRequests++;
 
+    // Fail fast while cooling down instead of queueing until the queue timeout
     if (!this.isAvailable()) {
       const remainingSec = Math.max(
         1,
         Math.ceil((this.cooldownEndsAt - Date.now()) / 1000),
       );
-      if (bypassQueueIfDisabled) {
-        throw new ProviderRateLimitedError(this.provider, remainingSec);
-      }
+      throw new ProviderRateLimitedError(this.provider, remainingSec);
     }
 
     if (this.queue.length >= this.config.maxQueueSize) {
@@ -299,53 +294,59 @@ class SingleProviderLimiter {
     });
   }
 
+  // Starts as many queued tasks as concurrency, RPM and breaker state allow
   private processNext(): void {
-    if (this.queue.length === 0) return;
-
-    if (!this.isAvailable()) {
-      return;
-    }
-
-    if (this.activeCount >= this.config.concurrency) {
-      return;
-    }
-
-    // Sliding window RPM check
-    const now = Date.now();
-    const oneMinuteAgo = now - 60_000;
-    this.requestTimestamps = this.requestTimestamps.filter(
-      (ts) => ts > oneMinuteAgo,
-    );
-
-    if (this.requestTimestamps.length >= this.config.rpm) {
-      // Re-check after the earliest timestamp in the window expires
-      const oldest = this.requestTimestamps[0] || now;
-      const waitMs = Math.max(50, oldest + 60_000 - now + 10);
-      setTimeout(() => this.processNext(), waitMs);
-      return;
-    }
-
-    const queuedTask = this.queue.shift();
-    if (!queuedTask) return;
-
-    clearTimeout(queuedTask.timeoutTimer);
-
-    this.activeCount++;
-    this.requestTimestamps.push(now);
-
-    (async () => {
-      try {
-        const result = await queuedTask.task();
-        this.recordSuccess();
-        queuedTask.resolve(result);
-      } catch (error) {
-        this.recordFailure(error);
-        queuedTask.reject(error);
-      } finally {
-        this.activeCount--;
-        this.processNext();
+    while (this.queue.length > 0) {
+      if (!this.isAvailable()) {
+        return;
       }
-    })();
+
+      if (this.activeCount >= this.config.concurrency) {
+        return;
+      }
+
+      // HALF_OPEN lets a single probe through; the rest wait for its outcome
+      if (this.state === "HALF_OPEN" && this.activeCount > 0) {
+        return;
+      }
+
+      // Sliding window RPM check
+      const now = Date.now();
+      const oneMinuteAgo = now - 60_000;
+      this.requestTimestamps = this.requestTimestamps.filter(
+        (ts) => ts > oneMinuteAgo,
+      );
+
+      if (this.requestTimestamps.length >= this.config.rpm) {
+        // Re-check after the earliest timestamp in the window expires
+        const oldest = this.requestTimestamps[0] || now;
+        const waitMs = Math.max(50, oldest + 60_000 - now + 10);
+        setTimeout(() => this.processNext(), waitMs);
+        return;
+      }
+
+      const queuedTask = this.queue.shift();
+      if (!queuedTask) return;
+
+      clearTimeout(queuedTask.timeoutTimer);
+
+      this.activeCount++;
+      this.requestTimestamps.push(now);
+
+      (async () => {
+        try {
+          const result = await queuedTask.task();
+          this.recordSuccess();
+          queuedTask.resolve(result);
+        } catch (error) {
+          this.recordFailure(error);
+          queuedTask.reject(error);
+        } finally {
+          this.activeCount--;
+          this.processNext();
+        }
+      })();
+    }
   }
 
   recordSuccess(): void {
@@ -416,6 +417,11 @@ class SingleProviderLimiter {
 
     if (is429 || isCaptcha) {
       this.total429s++;
+      // Requests already in flight when the cooldown started can all come back
+      // 429; only the first one sets (and escalates) the cooldown.
+      if (this.state === "COOLDOWN" && Date.now() < this.cooldownEndsAt) {
+        return;
+      }
       const cooldownSec =
         retryAfterSeconds ||
         Math.min(
@@ -545,9 +551,8 @@ export class ProviderProtectionManager {
     provider: string,
     task: () => Promise<T>,
     priority = 0,
-    bypassIfDisabled = false,
   ): Promise<T> {
-    return this.getLimiter(provider).schedule(task, priority, bypassIfDisabled);
+    return this.getLimiter(provider).schedule(task, priority);
   }
 
   triggerCooldown(
