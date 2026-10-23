@@ -9,6 +9,103 @@ const DEEZER_JWT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const SPOTIFY_PROVIDER = "spotify";
 const SPOTIFY_TOKEN_CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (Spotify token lasts 60 min)
 
+interface CachedToken {
+  token: string;
+  expireAt: number;
+}
+
+// Process-local cache in front of the jwt table, so hot paths skip a DB read
+const memoryTokens = new Map<string, CachedToken>();
+// One refresh per provider at a time; concurrent callers share its promise
+const inFlightRefreshes = new Map<string, Promise<string>>();
+// After a failed refresh, callers get the same error for a short while
+// instead of each hitting the upstream token endpoint again
+const REFRESH_FAILURE_BACKOFF_MS = 10_000;
+const refreshFailures = new Map<string, { error: unknown; until: number }>();
+
+async function getStoredToken(
+  provider: string,
+  client: DatabaseClient,
+  refresh: () => Promise<string>,
+): Promise<string> {
+  const cached = memoryTokens.get(provider);
+  if (cached && cached.expireAt > Date.now()) {
+    return cached.token;
+  }
+
+  try {
+    const existing = await client
+      .select()
+      .from(jwts)
+      .where(eq(jwts.provider, provider))
+      .limit(1);
+
+    const record = existing[0];
+    const expireAt = record?.expireAt ? new Date(record.expireAt).getTime() : 0;
+    if (record?.token && expireAt > Date.now()) {
+      memoryTokens.set(provider, { token: record.token, expireAt });
+      return record.token;
+    }
+  } catch (err) {
+    // If DB read fails, continue to fetch token directly
+    console.warn(`[jwt-manager] Failed to read ${provider} token from DB:`, err);
+  }
+
+  // Token is expired, missing, or DB had an error -> fetch a fresh one
+  return refresh();
+}
+
+function refreshStoredToken(
+  provider: string,
+  client: DatabaseClient,
+  fetchToken: () => Promise<{ token: string; expireAt: Date }>,
+): Promise<string> {
+  const inFlight = inFlightRefreshes.get(provider);
+  if (inFlight) return inFlight;
+
+  const failure = refreshFailures.get(provider);
+  if (failure && failure.until > Date.now()) {
+    return Promise.reject(failure.error);
+  }
+
+  const refresh = (async () => {
+    let fetched: { token: string; expireAt: Date };
+    try {
+      fetched = await fetchToken();
+    } catch (err) {
+      refreshFailures.set(provider, {
+        error: err,
+        until: Date.now() + REFRESH_FAILURE_BACKOFF_MS,
+      });
+      throw err;
+    }
+
+    const { token, expireAt } = fetched;
+    refreshFailures.delete(provider);
+    memoryTokens.set(provider, { token, expireAt: expireAt.getTime() });
+
+    try {
+      await client
+        .insert(jwts)
+        .values({ provider, token, expireAt })
+        .onConflictDoUpdate({
+          target: jwts.provider,
+          set: { token, expireAt },
+        });
+    } catch (err) {
+      // Graceful fallback if DB write fails
+      console.warn(`[jwt-manager] Failed to store ${provider} token in DB:`, err);
+    }
+
+    return token;
+  })().finally(() => {
+    inFlightRefreshes.delete(provider);
+  });
+
+  inFlightRefreshes.set(provider, refresh);
+  return refresh;
+}
+
 export async function fetchAnonymousDeezerJwt(options?: {
   timeout?: number;
 }): Promise<string> {
@@ -56,26 +153,9 @@ export async function getDeezerJwt(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-
-  try {
-    const existing = await client
-      .select()
-      .from(jwts)
-      .where(eq(jwts.provider, DEEZER_PROVIDER))
-      .limit(1);
-
-    const record = existing[0];
-    if (record?.token && record?.expireAt) {
-      if (new Date(record.expireAt) > new Date()) {
-        return record.token;
-      }
-    }
-  } catch {
-    // If DB read fails, continue to fetch token directly
-  }
-
-  // Token is expired, missing, or DB had an error -> fetch a fresh one
-  return refreshDeezerJwt(client, options);
+  return getStoredToken(DEEZER_PROVIDER, client, () =>
+    refreshDeezerJwt(client, options),
+  );
 }
 
 export async function refreshDeezerJwt(
@@ -83,29 +163,10 @@ export async function refreshDeezerJwt(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-  const newToken = await fetchAnonymousDeezerJwt(options);
-  const expireAt = new Date(Date.now() + DEEZER_JWT_CACHE_TTL_MS);
-
-  try {
-    await client
-      .insert(jwts)
-      .values({
-        provider: DEEZER_PROVIDER,
-        token: newToken,
-        expireAt,
-      })
-      .onConflictDoUpdate({
-        target: jwts.provider,
-        set: {
-          token: newToken,
-          expireAt,
-        },
-      });
-  } catch {
-    // Graceful fallback if DB write fails
-  }
-
-  return newToken;
+  return refreshStoredToken(DEEZER_PROVIDER, client, async () => ({
+    token: await fetchAnonymousDeezerJwt(options),
+    expireAt: new Date(Date.now() + DEEZER_JWT_CACHE_TTL_MS),
+  }));
 }
 
 export { fetchAnonymousSpotifyToken };
@@ -115,25 +176,9 @@ export async function getSpotifyToken(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-
-  try {
-    const existing = await client
-      .select()
-      .from(jwts)
-      .where(eq(jwts.provider, SPOTIFY_PROVIDER))
-      .limit(1);
-
-    const record = existing[0];
-    if (record?.token && record?.expireAt) {
-      if (new Date(record.expireAt) > new Date()) {
-        return record.token;
-      }
-    }
-  } catch {
-    // If DB read fails, fallback to direct fetch
-  }
-
-  return refreshSpotifyToken(client, options);
+  return getStoredToken(SPOTIFY_PROVIDER, client, () =>
+    refreshSpotifyToken(client, options),
+  );
 }
 
 export async function refreshSpotifyToken(
@@ -141,29 +186,10 @@ export async function refreshSpotifyToken(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-  const newToken = await fetchAnonymousSpotifyToken(options);
-  const expireAt = new Date(Date.now() + SPOTIFY_TOKEN_CACHE_TTL_MS);
-
-  try {
-    await client
-      .insert(jwts)
-      .values({
-        provider: SPOTIFY_PROVIDER,
-        token: newToken,
-        expireAt,
-      })
-      .onConflictDoUpdate({
-        target: jwts.provider,
-        set: {
-          token: newToken,
-          expireAt,
-        },
-      });
-  } catch {
-    // Graceful fallback if DB write fails
-  }
-
-  return newToken;
+  return refreshStoredToken(SPOTIFY_PROVIDER, client, async () => ({
+    token: await fetchAnonymousSpotifyToken(options),
+    expireAt: new Date(Date.now() + SPOTIFY_TOKEN_CACHE_TTL_MS),
+  }));
 }
 
 const MUSIXMATCH_PROVIDER = "musixmatch";
@@ -238,25 +264,9 @@ export async function getMusixmatchToken(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-
-  try {
-    const existing = await client
-      .select()
-      .from(jwts)
-      .where(eq(jwts.provider, MUSIXMATCH_PROVIDER))
-      .limit(1);
-
-    const record = existing[0];
-    if (record?.token && record?.expireAt) {
-      if (new Date(record.expireAt) > new Date()) {
-        return record.token;
-      }
-    }
-  } catch {
-    // If DB read fails, fallback to direct fetch
-  }
-
-  return refreshMusixmatchToken(client, options);
+  return getStoredToken(MUSIXMATCH_PROVIDER, client, () =>
+    refreshMusixmatchToken(client, options),
+  );
 }
 
 export async function refreshMusixmatchToken(
@@ -264,29 +274,10 @@ export async function refreshMusixmatchToken(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-  const newToken = await fetchAnonymousMusixmatchToken(options);
-  const expireAt = new Date(Date.now() + MUSIXMATCH_TOKEN_CACHE_TTL_MS);
-
-  try {
-    await client
-      .insert(jwts)
-      .values({
-        provider: MUSIXMATCH_PROVIDER,
-        token: newToken,
-        expireAt,
-      })
-      .onConflictDoUpdate({
-        target: jwts.provider,
-        set: {
-          token: newToken,
-          expireAt,
-        },
-      });
-  } catch {
-    // Graceful fallback if DB write fails
-  }
-
-  return newToken;
+  return refreshStoredToken(MUSIXMATCH_PROVIDER, client, async () => ({
+    token: await fetchAnonymousMusixmatchToken(options),
+    expireAt: new Date(Date.now() + MUSIXMATCH_TOKEN_CACHE_TTL_MS),
+  }));
 }
 
 const APPLE_MUSIC_PROVIDER = "apple";
@@ -377,25 +368,9 @@ export async function getAppleMusicToken(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-
-  try {
-    const existing = await client
-      .select()
-      .from(jwts)
-      .where(eq(jwts.provider, APPLE_MUSIC_PROVIDER))
-      .limit(1);
-
-    const record = existing[0];
-    if (record?.token && record?.expireAt) {
-      if (new Date(record.expireAt) > new Date()) {
-        return record.token;
-      }
-    }
-  } catch {
-    // Fallback to direct fetch
-  }
-
-  return refreshAppleMusicToken(client, options);
+  return getStoredToken(APPLE_MUSIC_PROVIDER, client, () =>
+    refreshAppleMusicToken(client, options),
+  );
 }
 
 export async function refreshAppleMusicToken(
@@ -403,26 +378,14 @@ export async function refreshAppleMusicToken(
   options?: { timeout?: number },
 ): Promise<string> {
   const client = dbClient || defaultDb;
-  const { token, expireAt } = await fetchAnonymousAppleMusicToken(options);
+  return refreshStoredToken(APPLE_MUSIC_PROVIDER, client, () =>
+    fetchAnonymousAppleMusicToken(options),
+  );
+}
 
-  try {
-    await client
-      .insert(jwts)
-      .values({
-        provider: APPLE_MUSIC_PROVIDER,
-        token,
-        expireAt,
-      })
-      .onConflictDoUpdate({
-        target: jwts.provider,
-        set: {
-          token,
-          expireAt,
-        },
-      });
-  } catch {
-    // Graceful fallback
-  }
-
-  return token;
+// Clears the in-process token cache and refresh state (used by tests)
+export function resetTokenCache(): void {
+  memoryTokens.clear();
+  inFlightRefreshes.clear();
+  refreshFailures.clear();
 }
