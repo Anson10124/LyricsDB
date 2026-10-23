@@ -29,6 +29,15 @@ const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
+// Only transient failures are worth retrying: network errors, timeouts, 408 and 5xx.
+// A 4xx answer (404 for a missing track, 401, 429, ...) will not change on retry.
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof HttpError) {
+    return error.status === 408 || error.status >= 500;
+  }
+  return true;
+}
+
 export function detectProviderFromUrl(url: string): string | undefined {
   const lower = url.toLowerCase();
   if (lower.includes("spotify.com") || lower.includes("spoti.fi") || lower.includes("spotify.link")) {
@@ -211,11 +220,8 @@ export class HttpClient {
         clearTimeout(timeoutId);
         lastError = error;
 
-        // If error was 429, don't retry in a tight loop — let limiter handle backoff
-        if (
-          error instanceof HttpError &&
-          error.status === 429
-        ) {
+        // 429s are left to the limiter's cooldown; other 4xx answers are final
+        if (!isRetryableError(error)) {
           throw error;
         }
 

@@ -359,15 +359,12 @@ class SingleProviderLimiter {
   }
 
   recordFailure(error: unknown): void {
-    this.totalFailures++;
-    this.consecutiveFailures++;
-
     const message = error instanceof Error ? error.message : String(error);
-    this.lastError = message;
 
     // Check for HTTP 429 or status 429
     let is429 = false;
     let retryAfterSeconds: number | undefined;
+    let status: number | undefined;
 
     if (
       message.includes("429") ||
@@ -383,7 +380,8 @@ class SingleProviderLimiter {
         statusCode?: number;
         retryAfter?: string | number;
       };
-      if (errObj.status === 429 || errObj.statusCode === 429) {
+      status = errObj.status ?? errObj.statusCode;
+      if (status === 429) {
         is429 = true;
       }
       if (errObj.retryAfter) {
@@ -398,6 +396,23 @@ class SingleProviderLimiter {
     const isCaptcha =
       message.toLowerCase().includes("captcha") ||
       message.toLowerCase().includes("bot detected");
+
+    // Any other 4xx (e.g. 404 for a track this provider doesn't have) means the
+    // provider answered normally, so it counts as a healthy response.
+    if (
+      !is429 &&
+      !isCaptcha &&
+      typeof status === "number" &&
+      status >= 400 &&
+      status < 500
+    ) {
+      this.recordSuccess();
+      return;
+    }
+
+    this.totalFailures++;
+    this.consecutiveFailures++;
+    this.lastError = message;
 
     if (is429 || isCaptcha) {
       this.total429s++;
