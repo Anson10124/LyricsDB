@@ -1,3 +1,6 @@
+import { AsyncResource } from "node:async_hooks";
+import { currentAbortSignal } from "./abort-context.js";
+
 export type ProviderState = "HEALTHY" | "DEGRADED" | "COOLDOWN" | "HALF_OPEN";
 
 export interface ProviderConfig {
@@ -58,7 +61,10 @@ interface QueuedTask<T> {
   reject: (reason?: unknown) => void;
   priority: number;
   enqueuedAt: number;
-  timeoutTimer: NodeJS.Timeout;
+  timeoutTimer?: NodeJS.Timeout;
+  // The scheduling caller's cancellation signal (deadline / client disconnect)
+  signal?: AbortSignal;
+  onAbort?: () => void;
 }
 
 const DEFAULT_PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
@@ -259,24 +265,35 @@ class SingleProviderLimiter {
       throw new ProviderQueueFullError(this.provider);
     }
 
-    return new Promise<T>((resolve, reject) => {
-      const timeoutTimer = setTimeout(() => {
-        // Remove from queue on timeout
-        const index = this.queue.findIndex((t) => t.resolve === (resolve as unknown));
-        if (index !== -1) {
-          this.queue.splice(index, 1);
-          reject(new ProviderQueueTimeoutError(this.provider));
-        }
-      }, this.config.queueTimeoutMs);
+    const signal = currentAbortSignal();
+    signal?.throwIfAborted();
 
+    return new Promise<T>((resolve, reject) => {
       const queuedTask: QueuedTask<T> = {
-        task,
+        // Run the task in the scheduling caller's async context, not that of
+        // whichever task's completion happens to start it
+        task: AsyncResource.bind(task),
         resolve,
         reject,
         priority,
         enqueuedAt: Date.now(),
-        timeoutTimer,
+        signal,
       };
+
+      queuedTask.timeoutTimer = setTimeout(() => {
+        if (this.removeFromQueue(queuedTask as QueuedTask<unknown>)) {
+          reject(new ProviderQueueTimeoutError(this.provider));
+        }
+      }, this.config.queueTimeoutMs);
+
+      if (signal) {
+        queuedTask.onAbort = () => {
+          if (this.removeFromQueue(queuedTask as QueuedTask<unknown>)) {
+            reject(signal.reason);
+          }
+        };
+        signal.addEventListener("abort", queuedTask.onAbort, { once: true });
+      }
 
       if (priority > 0) {
         // Higher priority tasks inserted ahead
@@ -292,6 +309,21 @@ class SingleProviderLimiter {
 
       this.processNext();
     });
+  }
+
+  private releaseTask(task: QueuedTask<unknown>): void {
+    clearTimeout(task.timeoutTimer);
+    if (task.onAbort) {
+      task.signal?.removeEventListener("abort", task.onAbort);
+    }
+  }
+
+  private removeFromQueue(task: QueuedTask<unknown>): boolean {
+    const index = this.queue.indexOf(task);
+    if (index === -1) return false;
+    this.queue.splice(index, 1);
+    this.releaseTask(task);
+    return true;
   }
 
   // Starts as many queued tasks as concurrency, RPM and breaker state allow
@@ -328,7 +360,7 @@ class SingleProviderLimiter {
       const queuedTask = this.queue.shift();
       if (!queuedTask) return;
 
-      clearTimeout(queuedTask.timeoutTimer);
+      this.releaseTask(queuedTask);
 
       this.activeCount++;
       this.requestTimestamps.push(now);
@@ -339,7 +371,10 @@ class SingleProviderLimiter {
           this.recordSuccess();
           queuedTask.resolve(result);
         } catch (error) {
-          this.recordFailure(error);
+          // A caller that gave up says nothing about the provider's health
+          if (!queuedTask.signal?.aborted) {
+            this.recordFailure(error);
+          }
           queuedTask.reject(error);
         } finally {
           this.activeCount--;
@@ -489,7 +524,7 @@ class SingleProviderLimiter {
     while (this.queue.length > 0) {
       const task = this.queue.shift();
       if (task) {
-        clearTimeout(task.timeoutTimer);
+        this.releaseTask(task);
         task.reject(
           new ProviderRateLimitedError(
             this.provider,

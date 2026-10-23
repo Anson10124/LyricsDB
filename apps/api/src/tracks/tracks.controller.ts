@@ -23,7 +23,7 @@ import {
 } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
-import { Observable, Subject } from "rxjs";
+import { Observable } from "rxjs";
 import {
   SUPPORTED_LYRIC_FORMATS,
   type FormattedLyricsResult,
@@ -189,43 +189,48 @@ export class TracksController {
     query: TrackStreamQueryDto,
     clientIp = "127.0.0.1",
   ): Observable<MessageEvent> {
-    const subject = new Subject<MessageEvent>();
     const shouldForceRefresh = Boolean(query.forceRefresh);
 
-    // Execute background resolution while streaming progress events
-    this.tracksService
-      .streamLyrics(
-        {
-          platform: query.platform,
-          id: query.id,
-          url: query.url,
-          format: query.format || "json",
-          forceRefresh: shouldForceRefresh,
-        },
-        (event: ProgressLogEvent) => {
-          subject.next({
-            data: event,
-          });
-        },
-        clientIp,
-      )
-      .catch((err) => {
-        const message =
-          err instanceof Error ? err.message : "Unknown error during stream";
-        subject.next({
-          data: {
-            stage: "error",
-            data: { error: message },
-            timestamp: Date.now(),
-          },
-        });
-      })
-      .finally(() => {
-        // Complete the SSE stream once done
-        subject.complete();
-      });
+    return new Observable<MessageEvent>((subscriber) => {
+      // Nest unsubscribes when the client disconnects; abort the upstream work then
+      const disconnect = new AbortController();
 
-    return subject.asObservable();
+      // Execute background resolution while streaming progress events
+      this.tracksService
+        .streamLyrics(
+          {
+            platform: query.platform,
+            id: query.id,
+            url: query.url,
+            format: query.format || "json",
+            forceRefresh: shouldForceRefresh,
+          },
+          (event: ProgressLogEvent) => {
+            subscriber.next({
+              data: event,
+            });
+          },
+          clientIp,
+          disconnect.signal,
+        )
+        .catch((err) => {
+          const message =
+            err instanceof Error ? err.message : "Unknown error during stream";
+          subscriber.next({
+            data: {
+              stage: "error",
+              data: { error: message },
+              timestamp: Date.now(),
+            },
+          });
+        })
+        .finally(() => {
+          // Complete the SSE stream once done
+          subscriber.complete();
+        });
+
+      return () => disconnect.abort();
+    });
   }
 
   // ==========================================

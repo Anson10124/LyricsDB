@@ -4,7 +4,7 @@ import type {
   SyncedLyricsPayload,
   VocalType,
 } from "@repo/types";
-import { globalProviderLimiter } from "@repo/music-resolver";
+import { globalProviderLimiter, throwIfAborted } from "@repo/music-resolver";
 import { canFetchLyricify, fetchLyricifyLyrics } from "./fetchers/lyricify.js";
 import { parseLyricifyLyrics } from "./parsers/lyricify.js";
 import {
@@ -816,6 +816,9 @@ export class LyricsEngine {
 
     if (tier1Tasks.length > 0) {
       const tier1Results = await Promise.allSettled(tier1Tasks);
+      // Stop here if the caller hit its deadline or disconnected, rather than
+      // returning (and caching) a partial or empty result
+      throwIfAborted();
       const tier1Candidates: CandidateEvaluation[] = [];
 
       for (const r of tier1Results) {
@@ -1055,6 +1058,7 @@ export class LyricsEngine {
 
     if (tier2Tasks.length > 0) {
       const tier2Results = await Promise.allSettled(tier2Tasks);
+      throwIfAborted();
       const tier2Candidates: CandidateEvaluation[] = [];
 
       for (const r of tier2Results) {
@@ -1195,6 +1199,7 @@ export class LyricsEngine {
 
     if (tier3Tasks.length > 0) {
       const tier3Results = await Promise.allSettled(tier3Tasks);
+      throwIfAborted();
       const tier3Candidates: CandidateEvaluation[] = [];
 
       for (const r of tier3Results) {
@@ -1238,6 +1243,7 @@ export class LyricsEngine {
       }
     }
 
+    throwIfAborted();
     return null;
   }
 

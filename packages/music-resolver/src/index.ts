@@ -12,6 +12,7 @@ export * from "./adapters/deezer.js";
 export * from "./adapters/netease.js";
 export * from "./adapters/qq-music.js";
 export * from "./utils/http.js";
+export * from "./utils/abort-context.js";
 export * from "./utils/query.js";
 export * from "./utils/scraper.js";
 export * from "./utils/string-similarity.js";

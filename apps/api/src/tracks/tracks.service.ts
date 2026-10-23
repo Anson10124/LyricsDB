@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
+  GatewayTimeoutException,
   Inject,
   Injectable,
   Logger,
@@ -20,6 +21,9 @@ import {
   buildPlatformUrl,
   derivePlatformAndIdFromUrl,
   normalizePlatform,
+  currentAbortSignal,
+  rejectOnAbort,
+  runWithAbortSignal,
   type ResolvedLink,
   type ResolveResult,
 } from "@repo/music-resolver";
@@ -54,6 +58,12 @@ export type {
 // gets a fresh live attempt on the next request once this long has passed.
 const LYRICS_RETRY_INTERVAL_MS = 60 * 60 * 1000;
 
+// End-to-end budget for one live sync (metadata resolution + lyrics search + save).
+// Upstream calls inside it are cancelled once it runs out.
+const SYNC_TIMEOUT_MS = 45_000;
+const SYNC_TIMEOUT_MESSAGE =
+  "Timed out resolving this track upstream. Please try again shortly.";
+
 interface VerifiedPlatformIds {
   spotifyId?: string;
   deezerId?: string;
@@ -69,6 +79,7 @@ export class TracksService {
   // In-flight request deduplication map to prevent thundering herd
   private inFlightRequests = new Map<string, Promise<Track>>();
   private lyricsEngine = new LyricsEngine();
+  private readonly syncTimeoutMs = SYNC_TIMEOUT_MS;
 
   constructor(
     @Inject(DATABASE_CONNECTION) private readonly db: DatabaseClient,
@@ -146,14 +157,32 @@ export class TracksService {
     return this.syncDeduped(lockKey, targetUrl);
   }
 
-  // Coalesces concurrent syncs of the same track onto a single promise
+  // Deadline for a live sync, optionally also cancelled by the caller (e.g. SSE disconnect)
+  private syncDeadline(signal?: AbortSignal): AbortSignal {
+    const timeout = AbortSignal.timeout(this.syncTimeoutMs);
+    return signal ? AbortSignal.any([signal, timeout]) : timeout;
+  }
+
+  // Coalesces concurrent syncs of the same track onto a single promise.
+  // The deadline belongs to the shared sync, not to whichever caller started it.
   private syncDeduped(lockKey: string, url: string): Promise<Track> {
     const inFlight = this.inFlightRequests.get(lockKey);
     if (inFlight) return inFlight;
 
-    const syncPromise = this.executeSyncAndStore(url).finally(() => {
-      this.inFlightRequests.delete(lockKey);
-    });
+    const deadline = this.syncDeadline();
+    const syncPromise = Promise.race([
+      runWithAbortSignal(deadline, () => this.executeSyncAndStore(url)),
+      rejectOnAbort(deadline),
+    ])
+      .catch((err: unknown) => {
+        if (deadline.aborted) {
+          throw new GatewayTimeoutException(SYNC_TIMEOUT_MESSAGE);
+        }
+        throw err;
+      })
+      .finally(() => {
+        this.inFlightRequests.delete(lockKey);
+      });
 
     this.inFlightRequests.set(lockKey, syncPromise);
     return syncPromise;
@@ -716,10 +745,38 @@ export class TracksService {
   }
 
   // Real-time EventStream (SSE) live track and lyrics resolution
+  // `signal` aborts when the SSE client disconnects; the sync deadline applies on top.
   async streamLyrics(
     options: StreamLyricsOptions,
     emitEvent: (event: ProgressLogEvent) => void,
     clientIp = "127.0.0.1",
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const deadline = this.syncDeadline(signal);
+    try {
+      await Promise.race([
+        runWithAbortSignal(deadline, () =>
+          this.runLyricsStream(options, emitEvent, clientIp),
+        ),
+        rejectOnAbort(deadline),
+      ]);
+    } catch (err) {
+      if (!deadline.aborted) throw err;
+      // Nobody is listening after a disconnect; only report a timeout
+      if (!signal?.aborted) {
+        emitEvent({
+          stage: "error",
+          data: { error: SYNC_TIMEOUT_MESSAGE },
+          timestamp: Date.now(),
+        });
+      }
+    }
+  }
+
+  private async runLyricsStream(
+    options: StreamLyricsOptions,
+    emitEvent: (event: ProgressLogEvent) => void,
+    clientIp: string,
   ): Promise<void> {
     const format = options.format || "json";
     const { platform, id, url, forceRefresh } = options;
@@ -954,6 +1011,10 @@ export class TracksService {
     } catch (err) {
       if (retryingTrack) {
         await this.touchTrack(retryingTrack.id);
+      }
+      // Deadline / disconnect: let streamLyrics report it
+      if (currentAbortSignal()?.aborted) {
+        throw err;
       }
       const message =
         err instanceof Error

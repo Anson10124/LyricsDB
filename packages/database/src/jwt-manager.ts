@@ -1,5 +1,8 @@
 import { eq } from "drizzle-orm";
-import { fetchAnonymousSpotifyToken } from "@repo/music-resolver";
+import {
+  fetchAnonymousSpotifyToken,
+  runWithoutAbortSignal,
+} from "@repo/music-resolver";
 import { db as defaultDb, type DatabaseClient } from "./client.js";
 import { jwts } from "./schema/jwt.js";
 
@@ -68,7 +71,9 @@ function refreshStoredToken(
     return Promise.reject(failure.error);
   }
 
-  const refresh = (async () => {
+  // Detached from the starting caller's cancellation signal: other callers share
+  // this refresh, so one caller's deadline or disconnect must not fail it for all
+  const refresh = runWithoutAbortSignal(async () => {
     let fetched: { token: string; expireAt: Date };
     try {
       fetched = await fetchToken();
@@ -98,7 +103,7 @@ function refreshStoredToken(
     }
 
     return token;
-  })().finally(() => {
+  }).finally(() => {
     inFlightRefreshes.delete(provider);
   });
 

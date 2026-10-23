@@ -1,3 +1,4 @@
+import { currentAbortSignal } from "./abort-context.js";
 import { globalProviderLimiter } from "./provider-limiter.js";
 import { assertSafeUrl } from "./ssrf-guard.js";
 
@@ -139,11 +140,16 @@ export class HttpClient {
     assertSafeUrl(url);
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const retries = options?.retries ?? 2;
+    const callerSignal = currentAbortSignal();
 
     let lastError: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
+      callerSignal?.throwIfAborted();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const signal = callerSignal
+        ? AbortSignal.any([controller.signal, callerSignal])
+        : controller.signal;
 
       try {
         const headers: Record<string, string> = {
@@ -172,7 +178,7 @@ export class HttpClient {
           method,
           headers,
           body: method !== "GET" ? body : undefined,
-          signal: controller.signal,
+          signal,
         });
 
         clearTimeout(timeoutId);
@@ -211,6 +217,11 @@ export class HttpClient {
       } catch (error) {
         clearTimeout(timeoutId);
         lastError = error;
+
+        // The caller gave up (deadline or disconnect): stop, don't retry
+        if (callerSignal?.aborted) {
+          throw callerSignal.reason;
+        }
 
         // 429s are left to the limiter's cooldown; other 4xx answers are final
         if (!isRetryableError(error)) {
