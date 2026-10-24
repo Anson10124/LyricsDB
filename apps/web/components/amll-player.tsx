@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Maximize, RotateCcw } from "lucide-react";
+import { CaseSensitive, Languages, Maximize, RotateCcw } from "lucide-react";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
@@ -46,10 +46,31 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [showRomaji, setShowRomaji] = useState(false);
+
   const durationMs = track.durationMs || 180000;
-  const lyricLines = useMemo(
+  const sourceLines = useMemo(
     () => convertCompactToAmllLines(rawLyrics),
     [rawLyrics],
+  );
+  const hasTranslation = useMemo(
+    () => sourceLines.some((line) => line.translatedLyric),
+    [sourceLines],
+  );
+  const hasRomaji = useMemo(
+    () => sourceLines.some((line) => line.romanLyric),
+    [sourceLines],
+  );
+  // The core LyricPlayer has no switch for these, so blank them out instead
+  const lyricLines = useMemo(
+    () =>
+      sourceLines.map((line) => ({
+        ...line,
+        translatedLyric: showTranslation ? line.translatedLyric : "",
+        romanLyric: showRomaji ? line.romanLyric : "",
+      })),
+    [sourceLines, showTranslation, showRomaji],
   );
 
   const playbackStartTimeRef = useRef<number | null>(null);
@@ -213,6 +234,36 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
         </div>
 
         <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
+          {hasRomaji && (
+            <button
+              type="button"
+              onClick={() => setShowRomaji((prev) => !prev)}
+              aria-pressed={showRomaji}
+              className={`flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all cursor-pointer hover:text-white ${
+                showRomaji
+                  ? "bg-white/25 text-white hover:bg-white/35"
+                  : "bg-black/15 text-white/60 hover:bg-black/30"
+              }`}
+              title={showRomaji ? "Hide romanization" : "Show romanization"}
+            >
+              <CaseSensitive className="size-4" />
+            </button>
+          )}
+          {hasTranslation && (
+            <button
+              type="button"
+              onClick={() => setShowTranslation((prev) => !prev)}
+              aria-pressed={showTranslation}
+              className={`flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all cursor-pointer hover:text-white ${
+                showTranslation
+                  ? "bg-white/25 text-white hover:bg-white/35"
+                  : "bg-black/15 text-white/60 hover:bg-black/30"
+              }`}
+              title={showTranslation ? "Hide translation" : "Show translation"}
+            >
+              <Languages className="size-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={handleRestart}
