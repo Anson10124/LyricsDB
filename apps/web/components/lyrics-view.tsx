@@ -129,8 +129,12 @@ export function LyricsView({
             <button
               type="button"
               onClick={onRefresh}
-              disabled={isRefreshing || isMarkingCorrect}
-              title="Re-fetch this track from upstream providers"
+              disabled={isRefreshing || isMarkingCorrect || track.isVerified}
+              title={
+                track.isVerified
+                  ? "Verified tracks can't be refreshed"
+                  : "Re-fetch this track from upstream providers"
+              }
               className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <RefreshCw

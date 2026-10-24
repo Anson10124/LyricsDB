@@ -163,7 +163,7 @@ export default function TrackPage({ params }: TrackPageProps) {
   };
 
   const handleRefresh = () => {
-    if (!track || refreshing) return;
+    if (!track || refreshing || track.isVerified) return;
 
     const source = getRefreshSource(track);
     if (!source) {

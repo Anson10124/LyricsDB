@@ -64,6 +64,9 @@ const SYNC_TIMEOUT_MS = 45_000;
 const SYNC_TIMEOUT_MESSAGE =
   "Timed out resolving this track upstream. Please try again shortly.";
 
+const VERIFIED_REFRESH_ERROR =
+  "This track has been verified as correct and can't be refreshed.";
+
 interface VerifiedPlatformIds {
   spotifyId?: string;
   deezerId?: string;
@@ -823,6 +826,20 @@ export class TracksService {
       cachedTrack = await this.findByPlatformId(targetPlatform, targetId);
     }
 
+    // Verified tracks are locked; reject before spending any upstream budget
+    if (forceRefresh && targetPlatform && targetId) {
+      this.ipRateLimiter.consume(clientIp, "cached");
+      const lockedTrack = await this.findByPlatformId(targetPlatform, targetId);
+      if (lockedTrack?.isVerified) {
+        emitEvent({
+          stage: "error",
+          data: { error: VERIFIED_REFRESH_ERROR, trackId: lockedTrack.id },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+    }
+
     // A cached row without lyrics whose last attempt is stale gets a live re-sync,
     // if the client still has uncached budget; otherwise it is served from cache.
     let retryingTrack: Track | null = null;
@@ -945,6 +962,16 @@ export class TracksService {
       const existingTrack = await this.findExistingTrackByPlatformLinks(
         resolved.links,
       );
+
+      // The refresh may reach a verified track through another platform's link
+      if (forceRefresh && existingTrack?.isVerified) {
+        emitEvent({
+          stage: "error",
+          data: { error: VERIFIED_REFRESH_ERROR, trackId: existingTrack.id },
+          timestamp: Date.now(),
+        });
+        return;
+      }
 
       // Step 5: Live Lyrics Fetching with onProgress
       const lyricsData = await this.resolveAndStoreLyrics(

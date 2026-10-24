@@ -96,7 +96,8 @@ export class TracksController {
     name: "forceRefresh",
     required: false,
     type: Boolean,
-    description: "Bypass cached database results and force live re-fetching",
+    description:
+      "Bypass cached database results and force live re-fetching (rejected for verified tracks)",
     example: false,
   })
   @ApiResponse({
@@ -163,7 +164,8 @@ export class TracksController {
     name: "forceRefresh",
     required: false,
     type: Boolean,
-    description: "Bypass cached results and force live re-fetching",
+    description:
+      "Bypass cached results and force live re-fetching (rejected for verified tracks)",
     example: false,
   })
   @ApiResponse({

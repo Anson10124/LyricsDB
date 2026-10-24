@@ -81,7 +81,8 @@ export class TrackStreamQueryDto extends TrackQueryDto {
   @ApiProperty({
     required: false,
     type: Boolean,
-    description: "Bypass cached database results and force live re-fetching",
+    description:
+      "Bypass cached database results and force live re-fetching (rejected for verified tracks)",
     example: false,
   })
   @IsOptional()

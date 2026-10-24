@@ -478,7 +478,7 @@
             "name": "forceRefresh",
             "required": false,
             "in": "query",
-            "description": "Bypass cached database results and force live re-fetching",
+            "description": "Bypass cached database results and force live re-fetching (rejected for verified tracks)",
             "schema": {
               "example": false,
               "type": "boolean"
@@ -588,7 +588,7 @@
             "name": "forceRefresh",
             "required": false,
             "in": "query",
-            "description": "Bypass cached database results and force live re-fetching",
+            "description": "Bypass cached database results and force live re-fetching (rejected for verified tracks)",
             "schema": {
               "example": false,
               "type": "boolean"
@@ -698,7 +698,7 @@
             "name": "forceRefresh",
             "required": false,
             "in": "query",
-            "description": "Bypass cached results and force live re-fetching",
+            "description": "Bypass cached results and force live re-fetching (rejected for verified tracks)",
             "schema": {
               "example": false,
               "type": "boolean"
@@ -807,7 +807,7 @@
             "name": "forceRefresh",
             "required": false,
             "in": "query",
-            "description": "Bypass cached results and force live re-fetching",
+            "description": "Bypass cached results and force live re-fetching (rejected for verified tracks)",
             "schema": {
               "example": false,
               "type": "boolean"
