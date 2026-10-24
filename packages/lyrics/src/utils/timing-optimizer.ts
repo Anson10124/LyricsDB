@@ -14,7 +14,9 @@ export interface OptimizeTimingOptions {
   cleanUnintentionalOverlaps?: boolean;
 
   /**
-   * Synchronize the timing window between main lead lines and their attached background lines.
+   * Apply overlap clamping and start-time advancement to a main line's attached background line too.
+   * Word timings are never stretched to line the two up; the shared window lives on the line
+   * (see convertCompactToAmllLines).
    * @default true
    */
   syncMainAndBackgroundLines?: boolean;
@@ -122,61 +124,6 @@ export function convertExcessiveBackgroundLines(
       }
     } else {
       consecutiveBgCount = 0;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Synchronizes the start and end bounding window between a main line and its attached background line.
- */
-export function syncMainAndBackgroundLines(
-  payload: SyncedLyricsPayload,
-): SyncedLyricsPayload {
-  const result = clonePayload(payload);
-
-  for (let i = result.length - 2; i >= 0; i--) {
-    const line = result[i]!;
-    const words = getLineWords(line);
-    if (words.length === 0 || isLineBackground(words)) continue;
-
-    const nextLine = result[i + 1]!;
-    const nextWords = getLineWords(nextLine);
-    if (nextWords.length === 0 || !isLineBackground(nextWords)) continue;
-
-    const mainStart = getLineStartMs(words);
-    const mainEnd = getLineEndMs(words);
-    const bgStart = getLineStartMs(nextWords);
-    const bgEnd = getLineEndMs(nextWords);
-
-    const finalStart = Math.min(mainStart, bgStart);
-    const finalEnd = Math.max(mainEnd, bgEnd);
-
-    if (mainStart > finalStart && words.length > 0) {
-      const first = words[0]!;
-      const diff = first[1] - finalStart;
-      first[1] = finalStart;
-      first[2] = (first[2] || 0) + diff;
-    }
-
-    if (bgStart > finalStart && nextWords.length > 0) {
-      const first = nextWords[0]!;
-      const diff = first[1] - finalStart;
-      first[1] = finalStart;
-      first[2] = (first[2] || 0) + diff;
-    }
-
-    // If main line ends before finalEnd, extend the duration of the last word
-    if (mainEnd < finalEnd && words.length > 0) {
-      const last = words[words.length - 1]!;
-      last[2] = Math.max(0, finalEnd - last[1]);
-    }
-
-    // If background line ends before finalEnd, extend the duration of the last background word
-    if (bgEnd < finalEnd && nextWords.length > 0) {
-      const last = nextWords[nextWords.length - 1]!;
-      last[2] = Math.max(0, finalEnd - last[1]);
     }
   }
 
@@ -348,9 +295,6 @@ export function optimizeTiming(
 
   if (config.convertExcessiveBackgroundLines) {
     result = convertExcessiveBackgroundLines(result);
-  }
-  if (config.syncMainAndBackgroundLines) {
-    result = syncMainAndBackgroundLines(result);
   }
   if (config.cleanUnintentionalOverlaps) {
     result = cleanUnintentionalOverlaps(

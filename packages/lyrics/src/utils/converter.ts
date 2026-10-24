@@ -36,7 +36,6 @@ import {
 export {
   optimizeTiming,
   cleanUnintentionalOverlaps,
-  syncMainAndBackgroundLines,
   convertExcessiveBackgroundLines,
   tryAdvanceStartTime,
   type OptimizeTimingOptions,
@@ -186,7 +185,96 @@ export function convertCompactToAmllLines(
     });
   }
 
+  // A main line's window covers its attached background line, the same way a
+  // TTML <p> spans its x-bg span. Word timings are left as they are.
+  for (let i = 0; i < amllLines.length - 1; i++) {
+    const line = amllLines[i]!;
+    const next = amllLines[i + 1]!;
+    if (line.isBG || !next.isBG) continue;
+    line.startTime = Math.min(line.startTime, next.startTime);
+    line.endTime = Math.max(line.endTime, next.endTime);
+  }
+
   return amllLines;
+}
+
+interface TtmlParagraph {
+  line: LyricLine;
+  bg?: LyricLine;
+}
+
+// Mirrors toTTMLResult: a background line nests inside the preceding main
+// line's <p> unless that one already has a background, in which case it gets
+// its own <p>. AMLL numbers itunes:key per <p>, so paragraph i is L{i + 1}.
+function groupTtmlParagraphs(lines: LyricLine[]): TtmlParagraph[] {
+  const paragraphs: TtmlParagraph[] = [];
+  let currentMain: TtmlParagraph | undefined;
+
+  for (const line of lines) {
+    if (line.isBG && currentMain && !currentMain.bg) {
+      currentMain.bg = line;
+    } else if (line.isBG) {
+      paragraphs.push({ line });
+    } else {
+      currentMain = { line };
+      paragraphs.push(currentMain);
+    }
+  }
+
+  return paragraphs;
+}
+
+const TTM_NS = "http://www.w3.org/ns/ttml#metadata";
+const TTS_NS = "http://www.w3.org/ns/ttml#styling";
+
+function getTtmRole(el: Element): string | null {
+  return el.getAttribute("ttm:role") || el.getAttributeNS(TTM_NS, "role");
+}
+
+// Moves the space between word spans into the spans themselves, so the word
+// boundaries survive formatXml collapsing whitespace between tags.
+function applyWordSpacing(container: Element, words: LyricWord[]): Element[] {
+  for (const node of Array.from(container.childNodes)) {
+    if (node.nodeType === 3 && (node.textContent || "").trim() === "") {
+      container.removeChild(node);
+    }
+  }
+
+  const childSpans = Array.from(container.childNodes).filter(
+    (node): node is Element => node.nodeType === 1 && node.nodeName === "span",
+  );
+  const wordSpans = childSpans.filter((span) => {
+    const role = getTtmRole(span);
+    return role !== "x-translation" && role !== "x-roman" && role !== "x-bg";
+  });
+
+  for (let wIdx = 0; wIdx < wordSpans.length; wIdx++) {
+    const span = wordSpans[wIdx]!;
+    const origWord = words[wIdx];
+    if (!origWord) continue;
+
+    const rawWord = origWord.word || "";
+    const hasTrailingSpace = rawWord.endsWith(" ");
+    const isLastLyricWord = wIdx === wordSpans.length - 1;
+
+    const rubyBase = span.getElementsByTagName("span")[0];
+    const targetEl =
+      rubyBase &&
+      (rubyBase.getAttribute("tts:ruby") === "base" ||
+        rubyBase.getAttributeNS(TTS_NS, "ruby") === "base")
+        ? rubyBase
+        : span;
+
+    const currentText = (targetEl.textContent || "").trimEnd();
+
+    if (hasTrailingSpace && !isLastLyricWord) {
+      targetEl.textContent = currentText + " ";
+    } else {
+      targetEl.textContent = currentText;
+    }
+  }
+
+  return childSpans;
 }
 
 export function formatXml(xml: string, indent = "  "): string {
@@ -343,57 +431,25 @@ export function formatLyricsPayload(
       const doc = (generator as unknown as { doc?: Document }).doc;
 
       if (doc) {
-        const pElements = Array.from(doc.getElementsByTagName("p"));
-        for (let lineIdx = 0; lineIdx < pElements.length; lineIdx++) {
-          const p = pElements[lineIdx]!;
-          const amllLine = amllLines[lineIdx];
-          if (!amllLine || !amllLine.words) continue;
+        const paragraphs = new Map<string, TtmlParagraph>(
+          groupTtmlParagraphs(amllLines).map((paragraph, idx) => [
+            `L${idx + 1}`,
+            paragraph,
+          ]),
+        );
 
-          // Remove loose whitespace text nodes inside <p>
-          const childNodes = Array.from(p.childNodes);
-          for (const node of childNodes) {
-            if (node.nodeType === 3 && (node.textContent || "").trim() === "") {
-              p.removeChild(node);
-            }
-          }
+        for (const p of Array.from(doc.getElementsByTagName("p"))) {
+          const paragraph = paragraphs.get(p.getAttribute("itunes:key") || "");
+          if (!paragraph) continue;
+          const { line, bg } = paragraph;
 
-          // Find lyric spans (exclude translation and romanization spans)
-          const allSpans = Array.from(p.getElementsByTagName("span"));
-          const lyricSpans = allSpans.filter((span) => {
-            const role =
-              span.getAttribute("ttm:role") ||
-              span.getAttributeNS("http://www.w3.org/ns/ttml#metadata", "role");
-            return role !== "x-translation" && role !== "x-roman";
-          });
+          // A background line that couldn't nest into a main line is its own <p>
+          if (line.isBG) p.setAttributeNS(TTM_NS, "ttm:role", "x-bg");
+          if (line.isDuet) p.setAttributeNS(TTM_NS, "ttm:agent", "v2");
 
-          for (let wIdx = 0; wIdx < lyricSpans.length; wIdx++) {
-            const span = lyricSpans[wIdx]!;
-            const origWord = amllLine.words[wIdx];
-            if (!origWord) continue;
-
-            const rawWord = origWord.word || "";
-            const hasTrailingSpace = rawWord.endsWith(" ");
-            const isLastLyricWord = wIdx === lyricSpans.length - 1;
-
-            const rubyBase = span.getElementsByTagName("span")[0];
-            const targetEl =
-              rubyBase &&
-              (rubyBase.getAttribute("tts:ruby") === "base" ||
-                rubyBase.getAttributeNS(
-                  "http://www.w3.org/ns/ttml#styling",
-                  "ruby",
-                ) === "base")
-                ? rubyBase
-                : span;
-
-            const currentText = (targetEl.textContent || "").trimEnd();
-
-            if (hasTrailingSpace && !isLastLyricWord) {
-              targetEl.textContent = currentText + " ";
-            } else {
-              targetEl.textContent = currentText;
-            }
-          }
+          const childSpans = applyWordSpacing(p, line.words);
+          const bgSpan = childSpans.find((span) => getTtmRole(span) === "x-bg");
+          if (bg && bgSpan) applyWordSpacing(bgSpan, bg.words);
         }
       }
 
@@ -406,34 +462,6 @@ export function formatLyricsPayload(
           (generator as unknown as { doc: Document }).doc ||
           generator.generate(ttmlResult),
       );
-
-      // Ensure background vocals have ttm:role="x-bg" and duets have ttm:agent="v2"
-      for (let i = 0; i < amllLines.length; i++) {
-        const line = amllLines[i]!;
-        const key = `L${i + 1}`;
-        if (line.isBG) {
-          const pRegex = new RegExp(
-            `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*)(>)`,
-            "g",
-          );
-          rawXml = rawXml.replace(
-            pRegex,
-            (m: string, p1: string, p2: string) => {
-              if (!p1.includes('ttm:role="x-bg"')) {
-                return `${p1} ttm:role="x-bg"${p2}`;
-              }
-              return m;
-            },
-          );
-        }
-        if (line.isDuet) {
-          const pRegex = new RegExp(
-            `(<p\\b[^>]*\\bitunes:key="${key}"[^>]*\\bttm:agent=")v1(")`,
-            "g",
-          );
-          rawXml = rawXml.replace(pRegex, `$1v2$2`);
-        }
-      }
 
       if (amllLines.some((l) => l.isDuet)) {
         if (!rawXml.includes('xml:id="v2"')) {

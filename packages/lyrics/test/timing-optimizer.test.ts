@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { CompactLyricLine, SyncedLyricsPayload } from "@repo/types";
 import {
   cleanUnintentionalOverlaps,
-  syncMainAndBackgroundLines,
+  convertCompactToAmllLines,
   convertExcessiveBackgroundLines,
   tryAdvanceStartTime,
   optimizeTiming,
@@ -65,26 +65,39 @@ describe("Timing & Overlap Optimizer", () => {
   });
 
   describe("Main and Background Lines Synchronization", () => {
-    it("synchronizes the end time of main and attached background lines", () => {
-      const mainLine = createLine(1000, 2000, "main line ", 1);
-      const bgLine = createLine(1200, 2300, "bg line ", 2);
-      const payload: SyncedLyricsPayload = [mainLine, bgLine];
+    it("keeps background word timings instead of stretching them to the main line", () => {
+      const payload: SyncedLyricsPayload = [
+        [
+          [1, 80863, 207, "Y "],
+          [1, 81070, 4496, "hacer "],
+        ],
+        [
+          [2, 83300, 321, "Sube- "],
+          [2, 83621, 351, "sube "],
+        ],
+      ];
 
-      const result = syncMainAndBackgroundLines(payload);
+      const result = optimizeTiming(payload);
 
-      assert.equal(getLineEndMs(getLineWords(result[0]!)), 2300);
-      assert.equal(getLineEndMs(getLineWords(result[1]!)), 2300);
+      assert.deepEqual(result, payload);
     });
 
-    it("synchronizes when main line lasts longer than background line", () => {
-      const mainLine = createLine(1000, 3000, "main line ", 1);
-      const bgLine = createLine(1500, 2000, "bg line ", 2);
-      const payload: SyncedLyricsPayload = [mainLine, bgLine];
+    it("widens the main AMLL line window to cover its background line", () => {
+      const payload: SyncedLyricsPayload = [
+        [[1, 1000, 1000, "main line "]],
+        [[2, 800, 700, "bg line "]],
+      ];
 
-      const result = syncMainAndBackgroundLines(payload);
+      const [main, bg] = convertCompactToAmllLines(payload);
 
-      assert.equal(getLineEndMs(getLineWords(result[0]!)), 3000);
-      assert.equal(getLineEndMs(getLineWords(result[1]!)), 3000);
+      assert.equal(main!.startTime, 800);
+      assert.equal(main!.endTime, 2000);
+      assert.deepEqual(
+        main!.words.map((w) => [w.startTime, w.endTime]),
+        [[1000, 2000]],
+      );
+      assert.equal(bg!.startTime, 800);
+      assert.equal(bg!.endTime, 1500);
     });
   });
 
