@@ -1,4 +1,5 @@
 import type {
+  LibraryStats,
   SanitizedTrack,
   SupportedLyricFormat,
   TrackRecord,
@@ -111,4 +112,16 @@ export async function fetchTrackLyrics(
     return res.json();
   }
   return res.text();
+}
+
+/**
+ * Fetches aggregate statistics about the cached track library.
+ */
+export async function fetchLibraryStats(): Promise<LibraryStats> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(`${apiBase}/api/stats`);
+  if (!res.ok) {
+    throw new Error("Failed to load stats");
+  }
+  return (await res.json()) as LibraryStats;
 }

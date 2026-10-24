@@ -288,6 +288,10 @@ export default function Home() {
       </AnimatePresence>
 
       <div className="fixed top-4 right-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+        <Link href="/stats" className="text-sm text-muted-foreground">
+          Stats
+        </Link>
+        <span className="h-3.5 w-px bg-border" aria-hidden />
         <Link href="/docs" className="text-sm text-muted-foreground">
           Docs
         </Link>

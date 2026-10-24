@@ -2102,6 +2102,52 @@
           "Activity"
         ]
       }
+    },
+    "/api/stats": {
+      "get": {
+        "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days. Results are cached for up to 60 seconds.",
+        "operationId": "StatsController_getStats[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Aggregate library statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryStatsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get cached library statistics",
+        "tags": [
+          "Stats"
+        ]
+      }
+    },
+    "/stats": {
+      "get": {
+        "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days. Results are cached for up to 60 seconds.",
+        "operationId": "StatsController_getStats[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Aggregate library statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryStatsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get cached library statistics",
+        "tags": [
+          "Stats"
+        ]
+      }
     }
   },
   "info": {
@@ -2624,6 +2670,189 @@
             "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
           }
         }
+      },
+      "LibraryStatsTotalsDto": {
+        "type": "object",
+        "properties": {
+          "tracks": {
+            "type": "number",
+            "description": "Total cached tracks",
+            "example": 1520
+          },
+          "withLyrics": {
+            "type": "number",
+            "description": "Tracks with any lyrics",
+            "example": 1384
+          },
+          "word": {
+            "type": "number",
+            "description": "Tracks with word-synced lyrics",
+            "example": 902
+          },
+          "line": {
+            "type": "number",
+            "description": "Tracks with line-synced lyrics",
+            "example": 431
+          },
+          "plain": {
+            "type": "number",
+            "description": "Tracks with unsynced plain lyrics",
+            "example": 51
+          },
+          "none": {
+            "type": "number",
+            "description": "Tracks without lyrics",
+            "example": 136
+          },
+          "translation": {
+            "type": "number",
+            "description": "Tracks with a translation",
+            "example": 214
+          },
+          "romaji": {
+            "type": "number",
+            "description": "Tracks with romanization",
+            "example": 97
+          },
+          "verified": {
+            "type": "number",
+            "description": "Human-verified tracks",
+            "example": 12
+          }
+        },
+        "required": [
+          "tracks",
+          "withLyrics",
+          "word",
+          "line",
+          "plain",
+          "none",
+          "translation",
+          "romaji",
+          "verified"
+        ]
+      },
+      "LibraryProviderStatsDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Lyrics provider identifier ('unknown' if not recorded)",
+            "example": "amll-db"
+          },
+          "total": {
+            "type": "number",
+            "description": "Tracks with lyrics from this provider",
+            "example": 512
+          },
+          "word": {
+            "type": "number",
+            "description": "Word-synced tracks from this provider",
+            "example": 498
+          },
+          "line": {
+            "type": "number",
+            "description": "Line-synced tracks from this provider",
+            "example": 14
+          },
+          "plain": {
+            "type": "number",
+            "description": "Plain tracks from this provider",
+            "example": 0
+          }
+        },
+        "required": [
+          "provider",
+          "total",
+          "word",
+          "line",
+          "plain"
+        ]
+      },
+      "LibraryPlatformStatsDto": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "Streaming platform",
+            "enum": [
+              "spotify",
+              "appleMusic",
+              "deezer",
+              "netease",
+              "qqMusic"
+            ],
+            "example": "spotify"
+          },
+          "count": {
+            "type": "number",
+            "description": "Tracks with an ID on this platform",
+            "example": 1402
+          }
+        },
+        "required": [
+          "platform",
+          "count"
+        ]
+      },
+      "LibraryDailyStatsDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "UTC day (YYYY-MM-DD)",
+            "example": "2026-10-24"
+          },
+          "count": {
+            "type": "number",
+            "description": "Tracks added on this day",
+            "example": 37
+          }
+        },
+        "required": [
+          "date",
+          "count"
+        ]
+      },
+      "LibraryStatsResponseDto": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "number",
+            "description": "UNIX millisecond timestamp when these stats were computed",
+            "example": 1787262680794
+          },
+          "totals": {
+            "$ref": "#/components/schemas/LibraryStatsTotalsDto"
+          },
+          "providers": {
+            "description": "Per-provider breakdown, sorted by total descending",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryProviderStatsDto"
+            }
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryPlatformStatsDto"
+            }
+          },
+          "dailyAdded": {
+            "description": "Tracks added per UTC day over the last 30 days, oldest first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryDailyStatsDto"
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "totals",
+          "providers",
+          "platforms",
+          "dailyAdded"
+        ]
       }
     }
   },

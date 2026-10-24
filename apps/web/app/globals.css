@@ -90,6 +90,11 @@ body {
   --chart-3: oklch(0.681 0.162 75.834);
   --chart-4: oklch(0.554 0.135 66.442);
   --chart-5: oklch(0.476 0.114 61.907);
+  /* Lyrics sync types: synced types on the amber ramp, unsynced in neutrals */
+  --sync-word: var(--chart-3);
+  --sync-line: var(--chart-5);
+  --sync-plain: oklch(0.708 0 0);
+  --sync-none: oklch(0.87 0 0);
   --radius: 0.875rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -131,6 +136,10 @@ body {
   --chart-3: oklch(0.681 0.162 75.834);
   --chart-4: oklch(0.554 0.135 66.442);
   --chart-5: oklch(0.476 0.114 61.907);
+  --sync-word: var(--chart-2);
+  --sync-line: var(--chart-4);
+  --sync-plain: oklch(0.6 0 0);
+  --sync-none: oklch(0.4 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.795 0.184 86.047);
