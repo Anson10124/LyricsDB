@@ -16,17 +16,13 @@ import type { DeezerTrack } from "@/lib/deezer";
 
 import Link from "next/link";
 import { getLyricsStreamUrl } from "@/lib/api-client";
+import {
+  applyStreamEvent,
+  completeProgress,
+  initialProgress,
+} from "@/lib/stream-progress";
 
 
-const initialProgress: TaskProgressState = {
-  metaStatus: "pending",
-  platformsStatus: "pending",
-  matchedPlatforms: [],
-  searchingPlatforms: [],
-  lyricsStatus: "pending",
-  lyricsSearchingProviders: [],
-  saveStatus: "pending",
-};
 
 export default function Home() {
   const router = useRouter();
@@ -113,139 +109,15 @@ export default function Home() {
             if (!isCacheHitRef.current) {
               setViewState("progress");
             }
-            if (data?.step === "extracting_metadata") {
-              setProgress((prev) => ({
-                ...prev,
-                metaStatus: "running",
-                metaData: {
-                  ...prev.metaData,
-                  platform: data.platform,
-                  id: data.id,
-                },
-              }));
-            } else if (data?.step === "parsed_metadata") {
-              setProgress((prev) => ({
-                ...prev,
-                metaStatus: "done",
-                platformsStatus: "running",
-                metaData: {
-                  title: data.title,
-                  artist: data.artist,
-                  artists: data.artists,
-                  durationMs: data.durationMs,
-                  artworkUrl: data.artworkUrl,
-                },
-              }));
-            } else if (data?.step === "searching_adapter") {
-              setProgress((prev) => ({
-                ...prev,
-                platformsStatus: "running",
-                searchingPlatforms: Array.from(
-                  new Set([...prev.searchingPlatforms, data.platform]),
-                ),
-              }));
-            }
+            setProgress((prev) => applyStreamEvent(prev, stage, data));
             break;
           }
 
-          case "platform_matched": {
-            setProgress((prev) => ({
-              ...prev,
-              matchedPlatforms: [
-                ...prev.matchedPlatforms.filter(
-                  (p) => p.platform !== data.platform,
-                ),
-                { platform: data.platform, id: data.id, score: data.score },
-              ],
-            }));
-            break;
-          }
-
-          case "lyrics_searching": {
-            setProgress((prev) => {
-              const updatedProviders = [...prev.lyricsSearchingProviders];
-              if (data?.provider) {
-                const existingIdx = updatedProviders.findIndex(
-                  (p) =>
-                    p.provider.toLowerCase() === data.provider.toLowerCase(),
-                );
-                if (existingIdx >= 0) {
-                  updatedProviders[existingIdx] = {
-                    provider: data.provider,
-                    status: data.status,
-                  };
-                } else {
-                  updatedProviders.push({
-                    provider: data.provider,
-                    status: data.status,
-                  });
-                }
-              }
-
-              return {
-                ...prev,
-                platformsStatus: "done",
-                lyricsStatus:
-                  data?.status === "not_found" && prev.lyricsStatus !== "done"
-                    ? "failed"
-                    : "running",
-                lyricsSearchingProviders: updatedProviders,
-              };
-            });
-            break;
-          }
-
-          case "lyrics_found": {
-            setProgress((prev) => {
-              const winningProvider = data?.provider?.toLowerCase();
-              const updatedProviders = prev.lyricsSearchingProviders.map(
-                (p) => {
-                  if (p.provider.toLowerCase() === winningProvider) {
-                    return { ...p, status: "found" as const };
-                  }
-                  return {
-                    ...p,
-                    status:
-                      p.status === "searching"
-                        ? ("not_found" as const)
-                        : p.status,
-                  };
-                },
-              );
-
-              if (
-                winningProvider &&
-                !updatedProviders.some(
-                  (p) => p.provider.toLowerCase() === winningProvider,
-                )
-              ) {
-                updatedProviders.push({
-                  provider: data.provider,
-                  status: "found",
-                });
-              }
-
-              return {
-                ...prev,
-                lyricsStatus: "done",
-                lyricsSearchingProviders: updatedProviders,
-                lyricsResult: {
-                  provider: data?.provider,
-                  lyricsType: data?.lyricsType,
-                  hasLyrics: true,
-                },
-              };
-            });
-            break;
-          }
-
+          case "platform_matched":
+          case "lyrics_searching":
+          case "lyrics_found":
           case "saving": {
-            setProgress((prev) => ({
-              ...prev,
-              lyricsStatus:
-                prev.lyricsStatus === "running" ? "done" : prev.lyricsStatus,
-              saveStatus: "running",
-            }));
+            setProgress((prev) => applyStreamEvent(prev, stage, data));
             break;
           }
 
@@ -267,17 +139,9 @@ export default function Home() {
                 setViewState("lyrics");
               }
             } else {
-              setProgress((prev) => ({
-                ...prev,
-                metaStatus: "done",
-                platformsStatus: "done",
-                lyricsStatus: track?.hasLyrics
-                  ? "done"
-                  : prev.lyricsStatus === "done"
-                    ? "done"
-                    : "failed",
-                saveStatus: "done",
-              }));
+              setProgress((prev) =>
+                completeProgress(prev, Boolean(track?.hasLyrics)),
+              );
 
               // Grace period to let the user see the completed tasks
               doneTimeoutRef.current = setTimeout(() => {
@@ -293,19 +157,7 @@ export default function Home() {
 
           case "error": {
             es.close();
-            setProgress((prev) => ({
-              ...prev,
-              metaStatus:
-                prev.metaStatus === "running" ? "failed" : prev.metaStatus,
-              platformsStatus:
-                prev.platformsStatus === "running"
-                  ? "failed"
-                  : prev.platformsStatus,
-              lyricsStatus:
-                prev.lyricsStatus === "running" ? "failed" : prev.lyricsStatus,
-              saveStatus:
-                prev.saveStatus === "running" ? "failed" : prev.saveStatus,
-            }));
+            setProgress((prev) => applyStreamEvent(prev, stage, data));
             break;
           }
         }

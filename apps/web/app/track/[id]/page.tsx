@@ -3,8 +3,8 @@
 import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "motion/react";
-import { ArrowLeft, Music2 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, Music2, X } from "lucide-react";
 import { toast } from "sonner";
 import type {
   SanitizedTrack,
@@ -12,14 +12,30 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { LyricsView } from "@/components/lyrics-view";
+import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import {
   fetchTrackById,
   fetchTrackLyrics,
   getLyricsStreamUrl,
 } from "@/lib/api-client";
+import { formatArtworkUrl } from "@/lib/artwork";
+import {
+  applyStreamEvent,
+  completeProgress,
+  failProgress,
+  initialProgress,
+} from "@/lib/stream-progress";
 
 interface TrackPageProps {
   params: Promise<{ id: string }>;
+}
+
+interface RefreshPanelState {
+  open: boolean;
+  // Bumped per refresh so the task rows start with fresh open/closed state
+  run: number;
+  status: "running" | "done" | "failed";
+  error?: string;
 }
 
 async function loadTrackData(id: string) {
@@ -68,7 +84,14 @@ export default function TrackPage({ params }: TrackPageProps) {
     null,
   );
   const [refreshing, setRefreshing] = useState(false);
+  const [progress, setProgress] = useState<TaskProgressState>(initialProgress);
+  const [panel, setPanel] = useState<RefreshPanelState>({
+    open: false,
+    run: 0,
+    status: "running",
+  });
   const eventSourceRef = useRef<EventSource | null>(null);
+  const hidePanelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -100,8 +123,19 @@ export default function TrackPage({ params }: TrackPageProps) {
   useEffect(() => {
     return () => {
       eventSourceRef.current?.close();
+      if (hidePanelTimeoutRef.current) {
+        clearTimeout(hidePanelTimeoutRef.current);
+      }
     };
   }, []);
+
+  const closePanel = () => {
+    if (hidePanelTimeoutRef.current) {
+      clearTimeout(hidePanelTimeoutRef.current);
+      hidePanelTimeoutRef.current = null;
+    }
+    setPanel((prev) => ({ ...prev, open: false }));
+  };
 
   const handleRefresh = () => {
     if (!track || refreshing) return;
@@ -112,8 +146,27 @@ export default function TrackPage({ params }: TrackPageProps) {
       return;
     }
 
-    setRefreshing(true);
     eventSourceRef.current?.close();
+    if (hidePanelTimeoutRef.current) {
+      clearTimeout(hidePanelTimeoutRef.current);
+      hidePanelTimeoutRef.current = null;
+    }
+
+    setRefreshing(true);
+    setProgress({
+      ...initialProgress,
+      metaStatus: "running",
+      metaData: {
+        title: track.title,
+        artist: track.artists?.join(", "),
+        artists: track.artists,
+        durationMs: track.durationMs || undefined,
+        artworkUrl: formatArtworkUrl(track.artwork, 300) || undefined,
+        platform: source.platform,
+        id: source.id,
+      },
+    });
+    setPanel((prev) => ({ open: true, run: prev.run + 1, status: "running" }));
 
     // Same SSE pipeline as search, with the cache bypassed (uncached rate limit applies)
     const es = new EventSource(
@@ -121,12 +174,21 @@ export default function TrackPage({ params }: TrackPageProps) {
     );
     eventSourceRef.current = es;
 
-    const finish = () => {
+    const finish = (
+      status: RefreshPanelState["status"],
+      errorMessage?: string,
+    ) => {
       es.close();
       if (eventSourceRef.current === es) {
         eventSourceRef.current = null;
       }
       setRefreshing(false);
+      setPanel((prev) => ({ ...prev, status, error: errorMessage }));
+      if (status === "done") {
+        hidePanelTimeoutRef.current = setTimeout(() => {
+          setPanel((prev) => ({ ...prev, open: false }));
+        }, 2000);
+      }
     };
 
     es.onmessage = async (event) => {
@@ -138,44 +200,55 @@ export default function TrackPage({ params }: TrackPageProps) {
         return;
       }
 
-      if (payload.stage === "error") {
-        finish();
-        toast.error(
-          typeof payload.data?.error === "string"
-            ? payload.data.error
+      const { stage, data } = payload;
+      if (!stage) return;
+
+      if (stage === "error") {
+        setProgress((prev) => applyStreamEvent(prev, stage, data));
+        finish(
+          "failed",
+          typeof data?.error === "string"
+            ? data.error
             : "Failed to refresh track.",
         );
         return;
       }
 
-      if (payload.stage !== "done") return;
-      es.close();
+      if (stage !== "done") {
+        setProgress((prev) => applyStreamEvent(prev, stage, data));
+        return;
+      }
 
-      const refreshedId = (payload.data?.track as { id?: string } | undefined)
-        ?.id;
-      if (refreshedId && refreshedId !== id) {
-        finish();
-        router.replace(`/track/${refreshedId}`);
+      es.close();
+      const refreshed = data?.track as
+        | { id?: string; hasLyrics?: boolean }
+        | undefined;
+      setProgress((prev) =>
+        completeProgress(prev, Boolean(refreshed?.hasLyrics)),
+      );
+
+      if (refreshed?.id && refreshed.id !== id) {
+        finish("done");
+        router.replace(`/track/${refreshed.id}`);
         return;
       }
 
       try {
-        const data = await loadTrackData(id);
-        setTrack(data.track);
-        setLyrics(data.lyrics);
-        toast.success("Track refreshed from upstream providers.");
+        const reloaded = await loadTrackData(id);
+        setTrack(reloaded.track);
+        setLyrics(reloaded.lyrics);
+        finish("done");
       } catch (err) {
-        toast.error(
+        finish(
+          "failed",
           err instanceof Error ? err.message : "Failed to reload track.",
         );
-      } finally {
-        finish();
       }
     };
 
     es.onerror = () => {
-      finish();
-      toast.error("Lost connection while refreshing. Please try again.");
+      setProgress(failProgress);
+      finish("failed", "Lost connection while refreshing. Please try again.");
     };
   };
 
@@ -237,6 +310,52 @@ export default function TrackPage({ params }: TrackPageProps) {
           />
         </motion.div>
       )}
+
+      {/* Live refresh progress, docked to the side so the lyrics stay visible */}
+      <AnimatePresence>
+        {panel.open && (
+          <motion.aside
+            key="refresh-panel"
+            initial={{ opacity: 0, x: 24, filter: "blur(8px)" }}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, x: 24, filter: "blur(8px)" }}
+            transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+            aria-live="polite"
+            className="fixed bottom-4 left-4 right-4 z-40 flex max-h-[calc(100vh-2rem)] flex-col gap-3 overflow-y-auto rounded-3xl border border-border/70 bg-background/85 p-3 shadow-lg backdrop-blur-md sm:left-auto sm:w-[400px]"
+          >
+            <div className="flex items-start justify-between gap-3 px-1 pt-1">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <h2 className="text-sm font-bold tracking-tight text-foreground">
+                  {panel.status === "running"
+                    ? "Refreshing Track"
+                    : panel.status === "done"
+                      ? "Track Refreshed"
+                      : "Refresh Failed"}
+                </h2>
+                <p
+                  className={`text-xs ${panel.status === "failed" ? "text-red-500" : "text-muted-foreground"}`}
+                >
+                  {panel.status === "failed"
+                    ? panel.error
+                    : panel.status === "done"
+                      ? "Showing the latest data from upstream providers"
+                      : "Re-fetching metadata and lyrics from upstream providers"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePanel}
+                aria-label="Hide refresh progress"
+                className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <TaskRows key={panel.run} progress={progress} />
+          </motion.aside>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
