@@ -17,7 +17,9 @@ import {
   fetchTrackById,
   fetchTrackLyrics,
   getLyricsStreamUrl,
+  markTrackVerified,
 } from "@/lib/api-client";
+import { getTurnstileToken } from "@/lib/turnstile";
 import { formatArtworkUrl } from "@/lib/artwork";
 import {
   applyStreamEvent,
@@ -84,6 +86,7 @@ export default function TrackPage({ params }: TrackPageProps) {
     null,
   );
   const [refreshing, setRefreshing] = useState(false);
+  const [markingCorrect, setMarkingCorrect] = useState(false);
   const [progress, setProgress] = useState<TaskProgressState>(initialProgress);
   const [panel, setPanel] = useState<RefreshPanelState>({
     open: false,
@@ -92,6 +95,7 @@ export default function TrackPage({ params }: TrackPageProps) {
   });
   const eventSourceRef = useRef<EventSource | null>(null);
   const hidePanelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,6 +139,27 @@ export default function TrackPage({ params }: TrackPageProps) {
       hidePanelTimeoutRef.current = null;
     }
     setPanel((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleMarkCorrect = async () => {
+    if (!track || track.isVerified || markingCorrect || refreshing) return;
+    const container = turnstileContainerRef.current;
+    if (!container) return;
+
+    setMarkingCorrect(true);
+    try {
+      // A fresh single-use challenge on every click (no-op when Turnstile is off)
+      const token = await getTurnstileToken(container, "verify-track");
+      const updated = await markTrackVerified(track.id, token);
+      setTrack(updated);
+      toast.success("Thanks! Track marked as correct.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to mark track as correct.",
+      );
+    } finally {
+      setMarkingCorrect(false);
+    }
   };
 
   const handleRefresh = () => {
@@ -307,9 +332,17 @@ export default function TrackPage({ params }: TrackPageProps) {
             onReset={() => router.push("/")}
             onRefresh={handleRefresh}
             isRefreshing={refreshing}
+            onMarkCorrect={handleMarkCorrect}
+            isMarkingCorrect={markingCorrect}
           />
         </motion.div>
       )}
+
+      {/* Turnstile only shows here when Cloudflare needs the visitor to interact */}
+      <div
+        ref={turnstileContainerRef}
+        className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 empty:hidden"
+      />
 
       {/* Live refresh progress, docked to the side so the lyrics stay visible */}
       <AnimatePresence>

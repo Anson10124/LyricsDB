@@ -36,6 +36,10 @@ services:
       STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       SERVICE_URL_API: ${SERVICE_URL_API:-}
+      SERVICE_URL_WEB: ${SERVICE_URL_WEB:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
     depends_on:
       postgres:
         condition: service_healthy

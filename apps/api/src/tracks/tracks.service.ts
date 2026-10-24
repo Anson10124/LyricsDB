@@ -287,6 +287,23 @@ export class TracksService {
     return result[0];
   }
 
+  // Flag a track's metadata and lyrics as confirmed correct by a human
+  async markVerified(id: string, clientIp = "127.0.0.1"): Promise<Track> {
+    this.ipRateLimiter.consume(clientIp, "cached");
+
+    const result = await this.db
+      .update(tracks)
+      .set({ isVerified: true, updatedAt: new Date() })
+      .where(eq(tracks.id, id))
+      .returning();
+
+    if (result.length === 0 || !result[0]) {
+      throw new NotFoundException(`Track with id ${id} not found.`);
+    }
+
+    return result[0];
+  }
+
   // Fast O(1) indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC)
   async findByPlatformId(platform: string, id: string): Promise<Track | null> {
     const norm = normalizePlatform(platform);

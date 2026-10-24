@@ -151,3 +151,16 @@ export class LyricsByIdQueryDto {
   )
   format?: string = "json";
 }
+
+export class VerifyTrackDto {
+  @ApiProperty({
+    required: false,
+    description:
+      "Single-use Cloudflare Turnstile token (cf-turnstile-response). Required when human verification is enabled.",
+    example: "0.AbCdEf...",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  turnstileToken?: string;
+}

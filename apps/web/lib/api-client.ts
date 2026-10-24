@@ -91,6 +91,48 @@ export async function fetchTrackById(
 }
 
 /**
+ * Marks a track as verified correct. Pass a Turnstile token when verification is enabled.
+ */
+export async function markTrackVerified(
+  id: string,
+  turnstileToken?: string,
+): Promise<SanitizedTrack<TrackRecord>> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(
+    `${apiBase}/api/tracks/${encodeURIComponent(id)}/verify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(turnstileToken ? { turnstileToken } : {}),
+    },
+  );
+  if (!res.ok) {
+    if (res.status === 403) {
+      throw new Error("Human verification failed. Please try again.");
+    }
+    if (res.status === 429) {
+      throw new Error("Too many requests. Please wait a moment.");
+    }
+    throw new Error("Failed to mark track as correct");
+  }
+  return (await res.json()) as SanitizedTrack<TrackRecord>;
+}
+
+/**
+ * Fetches the public Turnstile site key (null when verification is disabled).
+ */
+export async function fetchTurnstileConfig(): Promise<{
+  siteKey: string | null;
+}> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(`${apiBase}/api/turnstile/config`);
+  if (!res.ok) {
+    throw new Error("Failed to load verification config");
+  }
+  return (await res.json()) as { siteKey: string | null };
+}
+
+/**
  * Fetches track lyrics by internal UUID.
  */
 export async function fetchTrackLyrics(

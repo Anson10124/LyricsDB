@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Music2, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  BadgeCheck,
+  CircleCheck,
+  ExternalLink,
+  Music2,
+  RefreshCw,
+} from "lucide-react";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
@@ -24,6 +31,8 @@ interface LyricsViewProps {
   onReset?: () => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onMarkCorrect?: () => void;
+  isMarkingCorrect?: boolean;
 }
 
 export function LyricsView({
@@ -32,6 +41,8 @@ export function LyricsView({
   onReset,
   onRefresh,
   isRefreshing = false,
+  onMarkCorrect,
+  isMarkingCorrect = false,
 }: LyricsViewProps) {
 
   const [selectedFormat, setSelectedFormat] =
@@ -68,7 +79,7 @@ export function LyricsView({
   return (
     <div className="w-full max-w-3xl flex flex-col gap-6 py-6 px-2">
       {/* Top action bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {onReset ? (
           <button
             type="button"
@@ -88,20 +99,47 @@ export function LyricsView({
           </Link>
         )}
 
-        {onRefresh ? (
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            title="Re-fetch this track from upstream providers"
-            className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <RefreshCw
-              className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-            />
-            <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
-          </button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {onMarkCorrect ? (
+            track.isVerified ? (
+              <span
+                title="This track has been confirmed correct"
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                <BadgeCheck className="size-3.5" />
+                <span>Verified</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onMarkCorrect}
+                disabled={isMarkingCorrect || isRefreshing}
+                title="Confirm this track's metadata and lyrics are correct"
+                className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <CircleCheck
+                  className={`size-3.5 ${isMarkingCorrect ? "animate-pulse" : ""}`}
+                />
+                <span>{isMarkingCorrect ? "Verifying..." : "Mark as Correct"}</span>
+              </button>
+            )
+          ) : null}
+
+          {onRefresh ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing || isMarkingCorrect}
+              title="Re-fetch this track from upstream providers"
+              className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <RefreshCw
+                className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Track Header Card */}

@@ -1267,6 +1267,134 @@
         ]
       }
     },
+    "/api/tracks/{id}/verify": {
+      "post": {
+        "description": "Flags a track's metadata and lyrics as confirmed by a human (10 RPM/IP). When Cloudflare Turnstile is configured, every call must carry a fresh single-use token.",
+        "operationId": "TracksController_verify[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyTrackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated track with isVerified set to true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Turnstile token missing, expired, or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Mark a track as verified correct",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/tracks/{id}/verify": {
+      "post": {
+        "description": "Flags a track's metadata and lyrics as confirmed by a human (10 RPM/IP). When Cloudflare Turnstile is configured, every call must carry a fresh single-use token.",
+        "operationId": "TracksController_verify[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyTrackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated track with isVerified set to true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Turnstile token missing, expired, or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Mark a track as verified correct",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
     "/api/tracks/{id}/lyrics": {
       "get": {
         "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID (60 RPM/IP).",
@@ -2103,6 +2231,52 @@
         ]
       }
     },
+    "/api/turnstile/config": {
+      "get": {
+        "description": "Returns the Cloudflare Turnstile site key the web app should render before protected actions, or null when human verification is disabled.",
+        "operationId": "TurnstileController_getConfig[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnstileConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the public Turnstile configuration",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/turnstile/config": {
+      "get": {
+        "description": "Returns the Cloudflare Turnstile site key the web app should render before protected actions, or null when human verification is disabled.",
+        "operationId": "TurnstileController_getConfig[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnstileConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the public Turnstile configuration",
+        "tags": [
+          "System"
+        ]
+      }
+    },
     "/api/stats": {
       "get": {
         "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days. Results are cached for up to 60 seconds.",
@@ -2670,6 +2844,30 @@
             "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
           }
         }
+      },
+      "VerifyTrackDto": {
+        "type": "object",
+        "properties": {
+          "turnstileToken": {
+            "type": "string",
+            "description": "Single-use Cloudflare Turnstile token (cf-turnstile-response). Required when human verification is enabled.",
+            "example": "0.AbCdEf..."
+          }
+        }
+      },
+      "TurnstileConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "siteKey": {
+            "type": "string",
+            "nullable": true,
+            "example": "0x4AAAAAAFjzJcDsRDWX-qM8",
+            "description": "Public Turnstile site key, or null when human verification is disabled"
+          }
+        },
+        "required": [
+          "siteKey"
+        ]
       },
       "LibraryStatsTotalsDto": {
         "type": "object",

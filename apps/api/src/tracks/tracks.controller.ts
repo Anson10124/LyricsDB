@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   MessageEvent,
   Param,
   ParseUUIDPipe,
@@ -13,6 +14,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBody,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -38,8 +40,10 @@ import {
   TrackQueryDto,
   TrackSearchQueryDto,
   TrackStreamQueryDto,
+  VerifyTrackDto,
 } from "./dto/track-query.dto";
 import { ClientIp } from "../common/decorators/client-ip.decorator";
+import { TurnstileService } from "../turnstile/turnstile.service";
 
 const SUPPORTED_FORMATS = SUPPORTED_LYRIC_FORMATS;
 
@@ -47,7 +51,10 @@ const SUPPORTED_FORMATS = SUPPORTED_LYRIC_FORMATS;
 @ApiTags("Tracks")
 @Controller(["api", ""])
 export class TracksController {
-  constructor(private readonly tracksService: TracksService) {}
+  constructor(
+    private readonly tracksService: TracksService,
+    private readonly turnstileService: TurnstileService,
+  ) {}
 
   // ==========================================
   // Real-time EventStream (SSE) Endpoint
@@ -357,6 +364,46 @@ export class TracksController {
     @ClientIp() clientIp: string,
   ) {
     const track = await this.tracksService.findById(id, clientIp);
+    return this.tracksService.sanitizeTrack(track);
+  }
+
+  @ApiOperation({
+    summary: "Mark a track as verified correct",
+    description:
+      "Flags a track's metadata and lyrics as confirmed by a human (10 RPM/IP). When Cloudflare Turnstile is configured, every call must carry a fresh single-use token.",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Track internal database UUID v4",
+    example: "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  })
+  @ApiBody({ type: VerifyTrackDto, required: false })
+  @ApiOkResponse({
+    type: SanitizedTrackDto,
+    description: "Updated track with isVerified set to true",
+  })
+  @ApiForbiddenResponse({
+    type: ErrorResponseDto,
+    description: "Turnstile token missing, expired, or invalid",
+  })
+  @ApiNotFoundResponse({
+    type: ErrorResponseDto,
+    description: "Track ID not found in database",
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post("tracks/:id/verify")
+  @HttpCode(200)
+  async verify(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @Body() dto: VerifyTrackDto,
+    @ClientIp() clientIp: string,
+  ) {
+    await this.turnstileService.verify(
+      dto.turnstileToken,
+      "verify-track",
+      clientIp,
+    );
+    const track = await this.tracksService.markVerified(id, clientIp);
     return this.tracksService.sanitizeTrack(track);
   }
 
