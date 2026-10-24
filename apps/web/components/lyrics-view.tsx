@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Music2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Music2, RefreshCw } from "lucide-react";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
@@ -22,9 +22,17 @@ interface LyricsViewProps {
   track: SanitizedTrack<TrackRecord>;
   rawLyrics?: SyncedLyricsPayload | string | null;
   onReset?: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
-export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
+export function LyricsView({
+  track,
+  rawLyrics,
+  onReset,
+  onRefresh,
+  isRefreshing = false,
+}: LyricsViewProps) {
 
   const [selectedFormat, setSelectedFormat] =
     useState<LyricsViewFormat>("synced");
@@ -79,6 +87,21 @@ export function LyricsView({ track, rawLyrics, onReset }: LyricsViewProps) {
             <span>Search another song</span>
           </Link>
         )}
+
+        {onRefresh ? (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            title="Re-fetch this track from upstream providers"
+            className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <RefreshCw
+              className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+          </button>
+        ) : null}
       </div>
 
       {/* Track Header Card */}

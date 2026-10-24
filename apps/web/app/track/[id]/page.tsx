@@ -1,20 +1,60 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowLeft, Music2 } from "lucide-react";
+import { toast } from "sonner";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
 import { LyricsView } from "@/components/lyrics-view";
-import { fetchTrackById, fetchTrackLyrics } from "@/lib/api-client";
+import {
+  fetchTrackById,
+  fetchTrackLyrics,
+  getLyricsStreamUrl,
+} from "@/lib/api-client";
 
 interface TrackPageProps {
   params: Promise<{ id: string }>;
+}
+
+async function loadTrackData(id: string) {
+  const [track, lyricsData] = await Promise.all([
+    fetchTrackById(id),
+    fetchTrackLyrics(id, "json").catch(() => null),
+  ]);
+
+  let lyrics: SyncedLyricsPayload | string | null = null;
+  if (lyricsData) {
+    if (
+      typeof lyricsData === "object" &&
+      lyricsData !== null &&
+      "plain" in lyricsData
+    ) {
+      lyrics = (lyricsData as { plain: string }).plain;
+    } else {
+      lyrics = lyricsData as SyncedLyricsPayload;
+    }
+  }
+
+  return { track, lyrics };
+}
+
+// Picks a platform ID the resolver can re-sync this track from
+function getRefreshSource(track: SanitizedTrack<TrackRecord>) {
+  const candidates: Array<[string, string | null | undefined]> = [
+    ["spotify", track.spotifyId],
+    ["apple", track.appleMusicId],
+    ["deezer", track.deezerId],
+    ["netease", track.neteaseId],
+    ["qq", track.qqMusicId],
+  ];
+  const match = candidates.find(([, platformId]) => platformId);
+  return match ? { platform: match[0], id: match[1] as string } : null;
 }
 
 export default function TrackPage({ params }: TrackPageProps) {
@@ -27,51 +67,117 @@ export default function TrackPage({ params }: TrackPageProps) {
   const [lyrics, setLyrics] = useState<SyncedLyricsPayload | string | null>(
     null,
   );
+  const [refreshing, setRefreshing] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
     setError(null);
 
-    async function loadTrackData() {
-      try {
-        const [trackData, lyricsData] = await Promise.all([
-          fetchTrackById(id),
-          fetchTrackLyrics(id, "json").catch(() => null),
-        ]);
-
+    loadTrackData(id)
+      .then((data) => {
         if (!isMounted) return;
-        setTrack(trackData);
-
-        if (lyricsData) {
-          if (
-            typeof lyricsData === "object" &&
-            lyricsData !== null &&
-            "plain" in lyricsData
-          ) {
-            setLyrics((lyricsData as { plain: string }).plain);
-          } else {
-            setLyrics(lyricsData as SyncedLyricsPayload);
-          }
-        }
-      } catch (err) {
+        setTrack(data.track);
+        setLyrics(data.lyrics);
+      })
+      .catch((err) => {
         if (isMounted) {
           setError(err instanceof Error ? err.message : "An error occurred");
         }
-      } finally {
+      })
+      .finally(() => {
         if (isMounted) {
           setLoading(false);
         }
-      }
-    }
-
-
-    loadTrackData();
+      });
 
     return () => {
       isMounted = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close();
+    };
+  }, []);
+
+  const handleRefresh = () => {
+    if (!track || refreshing) return;
+
+    const source = getRefreshSource(track);
+    if (!source) {
+      toast.error("This track has no platform link to refresh from.");
+      return;
+    }
+
+    setRefreshing(true);
+    eventSourceRef.current?.close();
+
+    // Same SSE pipeline as search, with the cache bypassed (uncached rate limit applies)
+    const es = new EventSource(
+      getLyricsStreamUrl({ ...source, forceRefresh: true }),
+    );
+    eventSourceRef.current = es;
+
+    const finish = () => {
+      es.close();
+      if (eventSourceRef.current === es) {
+        eventSourceRef.current = null;
+      }
+      setRefreshing(false);
+    };
+
+    es.onmessage = async (event) => {
+      let payload: { stage?: string; data?: Record<string, unknown> };
+      try {
+        payload = JSON.parse(event.data);
+      } catch (err) {
+        console.error("Failed to parse SSE event:", err);
+        return;
+      }
+
+      if (payload.stage === "error") {
+        finish();
+        toast.error(
+          typeof payload.data?.error === "string"
+            ? payload.data.error
+            : "Failed to refresh track.",
+        );
+        return;
+      }
+
+      if (payload.stage !== "done") return;
+      es.close();
+
+      const refreshedId = (payload.data?.track as { id?: string } | undefined)
+        ?.id;
+      if (refreshedId && refreshedId !== id) {
+        finish();
+        router.replace(`/track/${refreshedId}`);
+        return;
+      }
+
+      try {
+        const data = await loadTrackData(id);
+        setTrack(data.track);
+        setLyrics(data.lyrics);
+        toast.success("Track refreshed from upstream providers.");
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to reload track.",
+        );
+      } finally {
+        finish();
+      }
+    };
+
+    es.onerror = () => {
+      finish();
+      toast.error("Lost connection while refreshing. Please try again.");
+    };
+  };
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors">
@@ -126,6 +232,8 @@ export default function TrackPage({ params }: TrackPageProps) {
             track={track}
             rawLyrics={lyrics}
             onReset={() => router.push("/")}
+            onRefresh={handleRefresh}
+            isRefreshing={refreshing}
           />
         </motion.div>
       )}
