@@ -6,14 +6,21 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnApplicationBootstrap,
 } from "@nestjs/common";
 import {
+  and,
+  backfillTrackPlatformIds,
   DatabaseClient,
   eq,
   ilike,
+  inArray,
+  isPlatformIdKey,
   or,
+  PLATFORM_ID_COLUMNS,
   sql,
   Track,
+  trackPlatformIds,
   tracks,
   type NewTrack,
 } from "@repo/database";
@@ -46,6 +53,14 @@ import { DATABASE_CONNECTION } from "../database/database.constants";
 import { ResolverService } from "../resolver/resolver.service";
 import { StorageService } from "../storage/storage.service";
 import { IpRateLimiterService } from "../common/rate-limiter/ip-rate-limiter.service";
+import {
+  collectPlatformIds,
+  pickTrackMatch,
+  PLATFORM_TRACK_FIELDS,
+  platformIdKey,
+  type PlatformIdRef,
+  type VerifiedPlatformIds,
+} from "./platform-ids";
 
 export type {
   GetOrSyncTrackOptions,
@@ -67,20 +82,14 @@ const SYNC_TIMEOUT_MESSAGE =
 const VERIFIED_REFRESH_ERROR =
   "This track has been verified as correct and can't be refreshed.";
 
-interface VerifiedPlatformIds {
-  spotifyId?: string;
-  deezerId?: string;
-  neteaseId?: string;
-  appleMusicId?: string;
-  qqMusicId?: string;
-}
-
 @Injectable()
 
-export class TracksService {
+export class TracksService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TracksService.name);
   // In-flight request deduplication map to prevent thundering herd
   private inFlightRequests = new Map<string, Promise<Track>>();
+  // Last background enrichment attempt per imported track
+  private enrichAttempts = new Map<string, number>();
   private lyricsEngine = new LyricsEngine();
   private readonly syncTimeoutMs = SYNC_TIMEOUT_MS;
 
@@ -91,6 +100,20 @@ export class TracksService {
     private readonly ipRateLimiter: IpRateLimiterService,
     private readonly activityService: ActivityService,
   ) {}
+
+  // Copies primary IDs into track_platform_ids for rows saved before the table existed.
+  // Runs in the background: lookups also check the columns, so nothing waits on it.
+  onApplicationBootstrap(): void {
+    backfillTrackPlatformIds(this.db)
+      .then((inserted) => {
+        if (inserted > 0) {
+          this.logger.log(`Backfilled ${inserted} track platform IDs`);
+        }
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(`Track platform ID backfill failed: ${err}`);
+      });
+  }
 
   // Universal Read-Through Endpoint:
   // 1. Checks PostgreSQL database first (Instant ~2ms response, limited to 60 RPM / IP).
@@ -125,6 +148,7 @@ export class TracksService {
       const cached = await this.findByPlatformId(targetPlatform, targetId);
       if (cached) {
         this.ipRateLimiter.consume(clientIp, "cached");
+        this.enrichInBackground(cached, clientIp);
         return this.retryMissingLyrics(cached, clientIp);
       }
     }
@@ -267,6 +291,31 @@ export class TracksService {
     }
   }
 
+  // Imported tracks are served right away; a live resolve in the background fills
+  // in their artwork, duration and other platforms' IDs, keeping their lyrics.
+  // Spends the client's uncached budget, and backs off per track on failure.
+  private enrichInBackground(track: Track, clientIp: string): void {
+    if (!track.needsEnrichment) return;
+
+    const lastAttempt = this.enrichAttempts.get(track.id);
+    if (lastAttempt && Date.now() - lastAttempt < LYRICS_RETRY_INTERVAL_MS) {
+      return;
+    }
+    const ref = this.platformRefFor(track);
+    if (!ref || !this.ipRateLimiter.tryConsume(clientIp, "uncached")) return;
+
+    this.enrichAttempts.set(track.id, Date.now());
+    this.syncDeduped(
+      `${ref.platform}:${ref.id}`,
+      buildPlatformUrl(ref.platform, ref.id),
+    )
+      .then(() => this.enrichAttempts.delete(track.id))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Enriching track ${track.id} failed: ${message}`);
+      });
+  }
+
   private getHighConfidencePlatformId(
     link?: ResolvedLink | null,
   ): string | undefined {
@@ -287,6 +336,7 @@ export class TracksService {
       throw new NotFoundException(`Track with id ${id} not found.`);
     }
 
+    this.enrichInBackground(result[0], clientIp);
     return result[0];
   }
 
@@ -307,36 +357,116 @@ export class TracksService {
     return result[0];
   }
 
-  // Fast O(1) indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC)
+  // Fast indexed lookup by streaming platform ID (Spotify, Apple, Deezer, NetEase, QQ, ISRC).
+  // Matches the track's primary column or any other ID recorded for it.
   async findByPlatformId(platform: string, id: string): Promise<Track | null> {
     const norm = normalizePlatform(platform);
+    if (!isPlatformIdKey(norm)) return null;
 
-    const columnMap: Record<
-      string,
-      | typeof tracks.spotifyId
-      | typeof tracks.appleMusicId
-      | typeof tracks.deezerId
-      | typeof tracks.neteaseId
-      | typeof tracks.qqMusicId
-      | typeof tracks.isrc
-    > = {
-      spotify: tracks.spotifyId,
-      apple: tracks.appleMusicId,
-      deezer: tracks.deezerId,
-      netease: tracks.neteaseId,
-      qq: tracks.qqMusicId,
-      isrc: tracks.isrc,
-    };
-
-    const col = columnMap[norm];
-    if (!col) return null;
+    const aliasOwner = this.db
+      .select({ trackId: trackPlatformIds.trackId })
+      .from(trackPlatformIds)
+      .where(
+        and(
+          eq(trackPlatformIds.platform, norm),
+          eq(trackPlatformIds.platformId, id),
+        ),
+      );
 
     const result = await this.db
       .select()
       .from(tracks)
-      .where(eq(col, id))
+      .where(or(eq(PLATFORM_ID_COLUMNS[norm], id), inArray(tracks.id, aliasOwner)))
       .limit(1);
     return result[0] ?? null;
+  }
+
+  // Which stored tracks each ID belongs to, via the alias table or a primary column
+  private async findPlatformIdOwners(
+    ids: PlatformIdRef[],
+  ): Promise<Map<string, Set<string>>> {
+    const owners = new Map<string, Set<string>>();
+    if (ids.length === 0) return owners;
+
+    const addOwner = (ref: PlatformIdRef, trackId: string) => {
+      const key = platformIdKey(ref);
+      const set = owners.get(key) ?? new Set<string>();
+      set.add(trackId);
+      owners.set(key, set);
+    };
+
+    const [aliasRows, columnRows] = await Promise.all([
+      this.db
+        .select()
+        .from(trackPlatformIds)
+        .where(
+          or(
+            ...ids.map((ref) =>
+              and(
+                eq(trackPlatformIds.platform, ref.platform),
+                eq(trackPlatformIds.platformId, ref.platformId),
+              ),
+            ),
+          ),
+        ),
+      this.db
+        .select()
+        .from(tracks)
+        .where(
+          or(
+            ...ids.map((ref) =>
+              eq(PLATFORM_ID_COLUMNS[ref.platform], ref.platformId),
+            ),
+          ),
+        ),
+    ]);
+
+    for (const row of aliasRows) {
+      if (isPlatformIdKey(row.platform)) {
+        addOwner({ platform: row.platform, platformId: row.platformId }, row.trackId);
+      }
+    }
+    for (const track of columnRows) {
+      for (const ref of ids) {
+        if (track[PLATFORM_TRACK_FIELDS[ref.platform]] === ref.platformId) {
+          addOwner(ref, track.id);
+        }
+      }
+    }
+    return owners;
+  }
+
+  // Drops primary IDs that already belong to a different track, so saving never
+  // steals another row's ID (or trips its unique index).
+  private async dropIdsOwnedElsewhere(data: NewTrack): Promise<NewTrack> {
+    const ids = collectPlatformIds({}, null, data);
+    const owners = await this.findPlatformIdOwners(ids);
+    const cleaned: NewTrack = { ...data };
+
+    for (const ref of ids) {
+      const ownerIds = owners.get(platformIdKey(ref));
+      if (ownerIds && [...ownerIds].some((ownerId) => ownerId !== data.id)) {
+        cleaned[PLATFORM_TRACK_FIELDS[ref.platform]] = null;
+      }
+    }
+    return cleaned;
+  }
+
+  // Records every ID for a track. IDs already owned by another track are left alone.
+  // Best-effort: lookups still have the primary columns if this fails.
+  private async recordPlatformIds(
+    trackId: string,
+    ids: PlatformIdRef[],
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      await this.db
+        .insert(trackPlatformIds)
+        .values(ids.map((ref) => ({ ...ref, trackId })))
+        .onConflictDoNothing();
+    } catch (err) {
+      this.logger.warn(`Failed to record platform IDs for track ${trackId}: ${err}`);
+    }
   }
 
   // Strip raw lyrics from track object for API responses
@@ -432,6 +562,7 @@ export class TracksService {
     const validIds = this.extractHighConfidencePlatformIds(resolved.links);
     const existingTrack = await this.findExistingTrackByPlatformLinks(
       resolved.links,
+      meta.isrc,
     );
 
     const lyricsData = await this.resolveAndStoreLyrics(
@@ -447,7 +578,23 @@ export class TracksService {
       existingTrack,
     );
 
-    return this.safeSaveTrack(newTrackData);
+    return this.saveTrackWithPlatformIds(newTrackData, validIds, meta.isrc);
+  }
+
+  // Saves a resolved track, then records every ID it was reached by
+  private async saveTrackWithPlatformIds(
+    newTrackData: NewTrack,
+    validIds: VerifiedPlatformIds,
+    isrc?: string,
+  ): Promise<Track> {
+    const saved = await this.safeSaveTrack(
+      await this.dropIdsOwnedElsewhere(newTrackData),
+    );
+    await this.recordPlatformIds(
+      saved.id,
+      collectPlatformIds(validIds, isrc, saved),
+    );
+    return saved;
   }
 
   private extractHighConfidencePlatformIds(
@@ -469,32 +616,45 @@ export class TracksService {
     };
   }
 
+  // Finds the stored track a resolve belongs to, through any of its high-confidence
+  // IDs or its ISRC. When those point at several tracks, pickTrackMatch decides.
   private async findExistingTrackByPlatformLinks(
     links: Record<string, ResolvedLink | null | undefined>,
+    isrc?: string,
   ): Promise<Track | null> {
-    const spotifyLink = links["spotify"];
-    const deezerLink = links["deezer"];
-    const neteaseLink = links["netease"];
-    const appleLink =
-      links["appleMusic"] || links["applemusic"] || links["apple"];
-    const qqLink = links["qqMusic"] || links["qqmusic"] || links["qq"];
+    const sourceLink = Object.values(links).find(
+      (link) => link?.matchReason === "direct" && link.id,
+    );
+    const sourceKey = sourceLink?.id
+      ? `${normalizePlatform(sourceLink.platform)}:${sourceLink.id.trim()}`
+      : null;
 
-    const platformLinks: Array<[string, ResolvedLink | null | undefined]> = [
-      ["spotify", spotifyLink],
-      ["deezer", deezerLink],
-      ["netease", neteaseLink],
-      ["apple", appleLink],
-      ["qq", qqLink],
-    ];
+    const ids = collectPlatformIds(
+      this.extractHighConfidencePlatformIds(links),
+      isrc,
+    );
+    const owners = await this.findPlatformIdOwners(ids);
+    const candidateIds = new Set(
+      [...owners.values()].flatMap((set) => [...set]),
+    );
+    if (candidateIds.size === 0) return null;
 
-    for (const [platform, link] of platformLinks) {
-      const platformId = this.getHighConfidencePlatformId(link);
-      if (platformId) {
-        const existing = await this.findByPlatformId(platform, platformId);
-        if (existing) return existing;
-      }
-    }
-    return null;
+    const candidates = await this.db
+      .select()
+      .from(tracks)
+      .where(inArray(tracks.id, [...candidateIds]));
+
+    return pickTrackMatch(
+      candidates.map((track) => ({
+        track,
+        matchedIds: ids.filter((ref) =>
+          owners.get(platformIdKey(ref))?.has(track.id),
+        ).length,
+        ownsSource: Boolean(
+          sourceKey && owners.get(sourceKey)?.has(track.id),
+        ),
+      })),
+    );
   }
 
   private async resolveAndStoreLyrics(
@@ -623,12 +783,13 @@ export class TracksService {
         meta.artwork ||
         existingTrack?.artwork ||
         (meta.image ? { url: meta.image } : null),
-      isrc: meta.isrc || existingTrack?.isrc,
-      spotifyId: validIds.spotifyId || existingTrack?.spotifyId,
-      deezerId: validIds.deezerId || existingTrack?.deezerId,
-      neteaseId: validIds.neteaseId || existingTrack?.neteaseId,
-      appleMusicId: validIds.appleMusicId || existingTrack?.appleMusicId,
-      qqMusicId: validIds.qqMusicId || existingTrack?.qqMusicId,
+      // An existing row keeps its first-seen IDs; other versions' IDs go to track_platform_ids
+      isrc: existingTrack?.isrc || meta.isrc,
+      spotifyId: existingTrack?.spotifyId || validIds.spotifyId,
+      deezerId: existingTrack?.deezerId || validIds.deezerId,
+      neteaseId: existingTrack?.neteaseId || validIds.neteaseId,
+      appleMusicId: existingTrack?.appleMusicId || validIds.appleMusicId,
+      qqMusicId: existingTrack?.qqMusicId || validIds.qqMusicId,
       lyricsType: lyricsData.lyricsType,
       lyrics: lyricsData.lyrics,
       lyricsStoragePath: lyricsData.lyricsStoragePath,
@@ -638,6 +799,7 @@ export class TracksService {
       hasRomaji:
         lyricsData.hasRomaji ?? existingTrack?.hasRomaji ?? false,
       isVerified: existingTrack?.isVerified ?? false,
+      needsEnrichment: false,
     };
   }
 
@@ -708,14 +870,9 @@ export class TracksService {
             err.message.includes("violates unique constraint")));
 
       if (isUniqueConflict) {
-        const conditions = [
-          sanitizedData.spotifyId ? eq(tracks.spotifyId, sanitizedData.spotifyId) : undefined,
-          sanitizedData.appleMusicId ? eq(tracks.appleMusicId, sanitizedData.appleMusicId) : undefined,
-          sanitizedData.deezerId ? eq(tracks.deezerId, sanitizedData.deezerId) : undefined,
-          sanitizedData.neteaseId ? eq(tracks.neteaseId, sanitizedData.neteaseId) : undefined,
-          sanitizedData.qqMusicId ? eq(tracks.qqMusicId, sanitizedData.qqMusicId) : undefined,
-          sanitizedData.isrc ? eq(tracks.isrc, sanitizedData.isrc) : undefined,
-        ].filter((c): c is NonNullable<typeof c> => Boolean(c));
+        const conditions = collectPlatformIds({}, null, sanitizedData).map(
+          (ref) => eq(PLATFORM_ID_COLUMNS[ref.platform], ref.platformId),
+        );
 
         let existing: Track | null = null;
         if (conditions.length > 0) {
@@ -733,13 +890,13 @@ export class TracksService {
             .set({
               ...sanitizedData,
               id: existing.id,
-              isrc: sanitizedData.isrc || existing.isrc,
-              spotifyId: sanitizedData.spotifyId || existing.spotifyId,
-              deezerId: sanitizedData.deezerId || existing.deezerId,
-              neteaseId: sanitizedData.neteaseId || existing.neteaseId,
+              isrc: existing.isrc || sanitizedData.isrc,
+              spotifyId: existing.spotifyId || sanitizedData.spotifyId,
+              deezerId: existing.deezerId || sanitizedData.deezerId,
+              neteaseId: existing.neteaseId || sanitizedData.neteaseId,
               appleMusicId:
-                sanitizedData.appleMusicId || existing.appleMusicId,
-              qqMusicId: sanitizedData.qqMusicId || existing.qqMusicId,
+                existing.appleMusicId || sanitizedData.appleMusicId,
+              qqMusicId: existing.qqMusicId || sanitizedData.qqMusicId,
               artwork:
                 sanitizedData.artwork || existing.artwork,
               lyrics: sanitizedData.lyrics || existing.lyrics,
@@ -855,6 +1012,7 @@ export class TracksService {
     if (cachedTrack) {
       // Consume from 60 RPM cached bucket
       this.ipRateLimiter.consume(clientIp, "cached");
+      this.enrichInBackground(cachedTrack, clientIp);
 
       const sanitized = this.sanitizeTrack(cachedTrack);
       let formattedLyrics: FormattedLyricsResult | undefined;
@@ -961,6 +1119,7 @@ export class TracksService {
       const validIds = this.extractHighConfidencePlatformIds(resolved.links);
       const existingTrack = await this.findExistingTrackByPlatformLinks(
         resolved.links,
+        meta.isrc,
       );
 
       // The refresh may reach a verified track through another platform's link
@@ -1028,7 +1187,11 @@ export class TracksService {
         existingTrack,
       );
 
-      const finalTrack = await this.safeSaveTrack(newTrackData);
+      const finalTrack = await this.saveTrackWithPlatformIds(
+        newTrackData,
+        validIds,
+        meta.isrc,
+      );
       const sanitized = this.sanitizeTrack(finalTrack);
       let formattedLyrics: FormattedLyricsResult | undefined;
       const lyricsToFormat =

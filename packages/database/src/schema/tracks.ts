@@ -9,6 +9,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -57,6 +58,10 @@ export const tracks = pgTable(
     // Verification Flag (defaults to false for human review)
     isVerified: boolean("is_verified").default(false).notNull(),
 
+    // Imported (from AMLL TTML DB) without platform metadata such as artwork or
+    // the real duration; the first request fills it in with a live resolve
+    needsEnrichment: boolean("needs_enrichment").default(false).notNull(),
+
     // Timestamps
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -81,3 +86,29 @@ export const tracks = pgTable(
 
 export type Track = typeof tracks.$inferSelect;
 export type NewTrack = typeof tracks.$inferInsert;
+
+// Every platform ID (and ISRC) ever seen for a track. The per-platform columns on
+// `tracks` hold one primary ID each; catalogs list the same recording many times
+// (single, album, compilation, re-uploads), so the other IDs resolve through here.
+export const trackPlatformIds = pgTable(
+  "track_platform_ids",
+  {
+    // normalizePlatform() names: 'spotify' | 'apple' | 'deezer' | 'netease' | 'qq' | 'isrc'
+    platform: varchar("platform", { length: 16 }).notNull(),
+    platformId: varchar("platform_id", { length: 64 }).notNull(),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    // One ID belongs to exactly one track; doubles as the lookup index
+    primaryKey({ columns: [table.platform, table.platformId] }),
+    index("idx_track_platform_ids_track_id").on(table.trackId),
+  ],
+);
+
+export type TrackPlatformId = typeof trackPlatformIds.$inferSelect;
+export type NewTrackPlatformId = typeof trackPlatformIds.$inferInsert;
