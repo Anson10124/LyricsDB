@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { KpiCards } from "@/components/stats/kpi-cards";
 import { SyncTypeChart } from "@/components/stats/sync-type-chart";
 import { ProviderBreakdown } from "@/components/stats/provider-breakdown";
-import { DailyAddedChart } from "@/components/stats/daily-added-chart";
+import { TracksOverTimeChart } from "@/components/stats/tracks-over-time-chart";
 import { CoverageCard } from "@/components/stats/coverage-card";
 
 const updatedAt = new Intl.DateTimeFormat("en-US", {
@@ -119,7 +119,10 @@ export default function StatsPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-5">
               <div className="md:col-span-3">
-                <DailyAddedChart days={stats.dailyAdded} />
+                <TracksOverTimeChart
+                  days={stats.dailyAdded}
+                  total={stats.totals.tracks}
+                />
               </div>
               <div className="md:col-span-2">
                 <CoverageCard stats={stats} />
