@@ -11,7 +11,7 @@ export class StatsController {
   @ApiOperation({
     summary: "Get cached library statistics",
     description:
-      "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days. Results are cached for up to 60 seconds.",
+      "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days, and the 5 most recently added tracks. Results are cached for up to 60 seconds.",
   })
   @ApiOkResponse({
     type: LibraryStatsResponseDto,

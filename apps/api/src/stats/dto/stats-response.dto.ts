@@ -4,6 +4,7 @@ import type {
   LibraryPlatform,
   LibraryPlatformStats,
   LibraryProviderStats,
+  LibraryRecentTrack,
   LibraryStats,
   LibraryStatsTotals,
 } from "@repo/types";
@@ -77,6 +78,41 @@ export class LibraryDailyStatsDto implements LibraryDailyStats {
   count!: number;
 }
 
+export class LibraryRecentTrackDto implements LibraryRecentTrack {
+  @ApiProperty({ description: "Track ID", example: "6f1c2b9e-1d2a-4c3b-9e8f-7a6b5c4d3e2f" })
+  id!: string;
+
+  @ApiProperty({ description: "Track title", example: "Blinding Lights" })
+  title!: string;
+
+  @ApiProperty({ type: [String], example: ["The Weeknd"] })
+  artists!: string[];
+
+  @ApiProperty({ type: String, nullable: true, example: "After Hours" })
+  album!: string | null;
+
+  @ApiProperty({
+    enum: ["word", "line", "plain"],
+    nullable: true,
+    description: "Lyrics sync type, null if the track has no lyrics",
+    example: "word",
+  })
+  lyricsType!: LibraryRecentTrack["lyricsType"];
+
+  @ApiProperty({
+    type: Object,
+    nullable: true,
+    description: "Artwork metadata, if known",
+  })
+  artwork!: LibraryRecentTrack["artwork"];
+
+  @ApiProperty({
+    description: "UNIX millisecond timestamp when the track was added",
+    example: 1787262680794,
+  })
+  createdAt!: number;
+}
+
 export class LibraryStatsResponseDto implements LibraryStats {
   @ApiProperty({
     description: "UNIX millisecond timestamp when these stats were computed",
@@ -101,4 +137,10 @@ export class LibraryStatsResponseDto implements LibraryStats {
     description: "Tracks added per UTC day over the last 30 days, oldest first",
   })
   dailyAdded!: LibraryDailyStatsDto[];
+
+  @ApiProperty({
+    type: [LibraryRecentTrackDto],
+    description: "The 5 most recently added tracks, newest first",
+  })
+  recentlyAdded!: LibraryRecentTrackDto[];
 }

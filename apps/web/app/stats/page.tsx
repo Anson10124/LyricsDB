@@ -11,6 +11,7 @@ import { SyncTypeChart } from "@/components/stats/sync-type-chart";
 import { ProviderBreakdown } from "@/components/stats/provider-breakdown";
 import { TracksOverTimeChart } from "@/components/stats/tracks-over-time-chart";
 import { CoverageCard } from "@/components/stats/coverage-card";
+import { RecentlyAdded } from "@/components/stats/recently-added";
 
 const updatedAt = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
@@ -33,6 +34,7 @@ function LoadingSkeleton() {
         <Card className="h-80 animate-pulse md:col-span-3" />
         <Card className="h-80 animate-pulse md:col-span-2" />
       </div>
+      <Card className="h-96 animate-pulse" />
     </div>
   );
 }
@@ -128,6 +130,10 @@ export default function StatsPage() {
                 <CoverageCard stats={stats} />
               </div>
             </div>
+            <RecentlyAdded
+              tracks={stats.recentlyAdded ?? []}
+              now={stats.generatedAt}
+            />
           </div>
         )}
       </div>

@@ -31,6 +31,7 @@ function serviceWith(overrides = {}) {
   };
   s.queryProviderRows = async () => overrides.providerRows ?? [];
   s.queryDailyRows = async () => overrides.dailyRows ?? [];
+  s.queryRecentRows = async () => overrides.recentRows ?? [];
   return { s, calls: () => calls };
 }
 
@@ -81,6 +82,35 @@ test("stats derive tracks without lyrics and list every platform", async () => {
       ["qqMusic", 1],
     ],
   );
+});
+
+test("recently added tracks expose createdAt as UNIX milliseconds", async () => {
+  const createdAt = new Date(Date.UTC(2026, 9, 24, 12));
+  const { s } = serviceWith({
+    recentRows: [
+      {
+        id: "a",
+        title: "Song",
+        artists: ["Artist"],
+        album: null,
+        lyricsType: "word",
+        artwork: null,
+        createdAt,
+      },
+    ],
+  });
+  const stats = await s.getStats();
+  assert.deepEqual(stats.recentlyAdded, [
+    {
+      id: "a",
+      title: "Song",
+      artists: ["Artist"],
+      album: null,
+      lyricsType: "word",
+      artwork: null,
+      createdAt: createdAt.getTime(),
+    },
+  ]);
 });
 
 test("results are cached within the TTL and concurrent misses share one query", async () => {

@@ -1,3 +1,6 @@
+import type { LyricsType } from "./lyrics.js";
+import type { ArtworkMetadata } from "./track.js";
+
 export interface LibraryStatsTotals {
   tracks: number;
   withLyrics: number;
@@ -36,10 +39,22 @@ export interface LibraryDailyStats {
   count: number;
 }
 
+export interface LibraryRecentTrack {
+  id: string;
+  title: string;
+  artists: string[];
+  album: string | null;
+  lyricsType: LyricsType | null;
+  artwork: ArtworkMetadata | null;
+  // UNIX milliseconds
+  createdAt: number;
+}
+
 export interface LibraryStats {
   generatedAt: number;
   totals: LibraryStatsTotals;
   providers: LibraryProviderStats[];
   platforms: LibraryPlatformStats[];
   dailyAdded: LibraryDailyStats[];
+  recentlyAdded: LibraryRecentTrack[];
 }

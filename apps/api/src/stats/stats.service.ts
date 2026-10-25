@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   count,
   DatabaseClient,
+  desc,
   gte,
   isNotNull,
   sql,
@@ -11,6 +12,7 @@ import type {
   LibraryDailyStats,
   LibraryPlatform,
   LibraryProviderStats,
+  LibraryRecentTrack,
   LibraryStats,
   LibraryStatsTotals,
 } from "@repo/types";
@@ -20,6 +22,7 @@ import { DATABASE_CONNECTION } from "../database/database.constants";
 // Aggregates scan the whole table, so a busy stats page shares one result per window
 const STATS_CACHE_TTL_MS = 60_000;
 const DAILY_WINDOW_DAYS = 30;
+const RECENT_TRACKS_LIMIT = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type TotalsRow = Omit<LibraryStatsTotals, "none"> &
@@ -35,6 +38,8 @@ interface DailyRow {
   date: string;
   value: number;
 }
+
+type RecentRow = Omit<LibraryRecentTrack, "createdAt"> & { createdAt: Date };
 
 const countWhere = (condition: ReturnType<typeof sql>) =>
   sql<number>`count(*) filter (where ${condition})`.mapWith(Number);
@@ -70,10 +75,11 @@ export class StatsService {
 
   private async computeStats(): Promise<LibraryStats> {
     const now = Date.now();
-    const [totals, providerRows, dailyRows] = await Promise.all([
+    const [totals, providerRows, dailyRows, recentRows] = await Promise.all([
       this.queryTotals(),
       this.queryProviderRows(),
       this.queryDailyRows(now),
+      this.queryRecentRows(),
     ]);
 
     const platforms: LibraryPlatform[] = [
@@ -103,6 +109,10 @@ export class StatsService {
         count: totals[platform],
       })),
       dailyAdded: fillDailyRows(dailyRows, now),
+      recentlyAdded: recentRows.map((row) => ({
+        ...row,
+        createdAt: new Date(row.createdAt).getTime(),
+      })),
     };
   }
 
@@ -146,6 +156,22 @@ export class StatsService {
       .from(tracks)
       .where(gte(tracks.createdAt, new Date(startOfWindow(now))))
       .groupBy(day);
+  }
+
+  private async queryRecentRows(): Promise<RecentRow[]> {
+    return this.db
+      .select({
+        id: tracks.id,
+        title: tracks.title,
+        artists: tracks.artists,
+        album: tracks.album,
+        lyricsType: tracks.lyricsType,
+        artwork: tracks.artwork,
+        createdAt: tracks.createdAt,
+      })
+      .from(tracks)
+      .orderBy(desc(tracks.createdAt))
+      .limit(RECENT_TRACKS_LIMIT);
   }
 }
 
