@@ -5,8 +5,19 @@ description: The LyricsDB API exposes REST and Server-Sent Events endpoints for 
 
 ## Base URLs
 
-- **API Base URL**: `http://localhost:4000/api`
+### Free public API (recommended)
+
+- **API Base URL**: `https://lyricsdb.kollod.dev/api`
+- **Swagger Interactive OpenAPI Explorer**: [`https://lyricsdb.kollod.dev/api/docs`](https://lyricsdb.kollod.dev/api/docs)
+
+Free to use, with no API key or sign-up. It comes with a large, already-built lyrics library and fair-use [rate limits](/docs/rate-limits).
+
+### Self-hosted instance
+
+- **API Base URL**: `http://localhost:4000/api` (or your own domain)
 - **Swagger Interactive OpenAPI Explorer**: `http://localhost:4000/api/docs`
+
+A self-hosted instance starts with an empty database. See [Self-Hosting](/docs/self-hosting).
 
 ---
 
@@ -40,7 +51,7 @@ description: The LyricsDB API exposes REST and Server-Sent Events endpoints for 
 
 ## Rate Limiting Summary
 
-LyricsDB enforces **differentiated IP rate limits**:
+The free public API enforces **differentiated IP rate limits** (self-hosted instances use the same defaults):
 - **Cached Database Reads**: **60 requests / minute per IP** (~2ms response).
 - **Uncached Live Resolutions**: **6 requests / minute per IP** (protects upstream services from rate limits).
 

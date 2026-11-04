@@ -1,7 +1,19 @@
 ---
 title: Quick Start
-description: Get started with LyricsDB by fetching synced lyrics and track metadata for any song using the REST API.
+description: Get started with LyricsDB by fetching synced lyrics and track metadata for any song using the free public REST API.
 ---
+
+The quickest way to start is the **free public API**. There's nothing to install, no API key and no sign-up:
+
+```
+https://lyricsdb.kollod.dev/api
+```
+
+It already holds a large library of cached lyrics, so most popular songs come back instantly. Usage is free within fair-use [rate limits](/docs/rate-limits) (60 requests/min for cached songs, 6 requests/min for new songs, per IP).
+
+<Callout title="Running your own instance?" type="info">
+  Every example below works on a self-hosted instance too. Just replace `https://lyricsdb.kollod.dev` with your own address, such as `http://localhost:4000`. See [Self-Hosting](/docs/self-hosting) for setup.
+</Callout>
 
 ## 1. Fetch Lyrics by Streaming URL
 
@@ -9,7 +21,7 @@ You can pass a track link directly from Spotify, Apple Music, Deezer, NetEase, o
 
 ```bash
 # Fetch Apple Music-style TTML XML lyrics
-curl -X GET "http://localhost:4000/api/lyrics?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=ttml"
+curl -X GET "https://lyricsdb.kollod.dev/api/lyrics?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=ttml"
 ```
 
 ## 2. Fetch Lyrics by Platform & ID
@@ -18,10 +30,10 @@ You can also target a platform explicitly using `platform` and `id`:
 
 ```bash
 # Fetch structured compact JSON lyrics via Spotify Track ID
-curl -X GET "http://localhost:4000/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=json"
+curl -X GET "https://lyricsdb.kollod.dev/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=json"
 
 # Fetch line-by-line LRC lyrics via NetEase Song ID
-curl -X GET "http://localhost:4000/api/lyrics?platform=netease&id=2755500197&format=lrc"
+curl -X GET "https://lyricsdb.kollod.dev/api/lyrics?platform=netease&id=2755500197&format=lrc"
 ```
 
 ## 3. Look Up or Synchronize Track Metadata
@@ -29,7 +41,7 @@ curl -X GET "http://localhost:4000/api/lyrics?platform=netease&id=2755500197&for
 To retrieve track metadata (such as ISRC, matched platform IDs, album art, and duration) without raw lyrics payloads:
 
 ```bash
-curl -X GET "http://localhost:4000/api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT"
+curl -X GET "https://lyricsdb.kollod.dev/api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT"
 ```
 
 Example response:
@@ -71,7 +83,7 @@ Example response:
 For uncached or newly indexed tracks, you can monitor the live resolution lifecycle over Server-Sent Events:
 
 ```bash
-curl -N "http://localhost:4000/api/lyrics/stream?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=json"
+curl -N "https://lyricsdb.kollod.dev/api/lyrics/stream?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=json"
 ```
 
 ---

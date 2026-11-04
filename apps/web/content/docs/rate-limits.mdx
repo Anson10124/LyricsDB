@@ -5,6 +5,10 @@ description: Learn how LyricsDB protects upstream providers, prevents database s
 
 ## Overview
 
+<Callout title="These are the limits for the free public API" type="info">
+  The free public API at `https://lyricsdb.kollod.dev/api` uses the limits on this page. Using it is free, with no API key. If you need more than this, you can [self-host](/docs/self-hosting) your own instance, but it will start with an empty database.
+</Callout>
+
 LyricsDB implements a multi-tier protection architecture designed to:
 1. **Prevent Upstream Provider Exhaustion**: Protect external music services (Spotify, Apple Music, Deezer, NetEase, QQ Music, Musixmatch, LRCLIB) from rate limits and captchas.
 2. **Eliminate Database Pollution**: Reject malformed platform IDs, unverified URLs, and invalid metadata before touching PostgreSQL.
