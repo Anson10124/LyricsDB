@@ -141,6 +141,19 @@ export function isPlaceholderText(str: string): boolean {
   return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(norm));
 }
 
+// Opening lines of the generated gibberish Musixmatch serves as decoy lyrics
+// ("Wob gopini den / Tefe woxica fero / ...")
+const MUSIXMATCH_DECOY_LINES = [" wob gopini den ", " tefe woxica fero "];
+
+// Detects Musixmatch's decoy lyrics in any format: LRC, plain text, or RichSync
+// JSON (whose "x" field holds each full line). Compares whole words so that
+// timestamps, JSON keys and punctuation in between do not matter.
+export function isMusixmatchDecoyLyrics(rawText: string): boolean {
+  if (!rawText || typeof rawText !== "string") return false;
+  const words = ` ${(rawText.toLowerCase().match(/[a-z]+/g) ?? []).join(" ")} `;
+  return MUSIXMATCH_DECOY_LINES.some((line) => words.includes(line));
+}
+
 export function isPlaceholderLyricText(
   rawText: string,
   metadata?: { title?: string; artist?: string },
@@ -151,6 +164,7 @@ export function isPlaceholderLyricText(
   if (!trimmed) return true;
 
   if (isPlaceholderText(trimmed)) return true;
+  if (isMusixmatchDecoyLyrics(trimmed)) return true;
 
   // Remove LRC timestamp tags: [00:00.00], [00:00.000], [00:00], etc.
   // Remove LRC word timestamp tags: <00:00.00>, <00:00.000>, <00:00>

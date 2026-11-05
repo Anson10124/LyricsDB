@@ -1,6 +1,11 @@
 import { eq } from "drizzle-orm";
 import {
+  MUSIXMATCH_API_BASE,
+  MUSIXMATCH_APP_ID,
+  MUSIXMATCH_USER_AGENT,
   fetchAnonymousSpotifyToken,
+  generateMusixmatchRandomId,
+  isUsableMusixmatchToken,
   runWithoutAbortSignal,
 } from "@repo/music-resolver";
 import { db as defaultDb, type DatabaseClient } from "./client.js";
@@ -197,36 +202,27 @@ export async function refreshSpotifyToken(
   }));
 }
 
-const MUSIXMATCH_PROVIDER = "musixmatch";
+// Tokens are tied to the app_id they were issued for. The key moved off the old
+// "musixmatch" row, which holds a desktop-host token (often the all-zero dummy)
+const MUSIXMATCH_PROVIDER = "musixmatch-mobile";
 const MUSIXMATCH_TOKEN_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
-
-function generateMusixmatchRandomId(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz";
-  let result = "";
-  for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-}
 
 export async function fetchAnonymousMusixmatchToken(options?: {
   timeout?: number;
   maxRetries?: number;
 }): Promise<string> {
   const timeout = options?.timeout ?? 8000;
-  const maxRetries = options?.maxRetries ?? 8;
+  const maxRetries = options?.maxRetries ?? 3;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const t = generateMusixmatchRandomId();
-    const url = `https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0&t=${t}`;
+    let captcha = false;
+    const url = new URL(`${MUSIXMATCH_API_BASE}/token.get`);
+    url.searchParams.set("app_id", MUSIXMATCH_APP_ID);
+    url.searchParams.set("t", generateMusixmatchRandomId());
 
     try {
       const res = await fetch(url, {
-        headers: {
-          authority: "apic-desktop.musixmatch.com",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-        },
+        headers: { "User-Agent": MUSIXMATCH_USER_AGENT },
         signal: AbortSignal.timeout(timeout),
       });
 
@@ -239,19 +235,22 @@ export async function fetchAnonymousMusixmatchToken(options?: {
         };
 
         const token = data.message?.body?.user_token;
-        if (token && token !== "Upgrade. Paid script.") {
+        if (isUsableMusixmatchToken(token)) {
           return token;
         }
 
-        const hint = data.message?.header?.hint;
-        if (hint === "captcha" || data.message?.header?.status_code === 401) {
-          // Wait briefly before next attempt
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          continue;
+        // A captcha answer lasts well beyond a few seconds, so stop here and let
+        // the refresh-failure backoff space out the next attempt
+        if (data.message?.header?.hint === "captcha") {
+          captcha = true;
         }
       }
     } catch {
       // Retry on network/timeout error
+    }
+
+    if (captcha) {
+      throw new Error("Musixmatch token request was answered with a captcha");
     }
 
     if (attempt < maxRetries - 1) {

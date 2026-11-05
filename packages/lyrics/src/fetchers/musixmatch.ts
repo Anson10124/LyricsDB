@@ -3,6 +3,13 @@ import {
   refreshMusixmatchToken,
   type DatabaseClient,
 } from "@repo/database";
+import {
+  MUSIXMATCH_API_BASE,
+  MUSIXMATCH_APP_ID,
+  MUSIXMATCH_USER_AGENT,
+  generateMusixmatchRandomId,
+  isMusixmatchDecoyTrackId,
+} from "@repo/music-resolver";
 import { isPlaceholderLyricText } from "../utils/info-lines.js";
 
 export interface MusixmatchLyricsQueryParams {
@@ -37,15 +44,6 @@ export interface MusixmatchLyricsResponse {
 export interface MusixmatchFetchOptions {
   timeout?: number;
   dbClient?: DatabaseClient;
-}
-
-function generateRandomId(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz";
-  let result = "";
-  for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
 }
 
 export async function fetchMusixmatchLyrics(
@@ -98,6 +96,8 @@ export async function fetchMusixmatchLyrics(
 
     // 1. Extract Track Metadata
     const matcherTrack = macroCalls["matcher.track.get"]?.message?.body?.track;
+    // A decoy track means every lyric in this response belongs to another song
+    if (isMusixmatchDecoyTrackId(matcherTrack?.track_id)) return null;
     if (matcherTrack) {
       response.track = {
         trackId: matcherTrack.track_id,
@@ -221,17 +221,15 @@ async function executeMusixmatchMacroQuery(
   token: string,
   timeout = 8000,
 ): Promise<MusixmatchMacroApiResponse | null> {
-  const url = new URL(
-    "https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get",
-  );
+  const url = new URL(`${MUSIXMATCH_API_BASE}/macro.subtitles.get`);
   url.searchParams.set("namespace", "lyrics_richsynched");
   url.searchParams.set("optional_calls", "track.richsync");
   url.searchParams.set("subtitle_format", "lrc");
   url.searchParams.set("f_subtitle_length_max_deviation", "40");
   url.searchParams.set("usertoken", token);
-  url.searchParams.set("app_id", "web-desktop-app-v1.0");
+  url.searchParams.set("app_id", MUSIXMATCH_APP_ID);
   url.searchParams.set("format", "json");
-  url.searchParams.set("t", generateRandomId());
+  url.searchParams.set("t", generateMusixmatchRandomId());
 
   // Priority 1: Exact Spotify ID
   if (params.spotifyId?.trim()) {
@@ -268,11 +266,7 @@ async function executeMusixmatchMacroQuery(
 
   try {
     const res = await fetch(url.toString(), {
-      headers: {
-        authority: "apic-desktop.musixmatch.com",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-      },
+      headers: { "User-Agent": MUSIXMATCH_USER_AGENT },
       signal: controller.signal,
     });
 

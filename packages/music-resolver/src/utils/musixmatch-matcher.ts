@@ -1,5 +1,13 @@
 import type { EnrichedMusixmatchMetadata, ResolveOptions } from "../types.js";
 import { HttpClient } from "./http.js";
+import {
+  MUSIXMATCH_API_BASE,
+  MUSIXMATCH_APP_ID,
+  MUSIXMATCH_USER_AGENT,
+  generateMusixmatchRandomId,
+  isMusixmatchDecoyTrackId,
+  isUsableMusixmatchToken,
+} from "./musixmatch-api.js";
 
 export interface MusixmatchMatchParams {
   spotifyId?: string;
@@ -18,20 +26,12 @@ export interface MusixmatchMatcherOptions extends ResolveOptions {
   ) => Promise<string>;
 }
 
-function generateRandomId(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz";
-  let result = "";
-  for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-}
-
 async function fetchAnonymousTokenFallback(timeout = 8000): Promise<string> {
-  const maxRetries = 5;
+  const maxRetries = 3;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const t = generateRandomId();
-    const url = `https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0&t=${t}`;
+    const url = new URL(`${MUSIXMATCH_API_BASE}/token.get`);
+    url.searchParams.set("app_id", MUSIXMATCH_APP_ID);
+    url.searchParams.set("t", generateMusixmatchRandomId());
 
     try {
       const res = await HttpClient.get<{
@@ -39,19 +39,18 @@ async function fetchAnonymousTokenFallback(timeout = 8000): Promise<string> {
           header?: { status_code?: number; hint?: string };
           body?: { user_token?: string };
         };
-      }>(url, {
-        headers: {
-          authority: "apic-desktop.musixmatch.com",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-        },
+      }>(url.toString(), {
+        headers: { "User-Agent": MUSIXMATCH_USER_AGENT },
         timeout,
       });
 
       const token = res?.message?.body?.user_token;
-      if (token && token !== "Upgrade. Paid script.") {
+      if (isUsableMusixmatchToken(token)) {
         return token;
       }
+
+      // A captcha answer does not clear up within seconds, so retrying only adds load
+      if (res?.message?.header?.hint === "captcha") break;
     } catch {
       // Retry
     }
@@ -103,18 +102,16 @@ export async function matchTrackWithMusixmatch(
     return null;
   }
 
-  const baseUrl =
-    options?.apiUrl ||
-    "https://apic-desktop.musixmatch.com/ws/1.1/matcher.track.get";
+  const baseUrl = options?.apiUrl || `${MUSIXMATCH_API_BASE}/matcher.track.get`;
 
   const executeMatcherCall = async (
     token: string,
   ): Promise<MusixmatchTrackResponse | null> => {
     const url = new URL(baseUrl);
-    url.searchParams.set("app_id", "web-desktop-app-v1.0");
+    url.searchParams.set("app_id", MUSIXMATCH_APP_ID);
     url.searchParams.set("format", "json");
     url.searchParams.set("usertoken", token);
-    url.searchParams.set("t", generateRandomId());
+    url.searchParams.set("t", generateMusixmatchRandomId());
 
     if (spotifyId) {
       url.searchParams.set("track_spotify_id", spotifyId);
@@ -137,11 +134,7 @@ export async function matchTrackWithMusixmatch(
 
     try {
       return await HttpClient.get<MusixmatchTrackResponse>(url.toString(), {
-        headers: {
-          authority: "apic-desktop.musixmatch.com",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-        },
+        headers: { "User-Agent": MUSIXMATCH_USER_AGENT },
         timeout: options?.timeout ?? 8000,
         retries: 0,
       });
@@ -170,7 +163,8 @@ export async function matchTrackWithMusixmatch(
     }
 
     const tr = res.message?.body?.track;
-    if (!tr) return null;
+    // A decoy is a different song, so it must not fill in this track's metadata
+    if (!tr || isMusixmatchDecoyTrackId(tr.track_id)) return null;
 
     const extractedIsrc =
       tr.track_isrc?.trim() ||
