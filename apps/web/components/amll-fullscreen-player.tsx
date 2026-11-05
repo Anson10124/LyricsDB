@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { SanitizedTrack, TrackRecord } from "@repo/types";
 import type { LyricLine } from "@applemusic-like-lyrics/core";
 import { formatArtworkUrl } from "@/lib/artwork";
+import { uniqueArtists } from "@/lib/utils";
 import {
   PrebuiltLyricPlayer,
   musicIdAtom,
@@ -25,6 +26,9 @@ import {
   onRequestPrevSongAtom,
 } from "@applemusic-like-lyrics/react-full";
 import "@applemusic-like-lyrics/react-full/style.css";
+import { installMediaPlayGuard } from "@/lib/media-play-guard";
+
+installMediaPlayGuard();
 
 interface AmllFullscreenPlayerProps {
   track: SanitizedTrack<TrackRecord>;
@@ -114,25 +118,44 @@ export function AmllFullscreenPlayer({
     setOnRequestPrevSong,
   ]);
 
+  const animatedVideo =
+    track.artwork?.squareVideoUrl || track.artwork?.tallVideoUrl;
+  const coverIsVideo = Boolean(animatedVideo);
+  const coverUrl = animatedVideo || formatArtworkUrl(track.artwork, 1000) || "";
+
+  // AMLL keeps its state in global atoms, so on open they still hold the
+  // previous song's cover. Its background loads covers without cancelling
+  // older loads, so a slow old cover could land last and stay on screen.
+  // The player is therefore only shown once the atoms hold this song's cover.
+  const currentCover = useAtomValue(musicCoverAtom);
+  const coverReady = currentCover === coverUrl;
+
+  useEffect(() => {
+    setMusicCover(coverUrl);
+    setMusicCoverIsVideo(coverIsVideo);
+  }, [coverUrl, coverIsVideo, setMusicCover, setMusicCoverIsVideo]);
+
+  // Clear the cover on close so the next song never starts from this one
+  useEffect(
+    () => () => {
+      setMusicCover("");
+      setMusicCoverIsVideo(false);
+    },
+    [setMusicCover, setMusicCoverIsVideo],
+  );
+
   // Sync track metadata and lyrics to AMLL atoms
   useEffect(() => {
-    const animatedVideo =
-      track.artwork?.squareVideoUrl ||
-      track.artwork?.tallVideoUrl;
-    const isVideo = Boolean(animatedVideo);
-    const coverUrl =
-      animatedVideo || formatArtworkUrl(track.artwork, 1000) || "";
-
     setMusicId(track.id || track.spotifyId || track.appleMusicId || "track");
     setMusicName(track.title || "Unknown Track");
+    // AMLL keys each artist by name, so repeated names must be removed
+    const artists = uniqueArtists(track.artists);
     setMusicArtists(
-      track.artists && track.artists.length > 0
-        ? track.artists.map((name, i) => ({ name, id: `${i}` }))
+      artists.length > 0
+        ? artists.map((name, i) => ({ name, id: `${i}` }))
         : [{ name: "Unknown Artist", id: "0" }],
     );
     setMusicAlbumName(track.album || "");
-    setMusicCover(coverUrl);
-    setMusicCoverIsVideo(isVideo);
     setMusicDuration(durationMs);
     setMusicLyricLines(lyricLines);
     setIsLyricPageOpened(true);
@@ -147,15 +170,12 @@ export function AmllFullscreenPlayer({
     track.title,
     track.artists,
     track.album,
-    track.artwork,
     durationMs,
     lyricLines,
     setMusicId,
     setMusicName,
     setMusicArtists,
     setMusicAlbumName,
-    setMusicCover,
-    setMusicCoverIsVideo,
     setMusicDuration,
     setMusicLyricLines,
     setIsLyricPageOpened,
@@ -204,7 +224,7 @@ export function AmllFullscreenPlayer({
   return (
     <div className="fixed inset-0 z-50 flex h-dvh w-screen flex-col overflow-hidden bg-black text-white select-none">
       <div className="relative h-full w-full">
-        <PrebuiltLyricPlayer className="h-full w-full" />
+        {coverReady && <PrebuiltLyricPlayer className="h-full w-full" />}
       </div>
     </div>
   );

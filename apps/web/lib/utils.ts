@@ -14,12 +14,27 @@ export function formatDuration(
   unit: "ms" | "s" = "ms",
 ): string {
   if (!duration || duration <= 0) return "0:00";
-  const totalSeconds = Math.floor(
-    unit === "ms" ? duration / 1000 : duration,
-  );
+  const totalSeconds = Math.floor(unit === "ms" ? duration / 1000 : duration);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Drops blank and repeated artist names (some sources list the same artist
+ * twice, e.g. as main and featured), keeping the original order.
+ */
+export function uniqueArtists(artists?: string[] | null): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of artists ?? []) {
+    const name = raw.trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
 }
 
 /**

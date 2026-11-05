@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, Copy, Download, FileCode, WrapText } from "lucide-react";
 import type { SanitizedTrack, TrackRecord } from "@repo/types";
 import type { LyricsViewFormat } from "@/lib/lyrics-formatter";
+import { cn } from "@/lib/utils";
 
 interface LyricsCodeViewerProps {
   format: LyricsViewFormat;
@@ -267,9 +268,10 @@ export function LyricsCodeViewer({
 
   return (
     <div
-      className={`group relative flex h-[520px] w-full flex-col rounded-2xl border border-border/70 bg-zinc-950/90 text-zinc-100 shadow-xl backdrop-blur-md overflow-hidden ${
-        className || ""
-      }`}
+      className={cn(
+        "group relative flex h-[520px] w-full flex-col rounded-2xl border border-border/70 bg-zinc-950/90 text-zinc-100 shadow-xl backdrop-blur-md overflow-hidden",
+        className,
+      )}
     >
       {/* Top Header Bar */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-2.5 text-xs">

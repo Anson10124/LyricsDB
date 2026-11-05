@@ -22,7 +22,7 @@ import { DATABASE_CONNECTION } from "../database/database.constants";
 // Aggregates scan the whole table, so a busy stats page shares one result per window
 const STATS_CACHE_TTL_MS = 60_000;
 const DAILY_WINDOW_DAYS = 30;
-const RECENT_TRACKS_LIMIT = 5;
+const RECENT_TRACKS_LIMIT = 12;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type TotalsRow = Omit<LibraryStatsTotals, "none"> &

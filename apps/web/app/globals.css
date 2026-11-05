@@ -265,3 +265,14 @@ body {
 .UjzbJG_controls button:last-child {
   opacity: 0 !important;
 }
+
+/* Soft top/bottom fade so lyrics dissolve at the edges of their column */
+.lyrics-mask {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 14%,
+    black 82%,
+    transparent 100%
+  );
+}

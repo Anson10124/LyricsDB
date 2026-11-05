@@ -140,7 +140,7 @@ export class LibraryStatsResponseDto implements LibraryStats {
 
   @ApiProperty({
     type: [LibraryRecentTrackDto],
-    description: "The 5 most recently added tracks, newest first",
+    description: "The 12 most recently added tracks, newest first",
   })
   recentlyAdded!: LibraryRecentTrackDto[];
 }

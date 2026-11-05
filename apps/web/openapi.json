@@ -2279,7 +2279,7 @@
     },
     "/api/stats": {
       "get": {
-        "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days. Results are cached for up to 60 seconds.",
+        "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days, and the 12 most recently added tracks. Results are cached for up to 60 seconds.",
         "operationId": "StatsController_getStats[0]",
         "parameters": [],
         "responses": {
@@ -2302,7 +2302,7 @@
     },
     "/stats": {
       "get": {
-        "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days. Results are cached for up to 60 seconds.",
+        "description": "Returns aggregate counts over the cached track library: lyrics sync types (word, line, plain, none), per-provider breakdown, translation and romaji coverage, platform ID coverage, and tracks added per day over the last 30 days, and the 12 most recently added tracks. Results are cached for up to 60 seconds.",
         "operationId": "StatsController_getStats[1]",
         "parameters": [],
         "responses": {
@@ -3012,6 +3012,65 @@
           "count"
         ]
       },
+      "LibraryRecentTrackDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Track ID",
+            "example": "6f1c2b9e-1d2a-4c3b-9e8f-7a6b5c4d3e2f"
+          },
+          "title": {
+            "type": "string",
+            "description": "Track title",
+            "example": "Blinding Lights"
+          },
+          "artists": {
+            "example": [
+              "The Weeknd"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "album": {
+            "type": "string",
+            "nullable": true,
+            "example": "After Hours"
+          },
+          "lyricsType": {
+            "type": "string",
+            "enum": [
+              "word",
+              "line",
+              "plain"
+            ],
+            "nullable": true,
+            "description": "Lyrics sync type, null if the track has no lyrics",
+            "example": "word"
+          },
+          "artwork": {
+            "type": "object",
+            "nullable": true,
+            "description": "Artwork metadata, if known"
+          },
+          "createdAt": {
+            "type": "number",
+            "description": "UNIX millisecond timestamp when the track was added",
+            "example": 1787262680794
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "artists",
+          "album",
+          "lyricsType",
+          "artwork",
+          "createdAt"
+        ]
+      },
       "LibraryStatsResponseDto": {
         "type": "object",
         "properties": {
@@ -3042,6 +3101,13 @@
             "items": {
               "$ref": "#/components/schemas/LibraryDailyStatsDto"
             }
+          },
+          "recentlyAdded": {
+            "description": "The 12 most recently added tracks, newest first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryRecentTrackDto"
+            }
           }
         },
         "required": [
@@ -3049,7 +3115,8 @@
           "totals",
           "providers",
           "platforms",
-          "dailyAdded"
+          "dailyAdded",
+          "recentlyAdded"
         ]
       }
     }

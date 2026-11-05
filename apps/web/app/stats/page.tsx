@@ -12,6 +12,7 @@ import { ProviderBreakdown } from "@/components/stats/provider-breakdown";
 import { TracksOverTimeChart } from "@/components/stats/tracks-over-time-chart";
 import { CoverageCard } from "@/components/stats/coverage-card";
 import { RecentlyAdded } from "@/components/stats/recently-added";
+import { SiteHeader } from "@/components/site-header";
 
 const updatedAt = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
@@ -62,7 +63,8 @@ export default function StatsPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:py-12">
+      <SiteHeader />
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-24 pb-8 sm:pb-12">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-2">
             <Link
@@ -131,7 +133,7 @@ export default function StatsPage() {
               </div>
             </div>
             <RecentlyAdded
-              tracks={stats.recentlyAdded ?? []}
+              tracks={(stats.recentlyAdded ?? []).slice(0, 5)}
               now={stats.generatedAt}
             />
           </div>

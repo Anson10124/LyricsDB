@@ -10,19 +10,19 @@ import type {
 } from "@repo/types";
 import { InputBar } from "@/components/input-bar";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
-import { LyricsView } from "@/components/lyrics-view";
+import { TrackView } from "@/components/track/track-view";
+import { SiteHeader } from "@/components/site-header";
+import { LibraryShowcase } from "@/components/home/library-showcase";
+import { fade, rise, spring, stagger } from "@/lib/motion";
 import { LiveActivityToaster } from "@/components/live-activity-toaster";
 import type { DeezerTrack } from "@/lib/deezer";
 
-import Link from "next/link";
 import { getLyricsStreamUrl } from "@/lib/api-client";
 import {
   applyStreamEvent,
   completeProgress,
   initialProgress,
 } from "@/lib/stream-progress";
-
-
 
 export default function Home() {
   const router = useRouter();
@@ -86,7 +86,6 @@ export default function Home() {
     const streamUrl = getLyricsStreamUrl({ url, platform, id });
     const es = new EventSource(streamUrl);
     eventSourceRef.current = es;
-
 
     es.onmessage = (event) => {
       try {
@@ -204,59 +203,70 @@ export default function Home() {
     };
   }, []);
 
+  const isSearching = viewState === "search";
+
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors overflow-hidden px-2">
+    <main className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+      <SiteHeader tone={viewState === "lyrics" ? "overlay" : "default"} />
+
       <AnimatePresence mode="wait">
-        {viewState === "search" && (
+        {isSearching && (
           <motion.div
             key="search-view"
-            layout
-            initial={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            animate={{
-              opacity: 1,
-              filter: "blur(0px)",
-              scale: 1,
-              y: isDropdownOpen ? -85 : 0,
-            }}
-            exit={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            transition={{
-              duration: 0.4,
-              ease: [0.23, 1, 0.32, 1],
-              y: { type: "spring", stiffness: 320, damping: 28 },
-              layout: { type: "spring", stiffness: 320, damping: 28 },
-            }}
-            className="flex flex-col items-center w-full"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8, scale: 0.985 }}
+            transition={{ ...spring.smooth, opacity: fade }}
+            className="relative flex min-h-screen flex-col items-center justify-center gap-6 py-24 sm:gap-8"
           >
-            <div className="flex flex-col items-center gap-3 text-center mb-6 max-w-lg z-10">
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+            <motion.div
+              variants={stagger(0.08)}
+              initial="hidden"
+              animate="show"
+              className="relative z-30 flex w-full flex-col items-center"
+            >
+              <motion.h1
+                variants={rise}
+                className="text-5xl font-extrabold tracking-tight md:text-6xl"
+              >
                 Lyrics<span className="text-primary">DB</span>
-              </h1>
+              </motion.h1>
 
-              <p className="text-sm md:text-base text-muted-foreground">
+              <motion.p
+                variants={rise}
+                className="mt-3 mb-8 max-w-lg px-4 text-center text-sm text-muted-foreground md:text-base"
+              >
                 Search your favorite song or paste a link from Spotify, Apple
                 Music, or Deezer to get synchronized lyrics instantly
-              </p>
-            </div>
+              </motion.p>
 
-            <InputBar
-              onSearchUrl={handleSearchUrl}
-              onSelectTrack={handleSelectTrack}
-              onOpenChange={setIsDropdownOpen}
-              isLoading={false}
-            />
+              <motion.div
+                variants={rise}
+                className="flex w-full justify-center"
+              >
+                <InputBar
+                  onSearchUrl={handleSearchUrl}
+                  onSelectTrack={handleSelectTrack}
+                  onOpenChange={setIsDropdownOpen}
+                  isLoading={false}
+                />
+              </motion.div>
+            </motion.div>
+
+            <LibraryShowcase dimmed={isDropdownOpen} />
           </motion.div>
         )}
 
         {viewState === "progress" && (
           <motion.div
             key="progress-view"
-            initial={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }}
-            exit={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-            className="flex flex-col items-center w-full"
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.985 }}
+            transition={{ ...spring.smooth, opacity: fade }}
+            className="flex min-h-screen w-full flex-col items-center justify-center px-2"
           >
-            <div className="flex flex-col items-center gap-1.5 text-center mb-6">
+            <div className="mb-6 flex flex-col items-center gap-1.5 text-center">
               <h2 className="text-xl font-bold tracking-tight text-foreground">
                 Resolving Track
               </h2>
@@ -272,33 +282,23 @@ export default function Home() {
         {viewState === "lyrics" && result && (
           <motion.div
             key="lyrics-view"
-            initial={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }}
-            exit={{ opacity: 0, filter: "blur(12px)", scale: 0.96 }}
-            transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-            className="flex flex-col items-center w-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={fade}
+            className="w-full"
           >
-            <LyricsView
+            <TrackView
               track={result.track}
               rawLyrics={result.lyrics}
-              onReset={handleReset}
+              onBack={handleReset}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="fixed top-4 right-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
-        <Link href="/stats" className="text-sm text-muted-foreground">
-          Stats
-        </Link>
-        <span className="h-3.5 w-px bg-border" aria-hidden />
-        <Link href="/docs" className="text-sm text-muted-foreground">
-          Docs
-        </Link>
-      </div>
-
       <LiveActivityToaster
-        enabled={viewState === "search"}
+        enabled={isSearching}
         ignoredTrackIds={Array.from(userResolvedTrackIdsRef.current)}
       />
     </main>

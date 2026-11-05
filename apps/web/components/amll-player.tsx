@@ -1,15 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import { CaseSensitive, Languages, Maximize, RotateCcw } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  CaseSensitive,
+  Languages,
+  Maximize,
+  Pause,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
 import { convertCompactToAmllLines } from "@/lib/lyrics-formatter";
-import { formatArtworkUrl } from "@/lib/artwork";
+import { press, spring } from "@/lib/motion";
 import "@applemusic-like-lyrics/core/style.css";
 
 const LyricPlayer = dynamic(
@@ -20,12 +29,6 @@ const LyricPlayer = dynamic(
 type LyricLineMouseEvent = Parameters<
   NonNullable<React.ComponentProps<typeof LyricPlayer>["onLyricLineClick"]>
 >[0];
-
-const BackgroundRender = dynamic(
-  () =>
-    import("@applemusic-like-lyrics/react").then((mod) => mod.BackgroundRender),
-  { ssr: false },
-);
 
 const AmllFullscreenPlayer = dynamic(
   () =>
@@ -38,9 +41,51 @@ const AmllFullscreenPlayer = dynamic(
 interface AmllPlayerProps {
   track: SanitizedTrack<TrackRecord>;
   rawLyrics: SyncedLyricsPayload;
+  // Lets the page react to playback (artwork scale, background flow)
+  onPlayingChange?: (playing: boolean) => void;
 }
 
-export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
+function PillButton({
+  label,
+  onClick,
+  active = false,
+  prominent = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  prominent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileHover={{ scale: 1.06 }}
+      whileTap={press}
+      transition={spring.snappy}
+      aria-label={label}
+      aria-pressed={active || undefined}
+      title={label}
+      className={`flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+        prominent
+          ? "size-10 bg-white text-black hover:bg-white/90"
+          : active
+            ? "size-9 bg-white/25 text-white"
+            : "size-9 text-white/70 hover:bg-white/10 hover:text-white"
+      }`}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
+export function AmllPlayer({
+  track,
+  rawLyrics,
+  onPlayingChange,
+}: AmllPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -82,6 +127,11 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
     setIsClient(true);
   }, []);
 
+  // Fullscreen has its own background, so the page one can rest meanwhile
+  useEffect(() => {
+    onPlayingChange?.(isPlaying && !isFullscreen);
+  }, [isPlaying, isFullscreen, onPlayingChange]);
+
   useEffect(() => {
     const onFullscreenChange = () => {
       if (!document.fullscreenElement && isFullscreen) {
@@ -103,7 +153,6 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
 
     playbackStartTimeRef.current = performance.now();
     playbackStartOffsetRef.current = currentTimeRef.current;
-
 
     const intervalId = setInterval(() => {
       if (playbackStartTimeRef.current === null) return;
@@ -180,33 +229,16 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
 
   if (!isClient) {
     return (
-      <div className="flex h-[520px] w-full items-center justify-center rounded-2xl bg-card/60">
-        <div className="size-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="size-8 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
       </div>
     );
   }
 
-  const videoCover =
-    track.artwork?.squareVideoUrl || track.artwork?.tallVideoUrl;
-  const staticCover = formatArtworkUrl(track.artwork, 1000);
-  const albumCover = videoCover || staticCover;
-
   return (
     <>
-      <div className="relative flex h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-foreground/5 text-white select-none font-[family-name:var(--font-inter)]">
-        {albumCover && (
-          <div className="absolute inset-0 z-0 opacity-70 pointer-events-none overflow-hidden">
-            <BackgroundRender
-              album={albumCover}
-              albumIsVideo={Boolean(videoCover)}
-              playing={isPlaying}
-              fps={60}
-              flowSpeed={1}
-            />
-          </div>
-        )}
-
-        <div className="relative z-10 h-full w-full overflow-hidden px-4 sm:px-6 pointer-events-none">
+      <div className="relative h-full w-full select-none overflow-hidden text-white font-[family-name:var(--font-inter)]">
+        <div className="lyrics-mask relative z-10 h-full w-full overflow-hidden pointer-events-none">
           <LyricPlayer
             lyricLines={lyricLines}
             currentTime={currentTime}
@@ -222,71 +254,76 @@ export function AmllPlayer({ track, rawLyrics }: AmllPlayerProps) {
           />
         </div>
 
-        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleOpenFullscreen}
-            className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
-            title="Fullscreen"
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ ...spring.smooth, delay: 0.35 }}
+          className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/10 p-1 shadow-lg shadow-black/20 ring-1 ring-white/15 backdrop-blur-2xl"
+        >
+          <PillButton label="Restart" onClick={handleRestart}>
+            <RotateCcw className="size-4" />
+          </PillButton>
+          <PillButton
+            label={isPlaying ? "Pause" : "Play"}
+            onClick={handleTogglePlay}
+            prominent
           >
-            <Maximize className="size-4" />
-          </button>
-        </div>
-
-        <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
-          {hasRomaji && (
-            <button
-              type="button"
-              onClick={() => setShowRomaji((prev) => !prev)}
-              aria-pressed={showRomaji}
-              className={`flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all cursor-pointer hover:text-white ${
-                showRomaji
-                  ? "bg-white/25 text-white hover:bg-white/35"
-                  : "bg-black/15 text-white/60 hover:bg-black/30"
-              }`}
-              title={showRomaji ? "Hide romanization" : "Show romanization"}
-            >
-              <CaseSensitive className="size-4" />
-            </button>
-          )}
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={isPlaying ? "pause" : "play"}
+                initial={{ opacity: 0, scale: 0.5, rotate: -30 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.5, rotate: 30 }}
+                transition={spring.snappy}
+                className="flex"
+              >
+                {isPlaying ? (
+                  <Pause className="size-4 fill-current" />
+                ) : (
+                  <Play className="size-4 translate-x-px fill-current" />
+                )}
+              </motion.span>
+            </AnimatePresence>
+          </PillButton>
           {hasTranslation && (
-            <button
-              type="button"
+            <PillButton
+              label={showTranslation ? "Hide translation" : "Show translation"}
               onClick={() => setShowTranslation((prev) => !prev)}
-              aria-pressed={showTranslation}
-              className={`flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all cursor-pointer hover:text-white ${
-                showTranslation
-                  ? "bg-white/25 text-white hover:bg-white/35"
-                  : "bg-black/15 text-white/60 hover:bg-black/30"
-              }`}
-              title={showTranslation ? "Hide translation" : "Show translation"}
+              active={showTranslation}
             >
               <Languages className="size-4" />
-            </button>
+            </PillButton>
           )}
-          <button
-            type="button"
-            onClick={handleRestart}
-            className="flex size-9 items-center justify-center rounded-full backdrop-blur-md transition-all bg-black/15 hover:bg-black/30 hover:text-white cursor-pointer"
-            title="Restart"
-          >
-            <RotateCcw className="size-4" />
-          </button>
-        </div>
+          {hasRomaji && (
+            <PillButton
+              label={showRomaji ? "Hide romanization" : "Show romanization"}
+              onClick={() => setShowRomaji((prev) => !prev)}
+              active={showRomaji}
+            >
+              <CaseSensitive className="size-4" />
+            </PillButton>
+          )}
+          <PillButton label="Fullscreen" onClick={handleOpenFullscreen}>
+            <Maximize className="size-4" />
+          </PillButton>
+        </motion.div>
       </div>
 
-      {isFullscreen && (
-        <AmllFullscreenPlayer
-          track={track}
-          lyricLines={lyricLines}
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          durationMs={durationMs}
-          onClose={handleCloseFullscreen}
-          onTogglePlay={handleTogglePlay}
-          onSeek={handleSeek}
-        />
-      )}
+      {/* Portaled so no ancestor stacking context (page header, grid) can sit above it */}
+      {isFullscreen &&
+        createPortal(
+          <AmllFullscreenPlayer
+            track={track}
+            lyricLines={lyricLines}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            durationMs={durationMs}
+            onClose={handleCloseFullscreen}
+            onTogglePlay={handleTogglePlay}
+            onSeek={handleSeek}
+          />,
+          document.body,
+        )}
     </>
   );
 }

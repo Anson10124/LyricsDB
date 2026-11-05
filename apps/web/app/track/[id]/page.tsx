@@ -11,7 +11,9 @@ import type {
   SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
-import { LyricsView } from "@/components/lyrics-view";
+import { TrackView } from "@/components/track/track-view";
+import { SiteHeader } from "@/components/site-header";
+import { fade, spring } from "@/lib/motion";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
 import {
   fetchTrackById,
@@ -278,65 +280,55 @@ export default function TrackPage({ params }: TrackPageProps) {
   };
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors">
-      {loading && (
-        <motion.div
-          key="loading"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center gap-4 text-center"
-        >
-          <div className="flex size-12 items-center justify-center rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-sm font-medium text-muted-foreground">
-            Loading track and lyrics...
-          </p>
-        </motion.div>
-      )}
-
-      {!loading && error && (
-        <motion.div
-          key="error"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center gap-4 text-center max-w-md"
-        >
-          <div className="size-16 rounded-2xl bg-muted/60 flex items-center justify-center">
-            <Music2 className="size-8 text-muted-foreground/60" />
-          </div>
-          <h2 className="text-xl font-bold text-foreground">Track Not Found</h2>
-          <p className="text-sm text-muted-foreground">
-            The track with ID <span className="font-mono text-xs">{id}</span>{" "}
-            could not be found or has not been synchronized yet.
-          </p>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
+    <main className="dark relative min-h-screen bg-background text-foreground">
+      <SiteHeader tone="overlay" />
+      <AnimatePresence mode="wait">
+        {!loading && error && (
+          <motion.div
+            key="error"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...spring.smooth, opacity: fade }}
+            className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center"
           >
-            <ArrowLeft className="size-3.5" />
-            <span>Back to Search</span>
-          </Link>
-        </motion.div>
-      )}
+            <div className="size-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+              <Music2 className="size-8 text-muted-foreground/60" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground">
+              Track Not Found
+            </h2>
+            <p className="max-w-md text-sm text-muted-foreground">
+              The track with ID <span className="font-mono text-xs">{id}</span>{" "}
+              could not be found or has not been synchronized yet.
+            </p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition-colors hover:bg-white/90"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span>Back to Search</span>
+            </Link>
+          </motion.div>
+        )}
 
-      {!loading && track && (
-        <motion.div
-          key="content"
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="flex flex-col items-center w-full"
-        >
-          <LyricsView
-            track={track}
-            rawLyrics={lyrics}
-            onReset={() => router.push("/")}
-            onRefresh={handleRefresh}
-            isRefreshing={refreshing}
-            onMarkCorrect={handleMarkCorrect}
-            isMarkingCorrect={markingCorrect}
-          />
-        </motion.div>
-      )}
+        {!loading && track && (
+          <motion.div
+            key="content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={fade}
+          >
+            <TrackView
+              track={track}
+              rawLyrics={lyrics}
+              onRefresh={handleRefresh}
+              isRefreshing={refreshing}
+              onMarkCorrect={handleMarkCorrect}
+              isMarkingCorrect={markingCorrect}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Turnstile only shows here when Cloudflare needs the visitor to interact */}
       <div
@@ -349,12 +341,12 @@ export default function TrackPage({ params }: TrackPageProps) {
         {panel.open && (
           <motion.aside
             key="refresh-panel"
-            initial={{ opacity: 0, x: 24, filter: "blur(8px)" }}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, x: 24, filter: "blur(8px)" }}
-            transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+            initial={{ opacity: 0, y: 24, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.97 }}
+            transition={{ ...spring.smooth, opacity: fade }}
             aria-live="polite"
-            className="fixed bottom-4 left-4 right-4 z-40 flex max-h-[calc(100vh-2rem)] flex-col gap-3 overflow-y-auto rounded-3xl border border-border/70 bg-background/85 p-3 shadow-lg backdrop-blur-md sm:left-auto sm:w-[400px]"
+            className="fixed bottom-4 left-4 right-4 z-40 flex max-h-[calc(100vh-2rem)] flex-col gap-3 overflow-y-auto rounded-3xl border border-white/10 bg-zinc-900/75 p-3 shadow-2xl backdrop-blur-2xl sm:left-auto sm:w-[400px]"
           >
             <div className="flex items-start justify-between gap-3 px-1 pt-1">
               <div className="flex min-w-0 flex-col gap-0.5">
