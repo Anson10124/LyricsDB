@@ -19,6 +19,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiProduces,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -396,6 +397,61 @@ export class TracksController {
     @ClientIp() clientIp: string,
   ) {
     return this.tracksService.findNeighbors(id, clientIp);
+  }
+
+  @ApiOperation({
+    summary: "Get a short audio preview to play along with the lyrics",
+    description:
+      "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview (30 RPM/IP).",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Track internal database UUID v4",
+    example: "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  })
+  @ApiProduces("audio/mpeg")
+  @ApiOkResponse({
+    description: "MP3 audio clip",
+    content: { "audio/mpeg": { schema: { type: "string", format: "binary" } } },
+    headers: {
+      "X-Preview-Start-Ms": {
+        description: "Position in the full song where the clip starts, in ms",
+        schema: { type: "integer", example: 0 },
+      },
+      "X-Preview-End-Ms": {
+        description: "Position in the full song where the clip ends, in ms",
+        schema: { type: "integer", example: 30040 },
+      },
+    },
+  })
+  @ApiResponse({ status: 204, description: "No preview for this track" })
+  @ApiNotFoundResponse({
+    type: ErrorResponseDto,
+    description: "Track ID not found in database",
+  })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @Get("tracks/:id/preview")
+  async getPreview(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @ClientIp() clientIp: string,
+    @Res() res: Response,
+  ) {
+    const clip = await this.tracksService.getPreviewAudio(id, clientIp);
+    if (!clip) {
+      res.status(204).setHeader("Cache-Control", "public, max-age=600");
+      res.end();
+      return;
+    }
+    res.set({
+      "Content-Type": "audio/mpeg",
+      // The clip for a song never changes
+      "Cache-Control": "public, max-age=86400",
+      "X-Preview-Start-Ms": String(Math.round(clip.startMs)),
+      "X-Preview-End-Ms": String(Math.round(clip.endMs)),
+    });
+    res.send(
+      Buffer.from(clip.audio.buffer, clip.audio.byteOffset, clip.audio.byteLength),
+    );
   }
 
   @ApiOperation({

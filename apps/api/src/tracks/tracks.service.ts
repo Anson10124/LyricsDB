@@ -36,7 +36,12 @@ import {
   type ResolvedLink,
   type ResolveResult,
 } from "@repo/music-resolver";
-import { LyricsEngine } from "@repo/lyrics";
+import {
+  downloadNeteasePreview,
+  fetchNeteasePreview,
+  LyricsEngine,
+  type NeteasePreview,
+} from "@repo/lyrics";
 import type {
   FormattedLyricsResult,
   GetLyricsOptions,
@@ -81,6 +86,21 @@ const SYNC_TIMEOUT_MS = 45_000;
 const SYNC_TIMEOUT_MESSAGE =
   "Timed out resolving this track upstream. Please try again shortly.";
 
+// NetEase preview links expire after ~20 minutes; reuse one for at most this long
+const PREVIEW_CACHE_MS = 15 * 60 * 1000;
+// Songs NetEase has no audio for are asked about again after this long
+const PREVIEW_MISS_CACHE_MS = 10 * 60 * 1000;
+const PREVIEW_CACHE_LIMIT = 2000;
+// Downloaded clips (~0.5 MB each) kept in memory, oldest dropped past this
+const PREVIEW_AUDIO_CACHE_BYTES = 48 * 1024 * 1024;
+
+export interface TrackPreviewAudio {
+  audio: Uint8Array;
+  // The part of the full song the clip covers
+  startMs: number;
+  endMs: number;
+}
+
 const VERIFIED_REFRESH_ERROR =
   "This track has been verified as correct and can't be refreshed.";
 
@@ -93,6 +113,16 @@ export class TracksService implements OnApplicationBootstrap {
   // Last background enrichment attempt per imported track
   private enrichAttempts = new Map<string, number>();
   private lyricsEngine = new LyricsEngine();
+  // NetEase preview lookups by NetEase song ID
+  private previewCache = new Map<
+    string,
+    { preview: NeteasePreview | null; expiresAt: number }
+  >();
+  // Downloaded preview audio by NetEase song ID, plus the total size held
+  private previewAudioCache = new Map<string, TrackPreviewAudio>();
+  private previewAudioBytes = 0;
+  // Downloads in progress, so simultaneous requests share one
+  private previewDownloads = new Map<string, Promise<TrackPreviewAudio | null>>();
   private readonly syncTimeoutMs = SYNC_TIMEOUT_MS;
 
   constructor(
@@ -383,6 +413,98 @@ export class TracksService implements OnApplicationBootstrap {
     ]);
 
     return { prev: prev[0]?.id ?? null, next: next[0]?.id ?? null };
+  }
+
+  // A short audio clip of the song from NetEase, placed on the song's timeline
+  // so the lyrics can follow it. Only tracks matched to NetEase have one; the
+  // rest resolve to null.
+  async getPreviewAudio(
+    id: string,
+    clientIp = "127.0.0.1",
+  ): Promise<TrackPreviewAudio | null> {
+    this.ipRateLimiter.consume(clientIp, "cached");
+
+    const result = await this.db
+      .select({ neteaseId: tracks.neteaseId })
+      .from(tracks)
+      .where(eq(tracks.id, id))
+      .limit(1);
+    if (result.length === 0 || !result[0]) {
+      throw new NotFoundException(`Track with id ${id} not found.`);
+    }
+
+    const neteaseId = result[0].neteaseId;
+    if (!neteaseId) return null;
+
+    const cached = this.previewAudioCache.get(neteaseId);
+    if (cached) {
+      // Re-insert so it counts as recently used
+      this.previewAudioCache.delete(neteaseId);
+      this.previewAudioCache.set(neteaseId, cached);
+      return cached;
+    }
+
+    let download = this.previewDownloads.get(neteaseId);
+    if (!download) {
+      download = this.downloadPreview(neteaseId).finally(() => {
+        this.previewDownloads.delete(neteaseId);
+      });
+      this.previewDownloads.set(neteaseId, download);
+    }
+    return download;
+  }
+
+  private async downloadPreview(
+    neteaseId: string,
+  ): Promise<TrackPreviewAudio | null> {
+    let preview = await this.lookupPreview(neteaseId);
+    if (!preview) return null;
+
+    let audio = await downloadNeteasePreview(preview);
+    if (!audio) {
+      // The cached link may have expired: ask NetEase for a fresh one once
+      this.previewCache.delete(neteaseId);
+      preview = await this.lookupPreview(neteaseId);
+      audio = preview ? await downloadNeteasePreview(preview) : null;
+    }
+    if (!preview || !audio) return null;
+
+    const clip = { audio, startMs: preview.startMs, endMs: preview.endMs };
+    this.previewAudioCache.set(neteaseId, clip);
+    this.previewAudioBytes += audio.byteLength;
+    for (const [key, entry] of this.previewAudioCache) {
+      if (this.previewAudioBytes <= PREVIEW_AUDIO_CACHE_BYTES) break;
+      this.previewAudioCache.delete(key);
+      this.previewAudioBytes -= entry.audio.byteLength;
+    }
+    return clip;
+  }
+
+  private async lookupPreview(neteaseId: string): Promise<NeteasePreview | null> {
+    const now = Date.now();
+    const cached = this.previewCache.get(neteaseId);
+    if (cached && cached.expiresAt > now) return cached.preview;
+
+    const preview = await fetchNeteasePreview(neteaseId, {
+      realIp: process.env.NETEASE_REAL_IP?.trim() || undefined,
+    });
+
+    // Drop the oldest entry (Maps keep insertion order) to stay bounded
+    this.previewCache.delete(neteaseId);
+    if (this.previewCache.size >= PREVIEW_CACHE_LIMIT) {
+      const oldest = this.previewCache.keys().next().value;
+      if (oldest !== undefined) this.previewCache.delete(oldest);
+    }
+    this.previewCache.set(neteaseId, {
+      preview,
+      // Keep a few minutes of link life for the listener
+      expiresAt:
+        now +
+        (preview
+          ? Math.min(PREVIEW_CACHE_MS, preview.expiresInMs - 5 * 60 * 1000)
+          : PREVIEW_MISS_CACHE_MS),
+    });
+    return preview;
   }
 
   // Flag a track's metadata and lyrics as confirmed correct by a human

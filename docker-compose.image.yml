@@ -38,6 +38,7 @@ services:
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
+      NETEASE_REAL_IP: ${NETEASE_REAL_IP:-}
     depends_on:
       postgres:
         condition: service_healthy

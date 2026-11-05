@@ -1355,6 +1355,134 @@
         ]
       }
     },
+    "/api/tracks/{id}/preview": {
+      "get": {
+        "description": "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview (30 RPM/IP).",
+        "operationId": "TracksController_getPreview[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MP3 audio clip",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "X-Preview-Start-Ms": {
+                "description": "Position in the full song where the clip starts, in ms",
+                "schema": {
+                  "type": "integer",
+                  "example": 0
+                }
+              },
+              "X-Preview-End-Ms": {
+                "description": "Position in the full song where the clip ends, in ms",
+                "schema": {
+                  "type": "integer",
+                  "example": 30040
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No preview for this track"
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a short audio preview to play along with the lyrics",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/tracks/{id}/preview": {
+      "get": {
+        "description": "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview (30 RPM/IP).",
+        "operationId": "TracksController_getPreview[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MP3 audio clip",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "X-Preview-Start-Ms": {
+                "description": "Position in the full song where the clip starts, in ms",
+                "schema": {
+                  "type": "integer",
+                  "example": 0
+                }
+              },
+              "X-Preview-End-Ms": {
+                "description": "Position in the full song where the clip ends, in ms",
+                "schema": {
+                  "type": "integer",
+                  "example": 30040
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No preview for this track"
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a short audio preview to play along with the lyrics",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
     "/api/tracks/{id}/verify": {
       "post": {
         "description": "Flags a track's metadata and lyrics as confirmed by a human (10 RPM/IP). When Cloudflare Turnstile is configured, every call must carry a fresh single-use token.",

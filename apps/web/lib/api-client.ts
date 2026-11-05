@@ -109,6 +109,40 @@ export async function fetchTrackNeighbors(id: string): Promise<TrackNeighbors> {
   return (await res.json()) as TrackNeighbors;
 }
 
+export interface TrackPreview {
+  // Object URL of the downloaded clip; revoke it with URL.revokeObjectURL
+  url: string;
+  // The part of the full song the clip covers, in ms
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * Downloads the short audio clip that plays along with the lyrics, or returns
+ * null when the track has none. The clip is held in memory as a blob.
+ */
+export async function fetchTrackPreview(
+  id: string,
+  signal?: AbortSignal,
+): Promise<TrackPreview | null> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(
+    `${apiBase}/api/tracks/${encodeURIComponent(id)}/preview`,
+    { signal },
+  );
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    throw new Error("Failed to load audio preview");
+  }
+  const startMs = Number(res.headers.get("X-Preview-Start-Ms"));
+  const endMs = Number(res.headers.get("X-Preview-End-Ms"));
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    throw new Error("Audio preview is missing its timing");
+  }
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), startMs, endMs };
+}
+
 /**
  * Marks a track as verified correct. Pass a Turnstile token when verification is enabled.
  */

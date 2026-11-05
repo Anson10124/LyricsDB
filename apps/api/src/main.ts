@@ -62,6 +62,7 @@ async function bootstrap() {
     origin: allowedOrigins,
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    exposedHeaders: ["X-Preview-Start-Ms", "X-Preview-End-Ms"],
     maxAge: 86400,
   });
 

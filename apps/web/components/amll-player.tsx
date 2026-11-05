@@ -13,18 +13,27 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "motion/react";
 import {
   CaseSensitive,
+  HeadphoneOff,
+  Headphones,
   Languages,
+  LoaderCircle,
   Maximize,
   Pause,
   Play,
 } from "lucide-react";
+import { toast } from "sonner";
 import type {
   SanitizedTrack,
   SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
 import { convertCompactToAmllLines } from "@/lib/lyrics-formatter";
-import { fetchTrackNeighbors, type TrackNeighbors } from "@/lib/api-client";
+import {
+  fetchTrackNeighbors,
+  fetchTrackPreview,
+  type TrackNeighbors,
+  type TrackPreview,
+} from "@/lib/api-client";
 import { prefetchTrackData } from "@/lib/track-data";
 import { press, spring } from "@/lib/motion";
 import "@applemusic-like-lyrics/core/style.css";
@@ -51,6 +60,22 @@ interface AmllPlayerProps {
   rawLyrics: SyncedLyricsPayload;
   // Lets the page react to playback (artwork scale, background flow)
   onPlayingChange?: (playing: boolean) => void;
+}
+
+// Volume ramps at the edges of the preview clip so it doesn't cut in or out
+const CLIP_FADE_IN_MS = 600;
+const CLIP_FADE_OUT_MS = 2500;
+// The clip stops just short of its end so the last decoded frame isn't heard
+const CLIP_END_GUARD_MS = 100;
+
+function clipVolume(position: number, clip: TrackPreview) {
+  const out = (clip.endMs - CLIP_END_GUARD_MS - position) / CLIP_FADE_OUT_MS;
+  // A clip from the very start of the song needs no fade in
+  const into =
+    clip.startMs > 0 ? (position - clip.startMs) / CLIP_FADE_IN_MS : 1;
+  const gain = Math.min(1, Math.max(0, Math.min(out, into)));
+  // Squared so the fade sounds even rather than dropping off at the end
+  return gain * gain;
 }
 
 function formatTime(ms: number) {
@@ -152,6 +177,118 @@ export function AmllPlayer({
 
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
+  // Audio preview: nothing is downloaded until the visitor turns it on. It
+  // then stays on across track switches until turned off again.
+  const canPreview = Boolean(track.neteaseId);
+  const [audioOn, setAudioOn] = useState(false);
+  // Downloaded clip, tagged with its track so a switch drops the old one
+  const [preview, setPreview] = useState<
+    (TrackPreview & { trackId: string }) | null
+  >(null);
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+  const [previewStatus, setPreviewStatus] = useState<{
+    trackId: string;
+    state: "loading" | "none" | "failed";
+  } | null>(null);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
+  const clip = audioOn && preview?.trackId === track.id ? preview : null;
+  const clipRef = useRef(clip);
+  clipRef.current = clip;
+  const previewState = !audioOn
+    ? "off"
+    : clip
+      ? "ready"
+      : previewStatus?.trackId === track.id
+        ? previewStatus.state
+        : "loading";
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Set when the visitor presses the button, so only that load reports back
+  const announcePreviewRef = useRef(false);
+
+  useEffect(() => {
+    if (!audioOn || !canPreview || previewRef.current?.trackId === track.id) {
+      return;
+    }
+    const trackId = track.id;
+    const controller = new AbortController();
+    setPreviewStatus({ trackId, state: "loading" });
+    fetchTrackPreview(trackId, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) {
+          if (result) URL.revokeObjectURL(result.url);
+          return;
+        }
+        if (result) {
+          // The notice is shown once the clip starts playing
+          setPreview({ ...result, trackId });
+          setPreviewStatus(null);
+          return;
+        }
+        setPreviewStatus({ trackId, state: "none" });
+        if (announcePreviewRef.current) {
+          toast("No audio preview for this song");
+        }
+        announcePreviewRef.current = false;
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setPreviewStatus({ trackId, state: "failed" });
+        if (announcePreviewRef.current) {
+          toast.error("Couldn't load the audio preview");
+        }
+        announcePreviewRef.current = false;
+      });
+    return () => controller.abort();
+  }, [audioOn, canPreview, track.id, previewAttempt]);
+
+  // Free the downloaded clip once it is replaced or the player goes away
+  const previewUrl = preview?.url;
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  // Starts, moves or stops the clip so it matches the lyrics position, fading
+  // it at its edges. The clip only covers part of the song; outside it the
+  // lyrics run on silently.
+  const syncAudio = useCallback((position: number, playing: boolean) => {
+    const audio = audioRef.current;
+    const current = clipRef.current;
+    if (!audio || !current) return;
+
+    const inClip =
+      position >= current.startMs &&
+      position < current.endMs - CLIP_END_GUARD_MS;
+    if (!playing || !inClip) {
+      if (!audio.paused) audio.pause();
+      return;
+    }
+
+    audio.volume = clipVolume(position, current);
+    const target = (position - current.startMs) / 1000;
+    if (Math.abs(audio.currentTime - target) > 0.25) {
+      audio.currentTime = target;
+    }
+    if (audio.paused) {
+      audio.play().catch((error: unknown) => {
+        // Sound can't start before the visitor interacts with the page:
+        // pause so their next press of Play starts everything together
+        if (error instanceof DOMException && error.name === "NotAllowedError") {
+          setIsPlaying(false);
+        }
+      });
+    }
+  }, []);
+
+  const handleAudioError = useCallback(() => {
+    setPreview(null);
+    setPreviewStatus({ trackId: track.id, state: "failed" });
+  }, [track.id]);
 
   useEffect(() => {
     setIsClient(true);
@@ -178,6 +315,7 @@ export function AmllPlayer({
   useEffect(() => {
     if (!isPlaying) {
       playbackStartTimeRef.current = null;
+      syncAudio(currentTimeRef.current, false);
       return;
     }
 
@@ -186,8 +324,20 @@ export function AmllPlayer({
 
     const intervalId = setInterval(() => {
       if (playbackStartTimeRef.current === null) return;
-      const elapsed = performance.now() - playbackStartTimeRef.current;
-      const nextTime = playbackStartOffsetRef.current + elapsed;
+      const audio = audioRef.current;
+      const current = clipRef.current;
+      let nextTime: number;
+      if (audio && current && !audio.paused) {
+        // While the clip plays it is the clock, so the lyrics match what is
+        // heard even when the audio buffers
+        nextTime = current.startMs + audio.currentTime * 1000;
+        playbackStartTimeRef.current = performance.now();
+        playbackStartOffsetRef.current = nextTime;
+      } else {
+        const elapsed = performance.now() - playbackStartTimeRef.current;
+        nextTime = playbackStartOffsetRef.current + elapsed;
+      }
+      syncAudio(nextTime, true);
 
       if (nextTime >= durationMs) {
         setCurrentTime(durationMs);
@@ -200,7 +350,7 @@ export function AmllPlayer({
     return () => {
       clearInterval(intervalId);
     };
-  }, [isPlaying, durationMs]);
+  }, [isPlaying, durationMs, syncAudio]);
 
   // Flag a jump for one frame so AMLL drops any manual scroll and re-centres
   // on the new line instead of animating through everything in between
@@ -211,12 +361,58 @@ export function AmllPlayer({
     return () => cancelAnimationFrame(frame);
   }, [isSeeking]);
 
-  const handleSeek = useCallback((position: number) => {
-    playbackStartTimeRef.current = performance.now();
-    playbackStartOffsetRef.current = position;
-    setIsSeeking(true);
-    setCurrentTime(position);
-  }, []);
+  const handleSeek = useCallback(
+    (position: number) => {
+      playbackStartTimeRef.current = performance.now();
+      playbackStartOffsetRef.current = position;
+      setIsSeeking(true);
+      setCurrentTime(position);
+      syncAudio(position, isPlayingRef.current);
+    },
+    [syncAudio],
+  );
+
+  // A freshly turned-on clip plays from its start unless the lyrics are
+  // already inside it
+  const startedClipRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!clip || startedClipRef.current === clip.url) return;
+    startedClipRef.current = clip.url;
+    const position = currentTimeRef.current;
+    if (
+      position < clip.startMs ||
+      position >= clip.endMs - CLIP_FADE_OUT_MS
+    ) {
+      handleSeek(clip.startMs);
+    }
+    setIsPlaying(true);
+
+    // Tell the visitor what they're hearing when they turn audio on
+    if (announcePreviewRef.current) {
+      announcePreviewRef.current = false;
+      const seconds = Math.round((clip.endMs - clip.startMs) / 1000);
+      toast(`This is only a ${seconds}-second preview`, {
+        description:
+          "Audio is powered by NetEase Cloud Music (163). The lyrics keep going silently after the preview ends.",
+      });
+    }
+  }, [clip, handleSeek]);
+
+  const handlePreviewButton = useCallback(() => {
+    if (previewState === "failed") {
+      announcePreviewRef.current = true;
+      setPreviewStatus(null);
+      setPreviewAttempt((n) => n + 1);
+      return;
+    }
+    if (audioOn) {
+      setAudioOn(false);
+      startedClipRef.current = null;
+    } else {
+      announcePreviewRef.current = true;
+      setAudioOn(true);
+    }
+  }, [audioOn, previewState]);
 
   const handleLineClick = useCallback(
     (event: LyricLineMouseEvent) => {
@@ -388,9 +584,19 @@ export function AmllPlayer({
             <span className="w-8 text-right">{formatTime(currentTime)}</span>
             {/* Drawn bar underneath, transparent native input on top for a tall hit area */}
             <div className="group relative flex h-6 w-24 items-center sm:w-44">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-white/20 transition-[height] group-hover:h-1.5">
+              <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-[height] group-hover:h-1.5">
+                {/* The stretch of the song the audio preview covers */}
+                {clip && (
+                  <div
+                    className="absolute inset-y-0 rounded-full bg-white/40"
+                    style={{
+                      left: `${Math.min(100, (clip.startMs / durationMs) * 100)}%`,
+                      width: `${Math.max(0, (Math.min(clip.endMs, durationMs) - clip.startMs) / durationMs) * 100}%`,
+                    }}
+                  />
+                )}
                 <div
-                  className="h-full rounded-full bg-white/90"
+                  className="relative h-full rounded-full bg-white/90"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -430,11 +636,45 @@ export function AmllPlayer({
               <CaseSensitive className="size-4" />
             </PillButton>
           )}
+          {canPreview && (
+            <PillButton
+              label={
+                {
+                  off: "Play audio preview",
+                  loading: "Loading audio preview",
+                  ready: "Turn off audio preview",
+                  none: "No audio preview for this song",
+                  failed: "Audio preview failed, press to retry",
+                }[previewState]
+              }
+              onClick={handlePreviewButton}
+              active={previewState === "ready" || previewState === "loading"}
+            >
+              {previewState === "loading" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : previewState === "none" || previewState === "failed" ? (
+                <HeadphoneOff className="size-4" />
+              ) : (
+                <Headphones className="size-4" />
+              )}
+            </PillButton>
+          )}
           <PillButton label="Fullscreen" onClick={handleOpenFullscreen}>
             <Maximize className="size-4" />
           </PillButton>
         </motion.div>
       </div>
+
+      {clip && (
+        <audio
+          key={clip.url}
+          ref={audioRef}
+          src={clip.url}
+          preload="auto"
+          onError={handleAudioError}
+          className="hidden"
+        />
+      )}
 
       {/* Portaled so no ancestor stacking context (page header, grid) can sit above it */}
       {isFullscreen &&
