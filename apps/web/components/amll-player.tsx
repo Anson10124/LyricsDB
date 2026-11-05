@@ -31,6 +31,7 @@ import { convertCompactToAmllLines } from "@/lib/lyrics-formatter";
 import {
   fetchTrackNeighbors,
   fetchTrackPreview,
+  PreviewRateLimitError,
   type TrackNeighbors,
   type TrackPreview,
 } from "@/lib/api-client";
@@ -234,10 +235,20 @@ export function AmllPlayer({
         }
         announcePreviewRef.current = false;
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         setPreviewStatus({ trackId, state: "failed" });
-        if (announcePreviewRef.current) {
+        if (error instanceof PreviewRateLimitError) {
+          // Shown even for automatic loads, since it explains the silence. One
+          // id so quick track switches don't stack copies of it.
+          const wait = error.retryAfterSec;
+          toast.error("Audio preview limit reached", {
+            id: "preview-rate-limit",
+            description: `Previews are limited to 2 a minute. ${
+              wait ? `Try again in ${wait}s.` : "Try again shortly."
+            }`,
+          });
+        } else if (announcePreviewRef.current) {
           toast.error("Couldn't load the audio preview");
         }
         announcePreviewRef.current = false;

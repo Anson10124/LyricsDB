@@ -417,13 +417,9 @@ export class TracksService implements OnApplicationBootstrap {
 
   // A short audio clip of the song from NetEase, placed on the song's timeline
   // so the lyrics can follow it. Only tracks matched to NetEase have one; the
-  // rest resolve to null.
-  async getPreviewAudio(
-    id: string,
-    clientIp = "127.0.0.1",
-  ): Promise<TrackPreviewAudio | null> {
-    this.ipRateLimiter.consume(clientIp, "cached");
-
+  // rest resolve to null. Rate limited by its route alone (see the controller),
+  // not the shared per-IP lookup budget.
+  async getPreviewAudio(id: string): Promise<TrackPreviewAudio | null> {
     const result = await this.db
       .select({ neteaseId: tracks.neteaseId })
       .from(tracks)

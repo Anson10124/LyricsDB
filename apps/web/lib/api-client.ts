@@ -117,6 +117,14 @@ export interface TrackPreview {
   endMs: number;
 }
 
+// Thrown when the per-IP preview limit (2 a minute) is used up
+export class PreviewRateLimitError extends Error {
+  constructor(public readonly retryAfterSec: number | null) {
+    super("Too many audio previews");
+    this.name = "PreviewRateLimitError";
+  }
+}
+
 /**
  * Downloads the short audio clip that plays along with the lyrics, or returns
  * null when the track has none. The clip is held in memory as a blob.
@@ -131,6 +139,12 @@ export async function fetchTrackPreview(
     { signal },
   );
   if (res.status === 204) return null;
+  if (res.status === 429) {
+    const wait = Number(res.headers.get("Retry-After-medium"));
+    throw new PreviewRateLimitError(
+      Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : null,
+    );
+  }
   if (!res.ok) {
     throw new Error("Failed to load audio preview");
   }

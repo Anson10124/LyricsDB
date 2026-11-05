@@ -1357,7 +1357,7 @@
     },
     "/api/tracks/{id}/preview": {
       "get": {
-        "description": "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview (30 RPM/IP).",
+        "description": "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview. Limited to 2 requests per minute per IP, separately from other endpoints.",
         "operationId": "TracksController_getPreview[0]",
         "parameters": [
           {
@@ -1411,6 +1411,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "More than 2 previews in a minute; Retry-After-medium gives the seconds to wait",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
           }
         },
         "summary": "Get a short audio preview to play along with the lyrics",
@@ -1421,7 +1431,7 @@
     },
     "/tracks/{id}/preview": {
       "get": {
-        "description": "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview (30 RPM/IP).",
+        "description": "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview. Limited to 2 requests per minute per IP, separately from other endpoints.",
         "operationId": "TracksController_getPreview[1]",
         "parameters": [
           {
@@ -1468,6 +1478,16 @@
           },
           "404": {
             "description": "Track ID not found in database",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "More than 2 previews in a minute; Retry-After-medium gives the seconds to wait",
             "content": {
               "audio/mpeg": {
                 "schema": {

@@ -23,6 +23,7 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
@@ -402,7 +403,7 @@ export class TracksController {
   @ApiOperation({
     summary: "Get a short audio preview to play along with the lyrics",
     description:
-      "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview (30 RPM/IP).",
+      "Streams an MP3 clip of the song (from NetEase Cloud Music) for tracks matched to NetEase. The X-Preview-Start-Ms and X-Preview-End-Ms headers give the part of the song it covers, so lyrics can be synced to it. Responds 204 when the track has no preview. Limited to 2 requests per minute per IP, separately from other endpoints.",
   })
   @ApiParam({
     name: "id",
@@ -429,14 +430,20 @@ export class TracksController {
     type: ErrorResponseDto,
     description: "Track ID not found in database",
   })
-  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiTooManyRequestsResponse({
+    type: ErrorResponseDto,
+    description:
+      "More than 2 previews in a minute; Retry-After-medium gives the seconds to wait",
+  })
+  // Its own budget: the global throttlers are named "short" and "medium", so
+  // overriding "medium" is what takes effect
+  @Throttle({ medium: { limit: 2, ttl: 60_000 } })
   @Get("tracks/:id/preview")
   async getPreview(
     @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
-    @ClientIp() clientIp: string,
     @Res() res: Response,
   ) {
-    const clip = await this.tracksService.getPreviewAudio(id, clientIp);
+    const clip = await this.tracksService.getPreviewAudio(id);
     if (!clip) {
       res.status(204).setHeader("Cache-Control", "public, max-age=600");
       res.end();
