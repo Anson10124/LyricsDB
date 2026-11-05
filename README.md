@@ -5,6 +5,7 @@
 </p>
 
 <p align="center">
+  <a href="#free-public-api">Free public API</a> •
   <a href="#quick-start">Quick start</a> •
   <a href="#using-the-web-app">Web app</a> •
   <a href="#using-the-api">API</a> •
@@ -78,7 +79,53 @@ It's useful if you're building a music player, a karaoke app, a Discord or Spoti
 
 ---
 
+## Free public API
+
+**You don't need to host anything to use LyricsDB.** There's a free public instance that's ready to use right now:
+
+| What                    | Where                                                                          |
+| :---------------------- | :----------------------------------------------------------------------------- |
+| Website                 | [https://lyricsdb.kollod.dev](https://lyricsdb.kollod.dev)                     |
+| API base URL            | `https://lyricsdb.kollod.dev/api`                                              |
+| Interactive API docs    | [https://lyricsdb.kollod.dev/api/docs](https://lyricsdb.kollod.dev/api/docs)   |
+| Guides                  | [https://lyricsdb.kollod.dev/docs](https://lyricsdb.kollod.dev/docs)           |
+| Library stats           | [https://lyricsdb.kollod.dev/stats](https://lyricsdb.kollod.dev/stats)         |
+
+Try it straight away:
+
+```bash
+curl "https://lyricsdb.kollod.dev/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=lrc"
+```
+
+No API key and no sign-up. The public instance already has a **large, growing library** of cached lyrics (most of them word-synced and community-verified), so many songs come back instantly.
+
+**It's free, with fair-use rate limits per IP address:**
+
+| Request type                                  | Limit          |
+| :-------------------------------------------- | :------------- |
+| Songs already in the database                 | 60 per minute  |
+| New songs (fetched live from lyrics sources)  | 6 per minute   |
+| Burst limit (all requests)                    | 15 per second  |
+
+If you go over a limit, you get an HTTP `429` with a `retryAfter` value telling you how many seconds to wait. See the [rate limit guide](https://lyricsdb.kollod.dev/docs/rate-limits) for details.
+
+### Public API or self-hosting?
+
+|                         | Free public API                                    | Self-hosting                                                      |
+| :---------------------- | :------------------------------------------------- | :---------------------------------------------------------------- |
+| Setup                   | None. Just call the URL.                           | Docker or Node.js, plus a database                                |
+| Lyrics library          | Already built and large                            | **Starts empty** and grows only as you look songs up              |
+| First lookup of a song  | Instant for most songs                             | Every song is a slow live lookup the first time                   |
+| Rate limits             | Fair-use limits (above)                            | You set your own                                                  |
+| Best for                | Most apps, bots, overlays and personal projects    | Heavy use, private setups, or changing the code                   |
+
+> **Good to know:** a self-hosted instance does **not** come with the public library. It starts from zero and has to fetch every song from the lyrics sources one by one, which is slower and is limited by those sources' own rate limits. For most people, the free public API is the easier choice.
+
+---
+
 ## Quick start
+
+> **Just want to use the API?** You can skip this whole section and use the [free public API](#free-public-api). The steps below are for running your own copy.
 
 ### Option 1: Docker (easiest)
 
@@ -139,30 +186,32 @@ The **Stats** page (top right) shows how many tracks are cached, how they're syn
 
 ## Using the API
 
-All endpoints are plain HTTP GET requests, so you can try them in a browser or with `curl`. Full interactive documentation is at `/docs` on the API server.
+All endpoints are plain HTTP GET requests, so you can try them in a browser or with `curl`. Full interactive documentation is at [lyricsdb.kollod.dev/api/docs](https://lyricsdb.kollod.dev/api/docs).
+
+The examples below use the **free public API**. If you're self-hosting, swap `https://lyricsdb.kollod.dev` for your own address (for example `http://localhost:4000`).
 
 **Get lyrics from a Spotify link (as TTML):**
 
 ```bash
-curl "http://localhost:4000/api/lyrics?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=ttml"
+curl "https://lyricsdb.kollod.dev/api/lyrics?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=ttml"
 ```
 
 **Get lyrics by platform + ID (as compact JSON):**
 
 ```bash
-curl "http://localhost:4000/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=json"
+curl "https://lyricsdb.kollod.dev/api/lyrics?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT&format=json"
 ```
 
 **Get track info only (title, artists, IDs on every platform):**
 
 ```bash
-curl "http://localhost:4000/api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT"
+curl "https://lyricsdb.kollod.dev/api/tracks?platform=spotify&id=4cOdK2wGLETKBW3PvgPWqT"
 ```
 
 **Watch progress live while new lyrics are fetched (Server-Sent Events):**
 
 ```bash
-curl -N "http://localhost:4000/api/lyrics/stream?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=json"
+curl -N "https://lyricsdb.kollod.dev/api/lyrics/stream?url=https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT&format=json"
 ```
 
 > Already-cached tracks return instantly. To re-check a cached track against all sources, add `&forceRefresh=true` to the stream URL. If the refresh finds nothing usable, the existing lyrics are kept. Verified tracks are never overwritten.
@@ -222,6 +271,8 @@ How it behaves:
 ---
 
 ## Self-hosting
+
+> **Before you start:** your own instance begins with an **empty database**. It won't have the lyrics that are already in the [free public API](#free-public-api), so every song has to be fetched live from the lyrics sources the first time someone looks it up. If you just want lyrics, the public API is usually the better option.
 
 Pick whichever setup suits you. All of them use the same `.env` file. Each option below expands.
 

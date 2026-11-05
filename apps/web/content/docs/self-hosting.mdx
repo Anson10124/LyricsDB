@@ -3,6 +3,19 @@ title: Self-Hosting & Storage Setup
 description: Learn how to host LyricsDB yourself using Docker, Supabase, Cloudflare R2, or local PostgreSQL.
 ---
 
+<Callout title="Do you actually need to self-host?" type="warn">
+  There's a **free public API** at `https://lyricsdb.kollod.dev/api` that's ready to use right now, with no setup, API key or sign-up. It already has a large library of cached lyrics, and it's free within fair-use [rate limits](/docs/rate-limits). See the [Quick Start](/docs/quickstart).
+
+  If you self-host, your instance **starts with an empty database**. It doesn't include the public library, so every song has to be fetched live from the lyrics sources the first time it's looked up. That's slower, and it's limited by those sources' own rate limits. Self-hosting makes sense if you need higher limits, a private setup, or want to change the code.
+</Callout>
+
+| | Free public API | Self-hosting |
+| :--- | :--- | :--- |
+| **Setup** | None | Docker or Node.js, plus a database |
+| **Lyrics library** | Already built and large | Starts empty, grows as you look songs up |
+| **First lookup of a song** | Instant for most songs | Slow live lookup for every new song |
+| **Rate limits** | Fair-use limits | You choose |
+
 LyricsDB is designed to be lightweight and flexible. You can self-host it with zero external configuration (using local Docker PostgreSQL) or use free-tier cloud services (**Supabase** for managed PostgreSQL + **Cloudflare R2** or **Supabase Storage** for object storage) to store up to **1,000,000+ tracks** on 100% free tiers.
 
 ---
