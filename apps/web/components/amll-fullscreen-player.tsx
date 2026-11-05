@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { SanitizedTrack, TrackRecord } from "@repo/types";
 import type { LyricLine } from "@applemusic-like-lyrics/core";
-import { formatArtworkUrl } from "@/lib/artwork";
+import { getFullscreenCover } from "@/lib/track-data";
 import { uniqueArtists } from "@/lib/utils";
 import {
   PrebuiltLyricPlayer,
@@ -24,6 +24,7 @@ import {
   onSeekPositionAtom,
   onLyricLineClickAtom,
   onRequestPrevSongAtom,
+  onRequestNextSongAtom,
 } from "@applemusic-like-lyrics/react-full";
 import "@applemusic-like-lyrics/react-full/style.css";
 import { installMediaPlayGuard } from "@/lib/media-play-guard";
@@ -39,6 +40,8 @@ interface AmllFullscreenPlayerProps {
   onClose: () => void;
   onTogglePlay: () => void;
   onSeek: (position: number) => void;
+  onPrevSong: () => void;
+  onNextSong: () => void;
 }
 
 export function AmllFullscreenPlayer({
@@ -50,6 +53,8 @@ export function AmllFullscreenPlayer({
   onClose,
   onTogglePlay,
   onSeek,
+  onPrevSong,
+  onNextSong,
 }: AmllFullscreenPlayerProps) {
   const setMusicId = useSetAtom(musicIdAtom);
   const setMusicName = useSetAtom(musicNameAtom);
@@ -68,12 +73,15 @@ export function AmllFullscreenPlayer({
   const setOnSeekPosition = useSetAtom(onSeekPositionAtom);
   const setOnLyricLineClick = useSetAtom(onLyricLineClickAtom);
   const setOnRequestPrevSong = useSetAtom(onRequestPrevSongAtom);
+  const setOnRequestNextSong = useSetAtom(onRequestNextSongAtom);
 
   // Store latest callbacks and values in a ref so effects and listeners don't re-run
   const stateRef = useRef({
     onClose,
     onTogglePlay,
     onSeek,
+    onPrevSong,
+    onNextSong,
     lyricLines,
     currentTime,
     durationMs,
@@ -84,6 +92,8 @@ export function AmllFullscreenPlayer({
       onClose,
       onTogglePlay,
       onSeek,
+      onPrevSong,
+      onNextSong,
       lyricLines,
       currentTime,
       durationMs,
@@ -109,26 +119,31 @@ export function AmllFullscreenPlayer({
         }
       },
     });
-    setOnRequestPrevSong({ onEmit: () => stateRef.current.onSeek(0) });
+    setOnRequestPrevSong({ onEmit: () => stateRef.current.onPrevSong() });
+    setOnRequestNextSong({ onEmit: () => stateRef.current.onNextSong() });
   }, [
     setOnClickControlThumb,
     setOnPlayOrResume,
     setOnSeekPosition,
     setOnLyricLineClick,
     setOnRequestPrevSong,
+    setOnRequestNextSong,
   ]);
 
-  const animatedVideo =
-    track.artwork?.squareVideoUrl || track.artwork?.tallVideoUrl;
-  const coverIsVideo = Boolean(animatedVideo);
-  const coverUrl = animatedVideo || formatArtworkUrl(track.artwork, 1000) || "";
+  const { url: coverUrl, isVideo: coverIsVideo } = getFullscreenCover(track);
 
   // AMLL keeps its state in global atoms, so on open they still hold the
   // previous song's cover. Its background loads covers without cancelling
   // older loads, so a slow old cover could land last and stay on screen.
   // The player is therefore only shown once the atoms hold this song's cover.
+  // After that it stays up: switching songs updates it in place, with the next
+  // cover already cached by the track page.
   const currentCover = useAtomValue(musicCoverAtom);
-  const coverReady = currentCover === coverUrl;
+  const [hasShown, setHasShown] = useState(false);
+  if (!hasShown && currentCover === coverUrl) {
+    setHasShown(true);
+  }
+  const coverReady = hasShown || currentCover === coverUrl;
 
   useEffect(() => {
     setMusicCover(coverUrl);

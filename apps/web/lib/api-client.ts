@@ -90,6 +90,25 @@ export async function fetchTrackById(
   return (await res.json()) as SanitizedTrack<TrackRecord>;
 }
 
+export interface TrackNeighbors {
+  prev: string | null;
+  next: string | null;
+}
+
+/**
+ * Fetches the synced-lyrics tracks added just before and after this one.
+ */
+export async function fetchTrackNeighbors(id: string): Promise<TrackNeighbors> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(
+    `${apiBase}/api/tracks/${encodeURIComponent(id)}/neighbors`,
+  );
+  if (!res.ok) {
+    throw new Error("Failed to load neighbouring tracks");
+  }
+  return (await res.json()) as TrackNeighbors;
+}
+
 /**
  * Marks a track as verified correct. Pass a Turnstile token when verification is enabled.
  */

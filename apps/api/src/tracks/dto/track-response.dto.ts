@@ -150,3 +150,23 @@ export class SanitizedTrackDto {
   })
   updatedAt!: string;
 }
+
+export class TrackNeighborsDto {
+  @ApiProperty({
+    example: "1f0c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
+    description:
+      "ID of the synced-lyrics track added just before this one (null if this is the oldest)",
+    nullable: true,
+    type: String,
+  })
+  prev!: string | null;
+
+  @ApiProperty({
+    example: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+    description:
+      "ID of the synced-lyrics track added just after this one (null if this is the newest)",
+    nullable: true,
+    type: String,
+  })
+  next!: string | null;
+}

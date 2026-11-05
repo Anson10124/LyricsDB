@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "motion/react";
@@ -17,6 +24,8 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { convertCompactToAmllLines } from "@/lib/lyrics-formatter";
+import { fetchTrackNeighbors, type TrackNeighbors } from "@/lib/api-client";
+import { prefetchTrackData } from "@/lib/track-data";
 import { press, spring } from "@/lib/motion";
 import "@applemusic-like-lyrics/core/style.css";
 
@@ -126,6 +135,21 @@ export function AmllPlayer({
 
   const playbackStartTimeRef = useRef<number | null>(null);
   const playbackStartOffsetRef = useRef<number>(0);
+
+  // Switching songs keeps this component mounted, so restart playback for the
+  // new track. Done during render so the new lyrics never get the old position.
+  const [playbackTrackId, setPlaybackTrackId] = useState(track.id);
+  if (playbackTrackId !== track.id) {
+    setPlaybackTrackId(track.id);
+    setCurrentTime(0);
+    setIsPlaying(true);
+  }
+  // Re-anchor the timer before its next tick so it counts from 0 again
+  useLayoutEffect(() => {
+    playbackStartTimeRef.current = performance.now();
+    playbackStartOffsetRef.current = 0;
+  }, [track.id]);
+
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
 
@@ -228,6 +252,70 @@ export function AmllPlayer({
       // Fallback
     }
   }, []);
+
+  // The synced-lyrics tracks added just before and after this one
+  const [neighbors, setNeighbors] = useState<TrackNeighbors | null>(null);
+  // pushState instead of a router navigation: Next keeps the page mounted and
+  // the track page follows the URL, so the fullscreen player just receives the
+  // new song and animates to it. Back/forward still work through the URL.
+  // At the oldest track there is nothing before it, so prev restarts instead.
+  const moveTo = useCallback(
+    (direction: "prev" | "next", around: TrackNeighbors) => {
+      const target = around[direction];
+      if (target) {
+        // Further presses wait for the new track's neighbours
+        setNeighbors(null);
+        window.history.pushState(
+          null,
+          "",
+          `/track/${encodeURIComponent(target)}`,
+        );
+      } else if (direction === "prev") {
+        handleSeek(0);
+      }
+    },
+    [handleSeek],
+  );
+
+  // A press that lands before this track's neighbours are known is replayed
+  // once they arrive, so quick repeated presses aren't dropped
+  const pendingMoveRef = useRef<"prev" | "next" | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setNeighbors(null);
+    fetchTrackNeighbors(track.id)
+      .then((result) => {
+        if (!active) return;
+        setNeighbors(result);
+        const pending = pendingMoveRef.current;
+        pendingMoveRef.current = null;
+        if (pending) moveTo(pending, result);
+      })
+      .catch(() => {
+        pendingMoveRef.current = null;
+      });
+    return () => {
+      active = false;
+    };
+  }, [track.id, moveTo]);
+
+  // Loaded ahead while fullscreen is open so a switch is instant
+  useEffect(() => {
+    if (!isFullscreen || !neighbors) return;
+    if (neighbors.prev) prefetchTrackData(neighbors.prev);
+    if (neighbors.next) prefetchTrackData(neighbors.next);
+  }, [isFullscreen, neighbors]);
+
+  const handlePrevSong = useCallback(() => {
+    if (neighbors) moveTo("prev", neighbors);
+    else pendingMoveRef.current = "prev";
+  }, [neighbors, moveTo]);
+
+  const handleNextSong = useCallback(() => {
+    if (neighbors) moveTo("next", neighbors);
+    else pendingMoveRef.current = "next";
+  }, [neighbors, moveTo]);
 
   const handleTogglePlay = useCallback(() => {
     // Pressing play after the track ended starts it over
@@ -360,6 +448,8 @@ export function AmllPlayer({
             onClose={handleCloseFullscreen}
             onTogglePlay={handleTogglePlay}
             onSeek={handleSeek}
+            onPrevSong={handlePrevSong}
+            onNextSong={handleNextSong}
           />,
           document.body,
         )}

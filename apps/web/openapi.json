@@ -1267,6 +1267,94 @@
         ]
       }
     },
+    "/api/tracks/{id}/neighbors": {
+      "get": {
+        "description": "Returns the IDs of the tracks with synced lyrics that were added to the database just before and just after this one (60 RPM/IP).",
+        "operationId": "TracksController_getNeighbors[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Neighbouring track IDs (null at either end)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackNeighborsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the previous and next tracks by date added",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/tracks/{id}/neighbors": {
+      "get": {
+        "description": "Returns the IDs of the tracks with synced lyrics that were added to the database just before and just after this one (60 RPM/IP).",
+        "operationId": "TracksController_getNeighbors[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Neighbouring track IDs (null at either end)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackNeighborsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the previous and next tracks by date added",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
     "/api/tracks/{id}/verify": {
       "post": {
         "description": "Flags a track's metadata and lyrics as confirmed by a human (10 RPM/IP). When Cloudflare Turnstile is configured, every call must carry a fresh single-use token.",
@@ -2844,6 +2932,27 @@
             "example": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
           }
         }
+      },
+      "TrackNeighborsDto": {
+        "type": "object",
+        "properties": {
+          "prev": {
+            "type": "string",
+            "example": "1f0c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
+            "description": "ID of the synced-lyrics track added just before this one (null if this is the oldest)",
+            "nullable": true
+          },
+          "next": {
+            "type": "string",
+            "example": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+            "description": "ID of the synced-lyrics track added just after this one (null if this is the newest)",
+            "nullable": true
+          }
+        },
+        "required": [
+          "prev",
+          "next"
+        ]
       },
       "VerifyTrackDto": {
         "type": "object",

@@ -10,8 +10,10 @@ import {
 } from "@nestjs/common";
 import {
   and,
+  asc,
   backfillTrackPlatformIds,
   DatabaseClient,
+  desc,
   eq,
   ilike,
   inArray,
@@ -338,6 +340,49 @@ export class TracksService implements OnApplicationBootstrap {
 
     this.enrichInBackground(result[0], clientIp);
     return result[0];
+  }
+
+  // The synced-lyrics tracks added just before and after this one. Ordered by
+  // (createdAt, id) because bulk imports share one timestamp, and compared
+  // inside SQL since a JS Date would drop Postgres' microseconds.
+  async findNeighbors(
+    id: string,
+    clientIp = "127.0.0.1",
+  ): Promise<{ prev: string | null; next: string | null }> {
+    this.ipRateLimiter.consume(clientIp, "cached");
+
+    const exists = await this.db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(eq(tracks.id, id))
+      .limit(1);
+    if (exists.length === 0) {
+      throw new NotFoundException(`Track with id ${id} not found.`);
+    }
+
+    const position = sql`(select ${tracks.createdAt}, ${tracks.id} from ${tracks} where ${tracks.id} = ${id})`;
+    const synced = inArray(tracks.lyricsType, ["word", "line"]);
+
+    const [prev, next] = await Promise.all([
+      this.db
+        .select({ id: tracks.id })
+        .from(tracks)
+        .where(
+          and(synced, sql`(${tracks.createdAt}, ${tracks.id}) < ${position}`),
+        )
+        .orderBy(desc(tracks.createdAt), desc(tracks.id))
+        .limit(1),
+      this.db
+        .select({ id: tracks.id })
+        .from(tracks)
+        .where(
+          and(synced, sql`(${tracks.createdAt}, ${tracks.id}) > ${position}`),
+        )
+        .orderBy(asc(tracks.createdAt), asc(tracks.id))
+        .limit(1),
+    ]);
+
+    return { prev: prev[0]?.id ?? null, next: next[0]?.id ?? null };
   }
 
   // Flag a track's metadata and lyrics as confirmed correct by a human

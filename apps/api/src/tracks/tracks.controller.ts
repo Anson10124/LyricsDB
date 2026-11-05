@@ -32,7 +32,10 @@ import {
   type ProgressLogEvent,
 } from "@repo/types";
 import { TracksService } from "./tracks.service";
-import { SanitizedTrackDto } from "./dto/track-response.dto";
+import {
+  SanitizedTrackDto,
+  TrackNeighborsDto,
+} from "./dto/track-response.dto";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
 import {
   GetLyricsQueryDto,
@@ -367,6 +370,32 @@ export class TracksController {
   ) {
     const track = await this.tracksService.findById(id, clientIp);
     return this.tracksService.sanitizeTrack(track);
+  }
+
+  @ApiOperation({
+    summary: "Get the previous and next tracks by date added",
+    description:
+      "Returns the IDs of the tracks with synced lyrics that were added to the database just before and just after this one (60 RPM/IP).",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Track internal database UUID v4",
+    example: "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  })
+  @ApiOkResponse({
+    type: TrackNeighborsDto,
+    description: "Neighbouring track IDs (null at either end)",
+  })
+  @ApiNotFoundResponse({
+    type: ErrorResponseDto,
+    description: "Track ID not found in database",
+  })
+  @Get("tracks/:id/neighbors")
+  async getNeighbors(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @ClientIp() clientIp: string,
+  ) {
+    return this.tracksService.findNeighbors(id, clientIp);
   }
 
   @ApiOperation({

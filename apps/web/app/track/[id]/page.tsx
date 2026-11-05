@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Music2, X } from "lucide-react";
@@ -15,12 +15,8 @@ import { TrackView } from "@/components/track/track-view";
 import { SiteHeader } from "@/components/site-header";
 import { fade, spring } from "@/lib/motion";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
-import {
-  fetchTrackById,
-  fetchTrackLyrics,
-  getLyricsStreamUrl,
-  markTrackVerified,
-} from "@/lib/api-client";
+import { getLyricsStreamUrl, markTrackVerified } from "@/lib/api-client";
+import { fetchTrackData, loadTrackData } from "@/lib/track-data";
 import { getTurnstileToken } from "@/lib/turnstile";
 import { formatArtworkUrl } from "@/lib/artwork";
 import {
@@ -42,28 +38,6 @@ interface RefreshPanelState {
   error?: string;
 }
 
-async function loadTrackData(id: string) {
-  const [track, lyricsData] = await Promise.all([
-    fetchTrackById(id),
-    fetchTrackLyrics(id, "json").catch(() => null),
-  ]);
-
-  let lyrics: SyncedLyricsPayload | string | null = null;
-  if (lyricsData) {
-    if (
-      typeof lyricsData === "object" &&
-      lyricsData !== null &&
-      "plain" in lyricsData
-    ) {
-      lyrics = (lyricsData as { plain: string }).plain;
-    } else {
-      lyrics = lyricsData as SyncedLyricsPayload;
-    }
-  }
-
-  return { track, lyrics };
-}
-
 // Picks a platform ID the resolver can re-sync this track from
 function getRefreshSource(track: SanitizedTrack<TrackRecord>) {
   const candidates: Array<[string, string | null | undefined]> = [
@@ -78,8 +52,14 @@ function getRefreshSource(track: SanitizedTrack<TrackRecord>) {
 }
 
 export default function TrackPage({ params }: TrackPageProps) {
-  const { id } = use(params);
+  const { id: routeId } = use(params);
   const router = useRouter();
+  // The fullscreen player's previous/next buttons switch songs with
+  // history.pushState, which keeps this page (and the player) mounted. The
+  // URL is therefore the source of truth for which track is shown.
+  const pathname = usePathname();
+  const pathMatch = pathname?.match(/^\/track\/([^/]+)/);
+  const id = pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : routeId;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,12 +79,17 @@ export default function TrackPage({ params }: TrackPageProps) {
   const hidePanelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Only the first load blanks the page. Switching songs keeps the current
+  // track on screen until the next one (and its cover) is ready, so the
+  // player can animate from one to the other.
+  const hasTrackRef = useRef(false);
+  hasTrackRef.current = track !== null;
+
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
     setError(null);
 
-    loadTrackData(id)
+    loadTrackData(id, { withCover: hasTrackRef.current })
       .then((data) => {
         if (!isMounted) return;
         setTrack(data.track);
@@ -112,6 +97,8 @@ export default function TrackPage({ params }: TrackPageProps) {
       })
       .catch((err) => {
         if (isMounted) {
+          setTrack(null);
+          setLyrics(null);
           setError(err instanceof Error ? err.message : "An error occurred");
         }
       })
@@ -261,7 +248,7 @@ export default function TrackPage({ params }: TrackPageProps) {
       }
 
       try {
-        const reloaded = await loadTrackData(id);
+        const reloaded = await fetchTrackData(id);
         setTrack(reloaded.track);
         setLyrics(reloaded.lyrics);
         finish("done");
@@ -311,7 +298,7 @@ export default function TrackPage({ params }: TrackPageProps) {
           </motion.div>
         )}
 
-        {!loading && track && (
+        {!error && track && (
           <motion.div
             key="content"
             initial={{ opacity: 0 }}
