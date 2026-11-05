@@ -280,7 +280,7 @@ export default function TrackPage({ params }: TrackPageProps) {
   };
 
   return (
-    <main className="dark relative min-h-screen bg-background text-foreground">
+    <main className="dark relative min-h-svh bg-background text-foreground">
       <SiteHeader tone="overlay" />
       <AnimatePresence mode="wait">
         {!loading && error && (

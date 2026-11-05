@@ -17,7 +17,7 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { resolveTrackArtwork } from "@/lib/artwork";
-import { formatDuration, uniqueArtists } from "@/lib/utils";
+import { uniqueArtists } from "@/lib/utils";
 import { press, rise, spring, stagger } from "@/lib/motion";
 import { AmllPlayer } from "@/components/amll-player";
 import { TrackBackground } from "@/components/track/track-background";
@@ -196,21 +196,16 @@ export function TrackView({
       ? rawLyrics
       : null;
 
-  const meta = [
-    track.durationMs ? formatDuration(track.durationMs) : null,
-    track.lyricsProvider ? track.lyricsProvider.toUpperCase() : null,
-    track.isrc ? `ISRC ${track.isrc}` : null,
-  ].filter(Boolean);
-
   return (
-    <div className="dark relative min-h-dvh text-white">
+    <div className="dark relative h-svh overflow-hidden text-white">
       <TrackBackground
         imageCover={imageCover}
         videoCover={videoCover}
         playing={playing}
       />
 
-      <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-8 px-5 pt-24 pb-10 lg:h-dvh lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:gap-14 lg:pb-8">
+      {/* Fixed to one screen: details take what they need, lyrics fill the rest */}
+      <div className="relative z-10 mx-auto grid h-full w-full max-w-6xl grid-rows-[auto_minmax(0,1fr)] gap-6 px-5 pt-24 pb-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-14 lg:pb-8">
         {/* Left: artwork and details */}
         <motion.aside
           variants={stagger(0.06, 0.1)}
@@ -257,14 +252,6 @@ export function TrackView({
               <p className="truncate text-base font-medium text-white/75 sm:text-lg">
                 {artistLine}
               </p>
-              {track.album && (
-                <p className="truncate text-sm text-white/50">{track.album}</p>
-              )}
-              {meta.length > 0 && (
-                <p className="pt-1 font-mono text-[11px] tracking-wide text-white/45">
-                  {meta.join("  ·  ")}
-                </p>
-              )}
             </motion.div>
           </div>
 
@@ -339,7 +326,7 @@ export function TrackView({
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...spring.soft, delay: 0.2 }}
           aria-label="Lyrics"
-          className="relative h-[72dvh] min-h-[420px] lg:h-full"
+          className="relative h-full min-h-0"
         >
           {isSynced ? (
             <AmllPlayer

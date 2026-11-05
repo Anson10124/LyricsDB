@@ -206,7 +206,7 @@ export default function Home() {
   const isSearching = viewState === "search";
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+    <main className="relative min-h-svh overflow-x-hidden bg-background text-foreground">
       <SiteHeader tone={viewState === "lyrics" ? "overlay" : "default"} />
 
       <AnimatePresence mode="wait">
