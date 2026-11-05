@@ -10,7 +10,6 @@ import {
   Maximize,
   Pause,
   Play,
-  RotateCcw,
 } from "lucide-react";
 import type {
   SanitizedTrack,
@@ -43,6 +42,13 @@ interface AmllPlayerProps {
   rawLyrics: SyncedLyricsPayload;
   // Lets the page react to playback (artwork scale, background flow)
   onPlayingChange?: (playing: boolean) => void;
+}
+
+function formatTime(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function PillButton({
@@ -210,22 +216,21 @@ export function AmllPlayer({
     }
   }, []);
 
-  const handleTogglePlay = useCallback(() => {
-    setIsPlaying((prev) => !prev);
-  }, []);
-
   const handleSeek = useCallback((position: number) => {
     playbackStartTimeRef.current = performance.now();
     playbackStartOffsetRef.current = position;
     setCurrentTime(position);
   }, []);
 
-  const handleRestart = useCallback(() => {
-    playbackStartTimeRef.current = performance.now();
-    playbackStartOffsetRef.current = 0;
-    setCurrentTime(0);
-    setIsPlaying(true);
-  }, []);
+  const handleTogglePlay = useCallback(() => {
+    // Pressing play after the track ended starts it over
+    if (!isPlaying && currentTimeRef.current >= durationMs) {
+      handleSeek(0);
+    }
+    setIsPlaying((prev) => !prev);
+  }, [isPlaying, durationMs, handleSeek]);
+
+  const progressPercent = Math.min(100, (currentTime / durationMs) * 100);
 
   if (!isClient) {
     return (
@@ -260,9 +265,6 @@ export function AmllPlayer({
           transition={{ ...spring.smooth, delay: 0.35 }}
           className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/10 p-1 shadow-lg shadow-black/20 ring-1 ring-white/15 backdrop-blur-2xl"
         >
-          <PillButton label="Restart" onClick={handleRestart}>
-            <RotateCcw className="size-4" />
-          </PillButton>
           <PillButton
             label={isPlaying ? "Pause" : "Play"}
             onClick={handleTogglePlay}
@@ -285,6 +287,34 @@ export function AmllPlayer({
               </motion.span>
             </AnimatePresence>
           </PillButton>
+          <div className="flex items-center gap-2 px-2 text-[11px] font-medium tabular-nums text-white/70">
+            <span className="w-8 text-right">{formatTime(currentTime)}</span>
+            {/* Drawn bar underneath, transparent native input on top for a tall hit area */}
+            <div className="group relative flex h-6 w-24 items-center sm:w-44">
+              <div className="h-1 w-full overflow-hidden rounded-full bg-white/20 transition-[height] group-hover:h-1.5">
+                <div
+                  className="h-full rounded-full bg-white/90"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <div
+                className="pointer-events-none absolute size-3 rounded-full bg-white shadow transition-transform group-hover:scale-125 group-has-[:focus-visible]:ring-2 group-has-[:focus-visible]:ring-white/50"
+                style={{ left: `calc(${progressPercent}% - ${progressPercent * 0.12}px)` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={durationMs}
+                step={100}
+                value={Math.min(currentTime, durationMs)}
+                onChange={(e) => handleSeek(Number(e.target.value))}
+                aria-label="Seek"
+                aria-valuetext={`${formatTime(currentTime)} of ${formatTime(durationMs)}`}
+                className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+              />
+            </div>
+            <span className="w-8">{formatTime(durationMs)}</span>
+          </div>
           {hasTranslation && (
             <PillButton
               label={showTranslation ? "Hide translation" : "Show translation"}

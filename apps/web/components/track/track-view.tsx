@@ -248,7 +248,10 @@ export function TrackView({
             </motion.div>
 
             <motion.div variants={rise} className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-2xl font-bold leading-tight tracking-tight text-balance sm:text-3xl">
+              <h1
+                className="line-clamp-2 text-2xl font-bold leading-tight tracking-tight text-balance sm:text-3xl"
+                title={track.title}
+              >
                 {track.title}
               </h1>
               <p className="truncate text-base font-medium text-white/75 sm:text-lg">

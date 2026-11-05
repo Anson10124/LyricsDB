@@ -63,3 +63,4 @@ ehthumbs.db
 *.pem
 *.key
 *.crt
+.claude/launch.json
