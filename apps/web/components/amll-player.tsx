@@ -178,17 +178,30 @@ export function AmllPlayer({
     };
   }, [isPlaying, durationMs]);
 
+  // Flag a jump for one frame so AMLL drops any manual scroll and re-centres
+  // on the new line instead of animating through everything in between
+  const [isSeeking, setIsSeeking] = useState(false);
+  useEffect(() => {
+    if (!isSeeking) return;
+    const frame = requestAnimationFrame(() => setIsSeeking(false));
+    return () => cancelAnimationFrame(frame);
+  }, [isSeeking]);
+
+  const handleSeek = useCallback((position: number) => {
+    playbackStartTimeRef.current = performance.now();
+    playbackStartOffsetRef.current = position;
+    setIsSeeking(true);
+    setCurrentTime(position);
+  }, []);
+
   const handleLineClick = useCallback(
     (event: LyricLineMouseEvent) => {
       const targetLine = lyricLines[event.lineIndex];
-      if (targetLine?.startTime !== undefined) {
-        const newTime = targetLine.startTime;
-        playbackStartTimeRef.current = performance.now();
-        playbackStartOffsetRef.current = newTime;
-        setCurrentTime(newTime);
-      }
+      if (targetLine?.startTime === undefined) return;
+      handleSeek(targetLine.startTime);
+      setIsPlaying(true);
     },
-    [lyricLines],
+    [lyricLines, handleSeek],
   );
 
   const handleOpenFullscreen = useCallback(() => {
@@ -216,12 +229,6 @@ export function AmllPlayer({
     }
   }, []);
 
-  const handleSeek = useCallback((position: number) => {
-    playbackStartTimeRef.current = performance.now();
-    playbackStartOffsetRef.current = position;
-    setCurrentTime(position);
-  }, []);
-
   const handleTogglePlay = useCallback(() => {
     // Pressing play after the track ended starts it over
     if (!isPlaying && currentTimeRef.current >= durationMs) {
@@ -243,10 +250,12 @@ export function AmllPlayer({
   return (
     <>
       <div className="relative h-full w-full select-none overflow-hidden text-white font-[family-name:var(--font-inter)]">
-        <div className="lyrics-mask relative z-10 h-full w-full overflow-hidden pointer-events-none">
+        {/* AMLL handles wheel/touch scrolling itself and springs back to the active line after a few seconds */}
+        <div className="lyrics-mask lyrics-interactive relative z-10 h-full w-full overflow-hidden">
           <LyricPlayer
             lyricLines={lyricLines}
             currentTime={currentTime}
+            isSeeking={isSeeking}
             playing={isPlaying}
             alignAnchor="center"
             alignPosition={0.4}

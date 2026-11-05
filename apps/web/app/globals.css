@@ -276,3 +276,8 @@ body {
     transparent 100%
   );
 }
+
+/* Lyric lines seek on click; AMLL hashes its class names, so match by suffix */
+.lyrics-interactive [class*="_lyricLine"] {
+  cursor: pointer;
+}
