@@ -99,7 +99,15 @@ export interface ResolvedLink {
   score?: number;
   matchReason?: "isrc" | "fuzzy" | "direct";
   breakdown?: ScoreBreakdown;
+  // The catalog entry a search matched, so callers can check it is the same recording
+  matched?: MatchedRecording;
   raw?: Record<string, unknown>;
+}
+
+export interface MatchedRecording {
+  title: string;
+  album?: string;
+  durationMs?: number;
 }
 
 export interface ResolveResult {

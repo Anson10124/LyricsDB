@@ -62,6 +62,7 @@ import { StorageService } from "../storage/storage.service";
 import { IpRateLimiterService } from "../common/rate-limiter/ip-rate-limiter.service";
 import {
   collectPlatformIds,
+  isSameRecording,
   pickTrackMatch,
   PLATFORM_TRACK_FIELDS,
   platformIdKey,
@@ -348,10 +349,23 @@ export class TracksService implements OnApplicationBootstrap {
       });
   }
 
+  // A link's ID, if it is trusted to be this exact recording. Search matches must
+  // also agree on duration and version tags: a high title score alone is what
+  // let a song's remix, live or acoustic take be stored as the song itself.
   private getHighConfidencePlatformId(
-    link?: ResolvedLink | null,
+    link: ResolvedLink | null | undefined,
+    meta: ResolverTrackMetadata,
   ): string | undefined {
-    return link?.isVerified || (link?.score ?? 0) >= 0.8 ? link?.id : undefined;
+    if (!link?.id) return undefined;
+    if (!link.isVerified && (link.score ?? 0) < 0.8) return undefined;
+    if (
+      link.matchReason === "fuzzy" &&
+      link.matched &&
+      !isSameRecording(link.matched, meta)
+    ) {
+      return undefined;
+    }
+    return link.id;
   }
 
   // Find a track by internal database UUID (fast cache -> 60 RPM per IP)
@@ -722,10 +736,10 @@ export class TracksService implements OnApplicationBootstrap {
     const resolved: ResolveResult = await this.resolverService.resolveUrl(url);
     const meta = resolved.metadata;
 
-    const validIds = this.extractHighConfidencePlatformIds(resolved.links);
+    const validIds = this.extractHighConfidencePlatformIds(resolved.links, meta);
     const existingTrack = await this.findExistingTrackByPlatformLinks(
       resolved.links,
-      meta.isrc,
+      meta,
     );
 
     const lyricsData = await this.resolveAndStoreLyrics(
@@ -762,6 +776,7 @@ export class TracksService implements OnApplicationBootstrap {
 
   private extractHighConfidencePlatformIds(
     links: Record<string, ResolvedLink | null | undefined>,
+    meta: ResolverTrackMetadata,
   ): VerifiedPlatformIds {
     const spotifyLink = links["spotify"];
     const deezerLink = links["deezer"];
@@ -771,20 +786,23 @@ export class TracksService implements OnApplicationBootstrap {
     const qqLink = links["qqMusic"] || links["qqmusic"] || links["qq"];
 
     return {
-      spotifyId: this.getHighConfidencePlatformId(spotifyLink),
-      deezerId: this.getHighConfidencePlatformId(deezerLink),
-      neteaseId: this.getHighConfidencePlatformId(neteaseLink),
-      appleMusicId: this.getHighConfidencePlatformId(appleLink),
-      qqMusicId: this.getHighConfidencePlatformId(qqLink),
+      spotifyId: this.getHighConfidencePlatformId(spotifyLink, meta),
+      deezerId: this.getHighConfidencePlatformId(deezerLink, meta),
+      neteaseId: this.getHighConfidencePlatformId(neteaseLink, meta),
+      appleMusicId: this.getHighConfidencePlatformId(appleLink, meta),
+      qqMusicId: this.getHighConfidencePlatformId(qqLink, meta),
     };
   }
 
   // Finds the stored track a resolve belongs to, through any of its high-confidence
-  // IDs or its ISRC. When those point at several tracks, pickTrackMatch decides.
+  // IDs or its ISRC. A track that does not own the requested ID must also be the
+  // same recording (duration and version tags), so one wrong link never merges a
+  // remix, live or acoustic take into the original. pickTrackMatch breaks ties.
   private async findExistingTrackByPlatformLinks(
     links: Record<string, ResolvedLink | null | undefined>,
-    isrc?: string,
+    meta: ResolverTrackMetadata,
   ): Promise<Track | null> {
+    const isrc = meta.isrc;
     const sourceLink = Object.values(links).find(
       (link) => link?.matchReason === "direct" && link.id,
     );
@@ -793,7 +811,7 @@ export class TracksService implements OnApplicationBootstrap {
       : null;
 
     const ids = collectPlatformIds(
-      this.extractHighConfidencePlatformIds(links),
+      this.extractHighConfidencePlatformIds(links, meta),
       isrc,
     );
     const owners = await this.findPlatformIdOwners(ids);
@@ -807,8 +825,8 @@ export class TracksService implements OnApplicationBootstrap {
       .from(tracks)
       .where(inArray(tracks.id, [...candidateIds]));
 
-    return pickTrackMatch(
-      candidates.map((track) => ({
+    const matches = candidates
+      .map((track) => ({
         track,
         matchedIds: ids.filter((ref) =>
           owners.get(platformIdKey(ref))?.has(track.id),
@@ -816,8 +834,10 @@ export class TracksService implements OnApplicationBootstrap {
         ownsSource: Boolean(
           sourceKey && owners.get(sourceKey)?.has(track.id),
         ),
-      })),
-    );
+      }))
+      .filter((match) => match.ownsSource || isSameRecording(match.track, meta));
+
+    return pickTrackMatch(matches);
   }
 
   private async resolveAndStoreLyrics(
@@ -932,20 +952,26 @@ export class TracksService implements OnApplicationBootstrap {
     },
     existingTrack?: Track | null,
   ): NewTrack {
+    const freshArtists = meta.artists?.length
+      ? meta.artists
+      : meta.artist
+        ? [meta.artist]
+        : [];
+    const freshArtwork =
+      meta.artwork || (meta.image ? { url: meta.image } : null);
+    // A stored row keeps the title, album, duration and artwork it was first saved
+    // with, so resolving it from another release doesn't flip what it shows.
+    // Imported rows still waiting for platform metadata take the fresh values.
+    const kept =
+      existingTrack && !existingTrack.needsEnrichment ? existingTrack : null;
+
     return {
       ...(existingTrack?.id ? { id: existingTrack.id } : {}),
-      title: meta.title,
-      artists: meta.artists?.length
-        ? meta.artists
-        : meta.artist
-          ? [meta.artist]
-          : [],
-      album: meta.album,
-      durationMs: meta.durationMs || 0,
-      artwork:
-        meta.artwork ||
-        existingTrack?.artwork ||
-        (meta.image ? { url: meta.image } : null),
+      title: kept?.title || meta.title,
+      artists: kept?.artists?.length ? kept.artists : freshArtists,
+      album: kept ? (kept.album ?? meta.album) : meta.album,
+      durationMs: kept?.durationMs || meta.durationMs || 0,
+      artwork: kept?.artwork || freshArtwork || existingTrack?.artwork || null,
       // An existing row keeps its first-seen IDs; other versions' IDs go to track_platform_ids
       isrc: existingTrack?.isrc || meta.isrc,
       spotifyId: existingTrack?.spotifyId || validIds.spotifyId,
@@ -1279,10 +1305,13 @@ export class TracksService implements OnApplicationBootstrap {
       );
 
       const meta = resolved.metadata;
-      const validIds = this.extractHighConfidencePlatformIds(resolved.links);
+      const validIds = this.extractHighConfidencePlatformIds(
+        resolved.links,
+        meta,
+      );
       const existingTrack = await this.findExistingTrackByPlatformLinks(
         resolved.links,
-        meta.isrc,
+        meta,
       );
 
       // The refresh may reach a verified track through another platform's link

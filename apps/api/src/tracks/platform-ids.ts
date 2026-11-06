@@ -1,4 +1,5 @@
 import type { PlatformIdKey, Track } from "@repo/database";
+import { getVersionTags, sameVersionTags } from "@repo/music-resolver";
 
 export interface VerifiedPlatformIds {
   spotifyId?: string;
@@ -83,4 +84,29 @@ export function pickTrackMatch(matches: TrackMatch[]): Track | null {
         new Date(b.track.createdAt).getTime(),
   );
   return ranked[0]?.track ?? null;
+}
+
+// Two catalog entries of one recording can differ by a few seconds of silence;
+// radio edits, extended mixes and live takes differ by far more
+export const SAME_RECORDING_MAX_DURATION_DELTA_MS = 7000;
+
+export interface RecordingInfo {
+  title?: string | null;
+  album?: string | null;
+  durationMs?: number | null;
+}
+
+// Whether two entries are plausibly the same recording: durations agree (when both
+// are known) and both carry the same version tags (live, acoustic, remix, ...).
+// A similar title alone is not enough, since every version shares it.
+export function isSameRecording(a: RecordingInfo, b: RecordingInfo): boolean {
+  const aMs = a.durationMs ?? 0;
+  const bMs = b.durationMs ?? 0;
+  if (aMs > 0 && bMs > 0 && Math.abs(aMs - bMs) > SAME_RECORDING_MAX_DURATION_DELTA_MS) {
+    return false;
+  }
+  return sameVersionTags(
+    getVersionTags(a.title, a.album),
+    getVersionTags(b.title, b.album),
+  );
 }

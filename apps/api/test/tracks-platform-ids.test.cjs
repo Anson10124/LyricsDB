@@ -3,6 +3,7 @@ const { test } = require("node:test");
 const { TracksService } = require("../dist/tracks/tracks.service.js");
 const {
   collectPlatformIds,
+  isSameRecording,
   pickTrackMatch,
 } = require("../dist/tracks/platform-ids.js");
 
@@ -123,8 +124,8 @@ test("a sync records the requested ID, the new version's IDs, the ISRC and the o
     {},
     {},
   );
-  s.findExistingTrackByPlatformLinks = async (_links, isrc) => {
-    assert.equal(isrc, metadata.isrc);
+  s.findExistingTrackByPlatformLinks = async (_links, meta) => {
+    assert.equal(meta.isrc, metadata.isrc);
     return existing;
   };
   s.resolveAndStoreLyrics = async () => ({
@@ -198,7 +199,7 @@ test("matching picks the track that owns the requested ID over a verified duplic
         matchReason: "direct",
       },
     },
-    metadata.isrc,
+    metadata,
   );
   assert.equal(match.id, "owner");
 });
@@ -207,9 +208,10 @@ test("matching returns null when no ID is known", async () => {
   const s = service();
   s.findPlatformIdOwners = async () => new Map();
   assert.equal(
-    await s.findExistingTrackByPlatformLinks({
-      netease: { platform: "netease", id: NEW_NETEASE, isVerified: true },
-    }),
+    await s.findExistingTrackByPlatformLinks(
+      { netease: { platform: "netease", id: NEW_NETEASE, isVerified: true } },
+      metadata,
+    ),
     null,
   );
 });
@@ -227,4 +229,192 @@ test("a failed alias write does not fail the request", async () => {
   await s.recordPlatformIds("791f8b9b-9593-46ce-9852-b1801d88a5d1", [
     { platform: "netease", platformId: NEW_NETEASE },
   ]);
+});
+
+const directLink = {
+  netease: {
+    platform: "netease",
+    id: NEW_NETEASE,
+    isVerified: true,
+    matchReason: "direct",
+  },
+};
+
+function fuzzyLink(platform, id, matched) {
+  return {
+    platform,
+    id,
+    isVerified: true,
+    score: 0.9,
+    matchReason: "fuzzy",
+    matched,
+  };
+}
+
+function matchingService(rows, owners) {
+  const s = service({
+    select: () => ({ from: () => ({ where: async () => rows }) }),
+  });
+  s.findPlatformIdOwners = async () => owners;
+  return s;
+}
+
+const noLyrics = {
+  lyricsType: null,
+  lyrics: null,
+  lyricsStoragePath: null,
+  lyricsProvider: null,
+};
+
+test("isSameRecording needs matching duration and version tags", () => {
+  const studio = { title: "Example", album: "Album", durationMs: 180000 };
+  assert.equal(isSameRecording(studio, { ...studio, durationMs: 184000 }), true);
+  assert.equal(
+    isSameRecording(studio, {
+      title: "Example - 2011 Remaster",
+      durationMs: 181000,
+    }),
+    true,
+  );
+  assert.equal(isSameRecording(studio, { ...studio, durationMs: 200000 }), false);
+  assert.equal(
+    isSameRecording(studio, { ...studio, title: "Example (Live)" }),
+    false,
+  );
+  assert.equal(
+    isSameRecording(studio, { ...studio, title: "Example - Acoustic" }),
+    false,
+  );
+  assert.equal(
+    isSameRecording(studio, { ...studio, title: "Example (DJ Remix)" }),
+    false,
+  );
+  assert.equal(
+    isSameRecording(studio, { ...studio, album: "Live at Wembley" }),
+    false,
+  );
+  // An unknown duration (imported rows) leaves only the version check
+  assert.equal(
+    isSameRecording(studio, { title: "Example", durationMs: 0 }),
+    true,
+  );
+});
+
+test("search matches of another version are not trusted as this track's IDs", () => {
+  const ids = service().extractHighConfidencePlatformIds(
+    {
+      ...directLink,
+      qqMusic: fuzzyLink("qqMusic", "qq-live", {
+        title: "Example (Live)",
+        durationMs: 181000,
+      }),
+      deezer: fuzzyLink("deezer", "dz-edit", {
+        title: "Example",
+        durationMs: 150000,
+      }),
+      spotify: fuzzyLink("spotify", "sp-same", {
+        title: "Example",
+        durationMs: 181000,
+      }),
+      appleMusic: {
+        platform: "appleMusic",
+        id: "ap-isrc",
+        isVerified: true,
+        score: 1,
+        matchReason: "isrc",
+      },
+    },
+    metadata,
+  );
+  assert.equal(ids.neteaseId, NEW_NETEASE);
+  assert.equal(ids.qqMusicId, undefined);
+  assert.equal(ids.deezerId, undefined);
+  assert.equal(ids.spotifyId, "sp-same");
+  assert.equal(ids.appleMusicId, "ap-isrc");
+});
+
+test("matching does not merge a different version found through a shared ID", async () => {
+  const live = track({ id: "live", title: "Example (Live)" });
+  const s = matchingService(
+    [live],
+    new Map([[`isrc:${metadata.isrc}`, new Set(["live"])]]),
+  );
+  assert.equal(
+    await s.findExistingTrackByPlatformLinks(directLink, metadata),
+    null,
+  );
+});
+
+test("matching does not merge a recording with a different length", async () => {
+  const edit = track({ id: "edit", durationMs: 150000 });
+  const s = matchingService(
+    [edit],
+    new Map([[`isrc:${metadata.isrc}`, new Set(["edit"])]]),
+  );
+  assert.equal(
+    await s.findExistingTrackByPlatformLinks(directLink, metadata),
+    null,
+  );
+});
+
+test("matching still returns the track that owns the requested ID", async () => {
+  const owner = track({
+    id: "owner",
+    title: "Example (Live)",
+    durationMs: 240000,
+  });
+  const s = matchingService(
+    [owner],
+    new Map([[`netease:${NEW_NETEASE}`, new Set(["owner"])]]),
+  );
+  const match = await s.findExistingTrackByPlatformLinks(directLink, metadata);
+  assert.equal(match.id, "owner");
+});
+
+test("an existing row keeps its title, album, duration and artwork", () => {
+  const existing = track({
+    album: "Album",
+    artwork: { url: "https://example.com/album.jpg" },
+    needsEnrichment: false,
+  });
+  const entity = service().assembleTrackEntity(
+    {
+      ...metadata,
+      title: "Example - Single Version",
+      album: "Example (Single)",
+      durationMs: 181000,
+      artwork: { url: "https://example.com/single.jpg" },
+    },
+    {},
+    noLyrics,
+    existing,
+  );
+  assert.equal(entity.title, "Example");
+  assert.equal(entity.album, "Album");
+  assert.equal(entity.durationMs, 180000);
+  assert.equal(entity.artwork.url, "https://example.com/album.jpg");
+});
+
+test("an imported row takes the platform's metadata", () => {
+  const existing = track({
+    title: "example",
+    album: null,
+    durationMs: 0,
+    needsEnrichment: true,
+  });
+  const entity = service().assembleTrackEntity(
+    {
+      ...metadata,
+      album: "Album",
+      artwork: { url: "https://example.com/a.jpg" },
+    },
+    {},
+    noLyrics,
+    existing,
+  );
+  assert.equal(entity.title, "Example");
+  assert.equal(entity.album, "Album");
+  assert.equal(entity.durationMs, 180000);
+  assert.equal(entity.artwork.url, "https://example.com/a.jpg");
+  assert.equal(entity.needsEnrichment, false);
 });

@@ -374,6 +374,11 @@ export function findBestMatch(
         score: result.score,
         matchReason: result.matchReason,
         breakdown: result.breakdown,
+        matched: {
+          title: candidate.title,
+          album: candidate.album,
+          durationMs: candidate.durationMs,
+        },
         raw: candidate.raw,
       };
     }

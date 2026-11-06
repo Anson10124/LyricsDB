@@ -157,3 +157,84 @@ export function normalizeArtistName(artist: string): string {
     .replace(/[^a-z0-9\u4e00-\u9fa5\u3040-\u30ff]/g, "")
     .trim();
 }
+
+// Kinds of recording that share a song's name but not its audio (and so not its
+// lyric timing). Remasters and edition labels are not here: they keep the recording.
+export type VersionTag =
+  | "live"
+  | "acoustic"
+  | "remix"
+  | "instrumental"
+  | "karaoke"
+  | "cover"
+  | "sped-up"
+  | "slowed"
+  | "demo"
+  | "re-recording";
+
+const VERSION_TAG_PATTERNS: Array<[VersionTag, RegExp]> = [
+  ["live", /\blive\b|现场|現場|ライブ/i],
+  ["acoustic", /\b(acoustic|unplugged)\b|不插电|アコースティック/i],
+  [
+    "remix",
+    /\b(re-?mix(es|ed)?|rmx|club\s+mix|extended\s+mix|dub\s+mix|vip\s+mix|bootleg|rework)\b|混音|リミックス/i,
+  ],
+  ["instrumental", /\b(instrumental|inst\.?|off\s*vocal|backing\s+track)\b|伴奏|インスト/i],
+  ["karaoke", /\b(karaoke|sing-?along|in\s+the\s+style\s+of)\b|カラオケ/i],
+  [
+    "cover",
+    /\b(cover(\s+version)?|tribute|originally\s+performed\s+by)\b|翻唱|翻自|カバー/i,
+  ],
+  ["sped-up", /\b(sped\s*up|speed\s*up|nightcore)\b/i],
+  ["slowed", /\b(slowed|reverb)\b/i],
+  ["demo", /\bdemo\b/i],
+  ["re-recording", /\b(taylor'?s\s+version|re-?recorded|re-?recording)\b/i],
+];
+
+// The parts of a title that describe its version: "(...)", "[...]" and " - ..."
+function versionDecorations(text: string): string[] {
+  const parts = [...text.matchAll(/[([]([^)\]]*)[)\]]/g)].map((m) => m[1] ?? "");
+  const dash = text.replace(/[([][^)\]]*[)\]]/g, "").match(/\s-\s(.+)$/);
+  if (dash?.[1]) parts.push(dash[1]);
+  return parts;
+}
+
+function addTags(tags: Set<VersionTag>, text: string): void {
+  for (const [tag, pattern] of VERSION_TAG_PATTERNS) {
+    if (pattern.test(text)) tags.add(tag);
+  }
+}
+
+// Version tags read from a track's title and album. Only the title's decorations
+// count, so "Live Forever" is not a live recording but "Live Forever (Live)" is.
+// Albums are named more freely, so only clear version names count there.
+export function getVersionTags(
+  title?: string | null,
+  album?: string | null,
+): VersionTag[] {
+  const tags = new Set<VersionTag>();
+
+  if (title) {
+    for (const part of versionDecorations(cleanSearchQuery(title))) {
+      addTags(tags, part);
+    }
+  }
+
+  if (album) {
+    const cleanAlbum = cleanSearchQuery(album);
+    for (const part of versionDecorations(cleanAlbum)) addTags(tags, part);
+    if (/^live$|\blive\s+(at|in|from|on)\b|现场|ライブ/i.test(cleanAlbum)) {
+      tags.add("live");
+    }
+    if (/\b(unplugged|acoustic)\b/i.test(cleanAlbum)) tags.add("acoustic");
+    if (/\bremix(es|ed)?\b/i.test(cleanAlbum)) tags.add("remix");
+    if (/\bkaraoke\b|カラオケ/i.test(cleanAlbum)) tags.add("karaoke");
+    if (/\btribute\s+to\b/i.test(cleanAlbum)) tags.add("cover");
+  }
+
+  return [...tags].sort();
+}
+
+export function sameVersionTags(a: VersionTag[], b: VersionTag[]): boolean {
+  return a.length === b.length && a.every((tag, i) => tag === b[i]);
+}
