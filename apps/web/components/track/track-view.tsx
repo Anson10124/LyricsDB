@@ -17,6 +17,7 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { resolveTrackArtwork } from "@/lib/artwork";
+import { optimizedCoverUrl } from "@/components/cover-image";
 import { uniqueArtists } from "@/lib/utils";
 import { press, rise, spring, stagger } from "@/lib/motion";
 import { AmllPlayer } from "@/components/amll-player";
@@ -186,7 +187,17 @@ export function TrackView({
   const [sheetOpen, setSheetOpen] = useState(false);
   const closeSheet = useCallback(() => setSheetOpen(false), []);
 
-  const { imageCover, videoCover } = resolveTrackArtwork(track.artwork, 1000);
+  const artwork = resolveTrackArtwork(track.artwork, 1000);
+  const videoCover = artwork.videoCover;
+  // The cover and the video poster share one URL (400px is the cover's
+  // widest size). The background only samples colours for a blurred
+  // gradient, so it gets a much smaller copy.
+  const imageCover = artwork.imageCover
+    ? optimizedCoverUrl(artwork.imageCover, 400)
+    : undefined;
+  const backgroundCover = artwork.imageCover
+    ? optimizedCoverUrl(artwork.imageCover, 128)
+    : undefined;
   const artistLine =
     uniqueArtists(track.artists).join(", ") || "Unknown Artist";
   const isSynced = Array.isArray(rawLyrics);
@@ -199,7 +210,7 @@ export function TrackView({
   return (
     <div className="dark relative h-svh overflow-hidden text-white">
       <TrackBackground
-        imageCover={imageCover}
+        imageCover={backgroundCover}
         videoCover={videoCover}
         playing={playing}
       />

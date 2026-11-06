@@ -10,6 +10,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { CoverImage } from "@/components/cover-image";
 import { cn, formatDuration, isStreamingUrl } from "@/lib/utils";
 import {
   type DeezerTrack,
@@ -348,12 +349,10 @@ export function InputBar({
                       {/* Album Cover Thumbnail */}
                       <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
                         {coverUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <CoverImage
                             src={coverUrl}
                             alt={track.album?.title || track.title}
-                            className="size-full object-cover"
-                            loading="lazy"
+                            sizes="44px"
                           />
                         ) : (
                           <div className="flex size-full items-center justify-center text-muted-foreground">

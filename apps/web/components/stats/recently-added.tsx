@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CoverImage } from "@/components/cover-image";
 import { formatArtworkUrl } from "@/lib/artwork";
 import { SYNC_TYPES } from "./stats-format";
 
@@ -65,12 +66,10 @@ export function RecentlyAdded({
                   >
                     <div className="relative size-10 shrink-0 overflow-hidden rounded-md border border-border/50 bg-muted">
                       {coverUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <CoverImage
                           src={coverUrl}
                           alt={track.album || track.title}
-                          className="size-full object-cover"
-                          loading="lazy"
+                          sizes="40px"
                         />
                       ) : (
                         <div className="flex size-full items-center justify-center text-muted-foreground">

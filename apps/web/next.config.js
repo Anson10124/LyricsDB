@@ -1,4 +1,5 @@
 import { createMDX } from 'fumadocs-mdx/next';
+import { COVER_IMAGE_HOSTS } from './lib/image-hosts.js';
 
 const withMDX = createMDX();
 
@@ -6,6 +7,11 @@ const withMDX = createMDX();
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  images: {
+    remotePatterns: COVER_IMAGE_HOSTS.map((hostname) => ({ hostname })),
+    // Cover art URLs point at fixed files, so optimized copies can stay cached
+    minimumCacheTTL: 60 * 60 * 24 * 31,
+  },
   async rewrites() {
     // Determine backend API URL:
     // 1. Explicit internal service URL (e.g. http://api:4000 in Docker)
