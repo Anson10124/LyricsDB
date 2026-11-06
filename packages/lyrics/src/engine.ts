@@ -92,6 +92,18 @@ export interface CandidateEvaluation {
   wordCount: number;
   spanMs: number;
   coverageRatio: number;
+  // Lines are sung after the track has ended: timed for a longer version
+  // (extended mix, live take) rather than this recording
+  overrunsTrack: boolean;
+}
+
+// How far past the track's end the last sung word may start before the lyrics
+// count as another version's: 5% of the track, but at least 4 seconds
+export const LYRICS_OVERRUN_RATIO = 0.05;
+export const LYRICS_OVERRUN_MIN_MS = 4000;
+
+export function lyricsOverrunToleranceMs(trackDurationMs: number): number {
+  return Math.max(LYRICS_OVERRUN_MIN_MS, trackDurationMs * LYRICS_OVERRUN_RATIO);
 }
 
 /** Completeness remains mandatory before provider preference is considered. */
@@ -138,6 +150,7 @@ export function evaluateLyricsCandidate(
   let wordCount = 0;
   let spanMs = 0;
   let coverageRatio = 0;
+  let overrunsTrack = false;
   const vocalTypes = new Set<VocalType>();
 
   if (Array.isArray(candidate.lyrics)) {
@@ -146,30 +159,44 @@ export function evaluateLyricsCandidate(
 
     let minStartMs = Number.POSITIVE_INFINITY;
     let maxEndMs = 0;
+    // Start of the last word with text. Word lengths are not used for this:
+    // providers often stretch the final word or line to an arbitrary end.
+    let lastSungStartMs = 0;
 
     for (const line of payload) {
       if (!Array.isArray(line)) continue;
       for (const wordToken of line) {
         if (!wordToken || !Array.isArray(wordToken)) continue;
-        const [vocalType, startMs, lengthMs] = wordToken;
+        const [vocalType, startMs, lengthMs, text] = wordToken;
         if (vocalType) vocalTypes.add(vocalType);
         wordCount++;
         if (startMs < minStartMs) minStartMs = startMs;
         const endMs = startMs + (lengthMs || 0);
         if (endMs > maxEndMs) maxEndMs = endMs;
+        if (text?.trim() && startMs > lastSungStartMs) lastSungStartMs = startMs;
       }
     }
 
     if (minStartMs === Number.POSITIVE_INFINITY) minStartMs = 0;
     spanMs = Math.max(0, maxEndMs - minStartMs);
 
+    if (expectedDurationMs && expectedDurationMs > 0) {
+      overrunsTrack =
+        lastSungStartMs >
+        expectedDurationMs + lyricsOverrunToleranceMs(expectedDurationMs);
+    }
+
     if (expectedDurationMs && expectedDurationMs >= 60000) {
       coverageRatio = maxEndMs / expectedDurationMs;
-      // Complete if covers >= 55% of track duration and span >= 40s (or track is under 90s) and lineCount >= 4
+      // Complete if covers >= 55% of track duration and span >= 40s (or track is
+      // under 90s) and lineCount >= 4, without running past the track's end
       isComplete =
+        !overrunsTrack &&
         coverageRatio >= 0.55 &&
         (spanMs >= 40000 || expectedDurationMs < 90000) &&
         lineCount >= 4;
+    } else if (overrunsTrack) {
+      isComplete = false;
     } else {
       // Without durationMs, check minimum line count and span
       isComplete = lineCount >= 4 && spanMs >= 20000;
@@ -246,7 +273,24 @@ export function evaluateLyricsCandidate(
     wordCount,
     spanMs,
     coverageRatio,
+    overrunsTrack,
   };
+}
+
+// Evaluates fetched candidates, dropping lyrics timed for a longer version: they
+// would be out of sync with this recording, so they are neither picked nor used
+// as references for unmasking.
+export function evaluateLyricsCandidates(
+  results: Array<PromiseSettledResult<ResolvedLyricsResult | null>>,
+  expectedDurationMs?: number,
+): CandidateEvaluation[] {
+  const evaluations: CandidateEvaluation[] = [];
+  for (const result of results) {
+    if (result.status !== "fulfilled" || !result.value) continue;
+    const evaluation = evaluateLyricsCandidate(result.value, expectedDurationMs);
+    if (!evaluation.overrunsTrack) evaluations.push(evaluation);
+  }
+  return evaluations;
 }
 
 async function unmaskCandidate(
@@ -819,17 +863,10 @@ export class LyricsEngine {
       // Stop here if the caller hit its deadline or disconnected, rather than
       // returning (and caching) a partial or empty result
       throwIfAborted();
-      const tier1Candidates: CandidateEvaluation[] = [];
-
-      for (const r of tier1Results) {
-        if (r.status === "fulfilled" && r.value) {
-          const evalResult = evaluateLyricsCandidate(
-            r.value,
-            context.durationMs,
-          );
-          tier1Candidates.push(evalResult);
-        }
-      }
+      const tier1Candidates = evaluateLyricsCandidates(
+        tier1Results,
+        context.durationMs,
+      );
 
       const completeTier1 = tier1Candidates.filter((c) => c.isComplete);
       if (completeTier1.length > 0) {
@@ -1059,17 +1096,10 @@ export class LyricsEngine {
     if (tier2Tasks.length > 0) {
       const tier2Results = await Promise.allSettled(tier2Tasks);
       throwIfAborted();
-      const tier2Candidates: CandidateEvaluation[] = [];
-
-      for (const r of tier2Results) {
-        if (r.status === "fulfilled" && r.value) {
-          const evalResult = evaluateLyricsCandidate(
-            r.value,
-            context.durationMs,
-          );
-          tier2Candidates.push(evalResult);
-        }
-      }
+      const tier2Candidates = evaluateLyricsCandidates(
+        tier2Results,
+        context.durationMs,
+      );
 
       const completeTier2 = tier2Candidates.filter((c) => c.isComplete);
       if (completeTier2.length > 0) {
@@ -1200,17 +1230,10 @@ export class LyricsEngine {
     if (tier3Tasks.length > 0) {
       const tier3Results = await Promise.allSettled(tier3Tasks);
       throwIfAborted();
-      const tier3Candidates: CandidateEvaluation[] = [];
-
-      for (const r of tier3Results) {
-        if (r.status === "fulfilled" && r.value) {
-          const evalResult = evaluateLyricsCandidate(
-            r.value,
-            context.durationMs,
-          );
-          tier3Candidates.push(evalResult);
-        }
-      }
+      const tier3Candidates = evaluateLyricsCandidates(
+        tier3Results,
+        context.durationMs,
+      );
 
       if (tier3Candidates.length > 0) {
         tier3Candidates.sort(compareLyricsCandidates);
