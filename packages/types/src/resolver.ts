@@ -160,6 +160,8 @@ export interface MusicParser {
 }
 
 export interface EnrichedMusixmatchMetadata {
+  // What the lookup was keyed by; a title search is a fuzzy match
+  matchedBy?: "spotify" | "apple" | "isrc" | "title";
   isrc?: string;
   spotifyId?: string;
   spotifyIds?: string[];
@@ -169,6 +171,7 @@ export interface EnrichedMusixmatchMetadata {
   title?: string;
   artist?: string;
   album?: string;
+  durationMs?: number;
   raw?: Record<string, unknown>;
 }
 

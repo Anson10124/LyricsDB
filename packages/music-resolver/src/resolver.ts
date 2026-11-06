@@ -18,7 +18,10 @@ import type {
   ResolvedLink,
   TrackMetadata,
 } from "./types.js";
-import { matchTrackWithMusixmatch } from "./utils/musixmatch-matcher.js";
+import {
+  isTrustedMusixmatchMatch,
+  matchTrackWithMusixmatch,
+} from "./utils/musixmatch-matcher.js";
 import { fetchAppleArtworkMetadata } from "./utils/apple-animated-artwork.js";
 import { globalProviderLimiter } from "./utils/provider-limiter.js";
 import { backfillIsrc } from "./utils/isrc.js";
@@ -162,6 +165,10 @@ export class MusicResolver {
         apiUrl: this.musixmatchConfig?.apiUrl,
         getToken: this.musixmatchConfig?.getToken,
       });
+
+      if (enriched && !isTrustedMusixmatchMatch(enriched, metadata)) {
+        return null;
+      }
 
       if (enriched) {
         // Fill missing ISRC in metadata
@@ -348,41 +355,30 @@ export class MusicResolver {
 
     await Promise.all(adapterPromises);
 
-    // Fill in platform links from Musixmatch cross-platform mapping if adapter search yielded unverified result
-    if (enriched) {
-      if (
-        (!links["spotify"] || !links["spotify"].isVerified) &&
-        enriched.spotifyId &&
-        this.adapters.has("spotify") &&
-        parser.id !== "spotify"
-      ) {
-        links["spotify"] = {
-          platform: "spotify",
-          url: `https://open.spotify.com/track/${enriched.spotifyId}`,
-          id: enriched.spotifyId,
-          isVerified: true,
-          score: 0.95,
-          matchReason: "isrc",
-        };
-      }
-
-      const appleKey = links["appleMusic"] ? "appleMusic" : "applemusic";
-      if (
-        (!links[appleKey] || !links[appleKey]?.isVerified) &&
-        enriched.appleMusicId &&
-        this.adapters.has("appleMusic") &&
-        parser.id !== "appleMusic" &&
-        parser.id !== "applemusic"
-      ) {
-        links["appleMusic"] = {
-          platform: "appleMusic",
-          url: `https://music.apple.com/song/${enriched.appleMusicId}`,
-          id: enriched.appleMusicId,
-          isVerified: true,
-          score: 0.95,
-          matchReason: "isrc",
-        };
-      }
+    // Fill in the Spotify link from Musixmatch's mapping if the search found no
+    // verified match. Only for ID lookups: a title search may be another track.
+    // It is labelled a fuzzy match and carries the Musixmatch entry it came from,
+    // so callers still check it is the same recording.
+    if (
+      enriched?.spotifyId &&
+      enriched.matchedBy !== "title" &&
+      (!links["spotify"] || !links["spotify"].isVerified) &&
+      this.adapters.has("spotify") &&
+      parser.id !== "spotify"
+    ) {
+      links["spotify"] = {
+        platform: "spotify",
+        url: `https://open.spotify.com/track/${enriched.spotifyId}`,
+        id: enriched.spotifyId,
+        isVerified: true,
+        score: 0.95,
+        matchReason: "fuzzy",
+        matched: {
+          title: enriched.title || metadata.title,
+          album: enriched.album,
+          durationMs: enriched.durationMs,
+        },
+      };
     }
 
     await backfillIsrc(

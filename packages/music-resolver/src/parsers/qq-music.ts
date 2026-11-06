@@ -1,6 +1,6 @@
 import type { MetadataType, ResolveOptions, TrackMetadata } from "../types.js";
 import { HttpClient } from "../utils/http.js";
-import { normalizeSongTitle } from "../utils/query.js";
+import { normalizeSongTitle, withVersionLabels } from "../utils/query.js";
 import { getCheerioDoc, metaTagContent } from "../utils/scraper.js";
 import { BaseMusicParser } from "./base.js";
 
@@ -12,8 +12,10 @@ interface FcgPlaySingleSongResponse {
   data?: Array<{
     id: number;
     mid: string;
+    // `name` is the bare song name ("晴天"); `title` adds the version ("晴天 (Live)")
     name?: string;
     title?: string;
+    subtitle?: string;
     interval?: number;
     singer?: Array<{ id: number; mid: string; name: string; title?: string }>;
     album?: { id: number; mid: string; name: string; title?: string };
@@ -167,7 +169,10 @@ export class QQMusicParser extends BaseMusicParser {
 
         if (res?.code === 0 && res.data?.[0]) {
           const song = res.data[0];
-          const rawTitle = song.name || song.title || "";
+          // Prefer `title`, which keeps the version label that `name` drops
+          const rawTitle = withVersionLabels(song.title || song.name || "", [
+            song.subtitle,
+          ]);
           const normalized = normalizeSongTitle(rawTitle);
           const singers: string[] = song.singer
             ? song.singer

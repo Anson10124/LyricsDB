@@ -1,5 +1,11 @@
-import type { PlatformIdKey, Track } from "@repo/database";
-import { getVersionTags, sameVersionTags } from "@repo/music-resolver";
+import type { NewTrack, PlatformIdKey, Track } from "@repo/database";
+
+// Shared with the resolver, which runs the same check on its own matches
+export {
+  isSameRecording,
+  SAME_RECORDING_MAX_DURATION_DELTA_MS,
+  type RecordingInfo,
+} from "@repo/music-resolver";
 
 export interface VerifiedPlatformIds {
   spotifyId?: string;
@@ -86,27 +92,62 @@ export function pickTrackMatch(matches: TrackMatch[]): Track | null {
   return ranked[0]?.track ?? null;
 }
 
-// Two catalog entries of one recording can differ by a few seconds of silence;
-// radio edits, extended mixes and live takes differ by far more
-export const SAME_RECORDING_MAX_DURATION_DELTA_MS = 7000;
+export type TrackDetails = Pick<
+  NewTrack,
+  "title" | "artists" | "album" | "durationMs" | "artwork"
+>;
 
-export interface RecordingInfo {
-  title?: string | null;
-  album?: string | null;
-  durationMs?: number | null;
+// A stored row keeps the title, artists, album, duration and artwork it was first
+// saved with, so resolving it from another release doesn't flip what it shows.
+// Imported rows still waiting for platform metadata take the fresh values.
+export function keepStoredDetails(
+  existing: Track | null | undefined,
+  fresh: TrackDetails,
+): TrackDetails {
+  const kept = existing && !existing.needsEnrichment ? existing : null;
+  return {
+    title: kept?.title || fresh.title,
+    artists: kept?.artists?.length ? kept.artists : fresh.artists,
+    album: kept ? (kept.album ?? fresh.album) : fresh.album,
+    durationMs: kept?.durationMs || fresh.durationMs || 0,
+    artwork: kept?.artwork || fresh.artwork || existing?.artwork || null,
+  };
 }
 
-// Whether two entries are plausibly the same recording: durations agree (when both
-// are known) and both carry the same version tags (live, acoustic, remix, ...).
-// A similar title alone is not enough, since every version shares it.
-export function isSameRecording(a: RecordingInfo, b: RecordingInfo): boolean {
-  const aMs = a.durationMs ?? 0;
-  const bMs = b.durationMs ?? 0;
-  if (aMs > 0 && bMs > 0 && Math.abs(aMs - bMs) > SAME_RECORDING_MAX_DURATION_DELTA_MS) {
-    return false;
+type LyricsFields = Pick<NewTrack, "lyrics" | "lyricsStoragePath">;
+
+export function hasStoredLyrics(track: LyricsFields): boolean {
+  const { lyrics, lyricsStoragePath } = track;
+  if (lyricsStoragePath?.trim()) return true;
+  if (Array.isArray(lyrics)) return lyrics.length > 0;
+  if (typeof lyrics === "string") return lyrics.trim().length > 0;
+  return Boolean(lyrics);
+}
+
+// Folds a save into a stored row of the same recording, as when two requests
+// insert one new track at once. The row keeps its details and IDs (fresh IDs only
+// fill its empty columns), and the lyrics move as one bundle: the row's own if it
+// has any, otherwise the fresh ones. Mixing the fields could pair one source's
+// lyrics with another's type or storage path.
+export function mergeIntoStoredTrack(existing: Track, fresh: NewTrack): NewTrack {
+  const lyricsFrom =
+    hasStoredLyrics(existing) || !hasStoredLyrics(fresh) ? existing : fresh;
+
+  const merged: NewTrack = {
+    ...fresh,
+    id: existing.id,
+    ...keepStoredDetails(existing, fresh),
+    lyrics: lyricsFrom.lyrics ?? null,
+    lyricsType: lyricsFrom.lyricsType ?? null,
+    lyricsProvider: lyricsFrom.lyricsProvider ?? null,
+    lyricsStoragePath: lyricsFrom.lyricsStoragePath ?? null,
+    hasTranslation: lyricsFrom.hasTranslation ?? false,
+    hasRomaji: lyricsFrom.hasRomaji ?? false,
+    isVerified: existing.isVerified || Boolean(fresh.isVerified),
+    needsEnrichment: existing.needsEnrichment && Boolean(fresh.needsEnrichment),
+  };
+  for (const [, field] of TRACK_ID_FIELDS) {
+    merged[field] = existing[field] || fresh[field] || null;
   }
-  return sameVersionTags(
-    getVersionTags(a.title, a.album),
-    getVersionTags(b.title, b.album),
-  );
+  return merged;
 }

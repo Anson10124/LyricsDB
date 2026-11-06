@@ -1,7 +1,7 @@
 import type { MetadataType, ResolveOptions, TrackMetadata } from "../types.js";
 import { HttpClient } from "../utils/http.js";
 import { weapiEncrypt } from "../utils/netease-crypto.js";
-import { normalizeSongTitle } from "../utils/query.js";
+import { normalizeSongTitle, withVersionLabels } from "../utils/query.js";
 import { BaseMusicParser } from "./base.js";
 
 export const NETEASE_LINK_REGEX =
@@ -77,7 +77,8 @@ export class NeteaseParser extends BaseMusicParser {
 
       if (res.code === 200 && res.songs?.[0]) {
         const song = res.songs[0];
-        const rawTitle = song.name;
+        // Version labels live in `alia`, so "Song" + ["Live"] is "Song (Live)"
+        const rawTitle = withVersionLabels(song.name, song.alia);
         const normalized = normalizeSongTitle(rawTitle);
         const artists = song.ar?.map((a) => a.name).filter(Boolean) || [];
 

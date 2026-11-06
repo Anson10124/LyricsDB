@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 import { HttpClient } from "../utils/http.js";
 import { weapiEncrypt } from "../utils/netease-crypto.js";
+import { withVersionLabels } from "../utils/query.js";
 import { findBestMatch } from "../utils/string-similarity.js";
 
 export enum NeteaseSearchType {
@@ -124,8 +125,8 @@ export class NeteaseAdapter implements MusicAdapter {
       if (searchType === NeteaseSearchType.Song && response.result.songs) {
         for (const song of response.result.songs) {
           const artists = song.ar?.map((a) => a.name).filter(Boolean) || [];
+          // `alia` holds song notes ("Live", "伴奏", theme credits), not artist names
           const aliases: string[] = [];
-          if (song.alia) aliases.push(...song.alia);
           if (song.ar) {
             for (const ar of song.ar) {
               if (ar.tns) aliases.push(...ar.tns);
@@ -134,7 +135,9 @@ export class NeteaseAdapter implements MusicAdapter {
           }
 
           candidates.push({
-            title: song.name,
+            // NetEase keeps version labels in `alia`; fold them into the title so
+            // a live or instrumental entry is scored and stored as that version
+            title: withVersionLabels(song.name, song.alia),
             artist: artists.join(", ") || undefined,
             artists: artists.length > 0 ? artists : undefined,
             album: song.al?.name,

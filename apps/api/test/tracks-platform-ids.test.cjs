@@ -4,6 +4,7 @@ const { TracksService } = require("../dist/tracks/tracks.service.js");
 const {
   collectPlatformIds,
   isSameRecording,
+  mergeIntoStoredTrack,
   pickTrackMatch,
 } = require("../dist/tracks/platform-ids.js");
 
@@ -136,6 +137,7 @@ test("a sync records the requested ID, the new version's IDs, the ISRC and the o
   });
   s.dropIdsOwnedElsewhere = async (data) => data;
   s.safeSaveTrack = async (data) => ({ ...existing, ...data });
+  s.findPlatformIdOwners = async () => new Map();
   let recorded;
   s.recordPlatformIds = async (trackId, ids) => {
     recorded = { trackId, ids };
@@ -417,4 +419,180 @@ test("an imported row takes the platform's metadata", () => {
   assert.equal(entity.durationMs, 180000);
   assert.equal(entity.artwork.url, "https://example.com/a.jpg");
   assert.equal(entity.needsEnrichment, false);
+});
+
+test("merging a save into its twin keeps the row's details and fills only empty IDs", () => {
+  const existing = track({
+    id: "twin",
+    album: "Album",
+    neteaseId: OLD_NETEASE,
+    lyricsStoragePath: "lyrics/twin.json",
+    lyricsType: "word",
+    lyricsProvider: "netease-yrc",
+    hasTranslation: true,
+  });
+  const merged = mergeIntoStoredTrack(existing, {
+    title: "Example - Single Version",
+    artists: ["Artist"],
+    album: "Example (Single)",
+    durationMs: 181000,
+    neteaseId: NEW_NETEASE,
+    spotifyId: "spotify1",
+    lyrics: [{ text: "line" }],
+    lyricsType: "line",
+    lyricsProvider: "lrclib",
+    lyricsStoragePath: null,
+    hasTranslation: false,
+  });
+  assert.equal(merged.id, "twin");
+  assert.equal(merged.title, "Example");
+  assert.equal(merged.album, "Album");
+  assert.equal(merged.durationMs, 180000);
+  assert.equal(merged.neteaseId, OLD_NETEASE);
+  assert.equal(merged.spotifyId, "spotify1");
+  // The row's lyrics stay together: not its storage path with the fresh type
+  assert.equal(merged.lyricsStoragePath, "lyrics/twin.json");
+  assert.equal(merged.lyrics, null);
+  assert.equal(merged.lyricsType, "word");
+  assert.equal(merged.lyricsProvider, "netease-yrc");
+  assert.equal(merged.hasTranslation, true);
+});
+
+test("merging takes the fresh lyrics bundle when the row has none", () => {
+  const merged = mergeIntoStoredTrack(track({ id: "twin" }), {
+    title: "Example",
+    artists: ["Artist"],
+    durationMs: 180000,
+    lyrics: null,
+    lyricsType: "word",
+    lyricsProvider: "netease-yrc",
+    lyricsStoragePath: "lyrics/new.json",
+    hasRomaji: true,
+  });
+  assert.equal(merged.lyricsStoragePath, "lyrics/new.json");
+  assert.equal(merged.lyricsType, "word");
+  assert.equal(merged.lyricsProvider, "netease-yrc");
+  assert.equal(merged.hasRomaji, true);
+});
+
+const uniqueViolation = Object.assign(new Error("duplicate key"), {
+  code: "23505",
+});
+
+// A db stub whose first insert fails on a unique index, recording every write
+function conflictService({ rows = [], owners = new Map() } = {}) {
+  const writes = [];
+  let inserts = 0;
+  const insertResult = (data) => {
+    inserts++;
+    if (inserts === 1) throw uniqueViolation;
+    writes.push({ kind: "insert", data });
+    return [{ ...data, id: data.id ?? "inserted" }];
+  };
+  const s = service({
+    insert: () => ({
+      values: (data) => ({
+        returning: async () => insertResult(data),
+        onConflictDoUpdate: () => ({
+          returning: async () => insertResult(data),
+        }),
+      }),
+    }),
+    update: () => ({
+      set: (data) => ({
+        where: () => ({
+          returning: async () => {
+            writes.push({ kind: "update", data });
+            return [{ ...data }];
+          },
+        }),
+      }),
+    }),
+    select: () => ({ from: () => ({ where: async () => rows }) }),
+  });
+  s.activityService = { recordTrackAdded: () => {} };
+  s.findPlatformIdOwners = async () => owners;
+  return { s, writes };
+}
+
+const raceSave = {
+  title: "Example - Single Version",
+  artists: ["Artist"],
+  album: "Example (Single)",
+  durationMs: 181000,
+  neteaseId: NEW_NETEASE,
+  ...noLyrics,
+};
+
+test("a racing insert merges into its same-recording twin without overwriting it", async () => {
+  const twin = track({ id: "twin", album: "Album", neteaseId: NEW_NETEASE });
+  const { s, writes } = conflictService({
+    rows: [twin],
+    owners: new Map([[`netease:${NEW_NETEASE}`, new Set(["twin"])]]),
+  });
+
+  const saved = await s.safeSaveTrack(raceSave);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].kind, "update");
+  assert.equal(saved.id, "twin");
+  assert.equal(saved.title, "Example");
+  assert.equal(saved.album, "Album");
+});
+
+test("a racing insert never merges into a different version that holds its ID", async () => {
+  const live = track({ id: "live", title: "Example (Live)", neteaseId: NEW_NETEASE });
+  const { s, writes } = conflictService({
+    rows: [live],
+    owners: new Map([[`netease:${NEW_NETEASE}`, new Set(["live"])]]),
+  });
+
+  const saved = await s.safeSaveTrack(raceSave);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].kind, "insert");
+  assert.equal(writes[0].data.neteaseId, null);
+  assert.equal(saved.title, "Example - Single Version");
+});
+
+test("a save does not record IDs another track holds as its own aliases", async () => {
+  const s = service();
+  s.dropIdsOwnedElsewhere = async (data) => ({ ...data, neteaseId: null });
+  s.safeSaveTrack = async (data) => ({ ...data, id: "mine" });
+  s.findPlatformIdOwners = async () =>
+    new Map([[`netease:${NEW_NETEASE}`, new Set(["live"])]]);
+  let recorded;
+  s.recordPlatformIds = async (_trackId, ids) => {
+    recorded = ids;
+  };
+
+  await s.saveTrackWithPlatformIds(
+    { ...raceSave, spotifyId: "spotify1" },
+    { neteaseId: NEW_NETEASE, spotifyId: "spotify1" },
+  );
+  assert.deepEqual(recorded, [{ platform: "spotify", platformId: "spotify1" }]);
+});
+
+test("a conflicting update stays on its own row and drops the taken ID", async () => {
+  const { s, writes } = conflictService({
+    owners: new Map([[`netease:${NEW_NETEASE}`, new Set(["other"])]]),
+  });
+
+  const saved = await s.safeSaveTrack({ ...raceSave, id: "mine" });
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].kind, "insert");
+  assert.equal(writes[0].data.id, "mine");
+  assert.equal(writes[0].data.neteaseId, null);
+  assert.equal(saved.id, "mine");
+});
+
+test("a Musixmatch link that is another recording is not trusted", () => {
+  const ids = service().extractHighConfidencePlatformIds(
+    {
+      spotify: fuzzyLink("spotify", "spotify1", {
+        title: "Example (Live)",
+        durationMs: 180000,
+      }),
+    },
+    metadata,
+  );
+  assert.equal(ids.spotifyId, undefined);
 });

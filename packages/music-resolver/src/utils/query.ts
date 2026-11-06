@@ -223,7 +223,11 @@ export function getVersionTags(
   if (album) {
     const cleanAlbum = cleanSearchQuery(album);
     for (const part of versionDecorations(cleanAlbum)) addTags(tags, part);
-    if (/^live$|\blive\s+(at|in|from|on)\b|现场|ライブ/i.test(cleanAlbum)) {
+    if (
+      /^live$|\blive\s+(at|in|from|on)\b|现场|現場|演唱会|演唱會|音乐会|音樂會|ライブ|コンサート/i.test(
+        cleanAlbum,
+      )
+    ) {
       tags.add("live");
     }
     if (/\b(unplugged|acoustic)\b/i.test(cleanAlbum)) tags.add("acoustic");
@@ -237,4 +241,54 @@ export function getVersionTags(
 
 export function sameVersionTags(a: VersionTag[], b: VersionTag[]): boolean {
   return a.length === b.length && a.every((tag, i) => tag === b[i]);
+}
+
+// Appends the labels that name a version (live, remix, ...) to a title as
+// decorations, for catalogs that keep them apart from the name. Other labels,
+// such as translations or theme-song credits, are left out.
+export function withVersionLabels(
+  title: string,
+  labels?: Array<string | null | undefined> | null,
+): string {
+  const titleTags = new Set(getVersionTags(title));
+  const versionLabels = (labels ?? [])
+    .map((label) => label?.trim())
+    .filter((label): label is string => Boolean(label))
+    .filter((label) => {
+      // Skip labels the title already carries, but not ones that only share a
+      // word with the song's name ("Live Forever" + "Live" is a live take)
+      const tags = getVersionTags(`x (${label})`);
+      return tags.length > 0 && tags.some((tag) => !titleTags.has(tag));
+    });
+  if (versionLabels.length === 0) return title;
+  return `${title} ${versionLabels.map((label) => `(${label})`).join(" ")}`;
+}
+
+// Two catalog entries of one recording can differ by a few seconds of silence;
+// radio edits, extended mixes and live takes differ by far more
+export const SAME_RECORDING_MAX_DURATION_DELTA_MS = 7000;
+
+export interface RecordingInfo {
+  title?: string | null;
+  album?: string | null;
+  durationMs?: number | null;
+}
+
+// Whether two entries are plausibly the same recording: durations agree (when both
+// are known) and both carry the same version tags (live, acoustic, remix, ...).
+// A similar title alone is not enough, since every version shares it.
+export function isSameRecording(a: RecordingInfo, b: RecordingInfo): boolean {
+  const aMs = a.durationMs ?? 0;
+  const bMs = b.durationMs ?? 0;
+  if (
+    aMs > 0 &&
+    bMs > 0 &&
+    Math.abs(aMs - bMs) > SAME_RECORDING_MAX_DURATION_DELTA_MS
+  ) {
+    return false;
+  }
+  return sameVersionTags(
+    getVersionTags(a.title, a.album),
+    getVersionTags(b.title, b.album),
+  );
 }

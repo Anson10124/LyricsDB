@@ -63,12 +63,25 @@ import { IpRateLimiterService } from "../common/rate-limiter/ip-rate-limiter.ser
 import {
   collectPlatformIds,
   isSameRecording,
+  keepStoredDetails,
+  mergeIntoStoredTrack,
   pickTrackMatch,
   PLATFORM_TRACK_FIELDS,
   platformIdKey,
   type PlatformIdRef,
   type VerifiedPlatformIds,
 } from "./platform-ids";
+
+// Postgres unique_violation, or a driver message saying the same
+function isUniqueViolation(err: unknown): boolean {
+  if (err && typeof err === "object" && (err as { code?: string }).code === "23505") {
+    return true;
+  }
+  return (
+    err instanceof Error &&
+    /unique|duplicate key|violates unique constraint/.test(err.message)
+  );
+}
 
 export type {
   GetOrSyncTrackOptions,
@@ -767,9 +780,17 @@ export class TracksService implements OnApplicationBootstrap {
     const saved = await this.safeSaveTrack(
       await this.dropIdsOwnedElsewhere(newTrackData),
     );
+    // IDs another track already holds (in its columns or aliases) stay with it,
+    // including ones a concurrent save took while this one was being written
+    const ids = collectPlatformIds(validIds, isrc, saved);
+    const owners = await this.findPlatformIdOwners(ids);
     await this.recordPlatformIds(
       saved.id,
-      collectPlatformIds(validIds, isrc, saved),
+      ids.filter((ref) =>
+        [...(owners.get(platformIdKey(ref)) ?? [])].every(
+          (ownerId) => ownerId === saved.id,
+        ),
+      ),
     );
     return saved;
   }
@@ -959,19 +980,16 @@ export class TracksService implements OnApplicationBootstrap {
         : [];
     const freshArtwork =
       meta.artwork || (meta.image ? { url: meta.image } : null);
-    // A stored row keeps the title, album, duration and artwork it was first saved
-    // with, so resolving it from another release doesn't flip what it shows.
-    // Imported rows still waiting for platform metadata take the fresh values.
-    const kept =
-      existingTrack && !existingTrack.needsEnrichment ? existingTrack : null;
 
     return {
       ...(existingTrack?.id ? { id: existingTrack.id } : {}),
-      title: kept?.title || meta.title,
-      artists: kept?.artists?.length ? kept.artists : freshArtists,
-      album: kept ? (kept.album ?? meta.album) : meta.album,
-      durationMs: kept?.durationMs || meta.durationMs || 0,
-      artwork: kept?.artwork || freshArtwork || existingTrack?.artwork || null,
+      ...keepStoredDetails(existingTrack, {
+        title: meta.title,
+        artists: freshArtists,
+        album: meta.album,
+        durationMs: meta.durationMs ?? 0,
+        artwork: freshArtwork,
+      }),
       // An existing row keeps its first-seen IDs; other versions' IDs go to track_platform_ids
       isrc: existingTrack?.isrc || meta.isrc,
       spotifyId: existingTrack?.spotifyId || validIds.spotifyId,
@@ -993,10 +1011,8 @@ export class TracksService implements OnApplicationBootstrap {
   }
 
 
-  // Concurrency-Safe Database Ingestion & Conflict Handler:
-  // 1. Sanity Guard: Validates metadata before writing to PostgreSQL to prevent spam and DB pollution.
-  // 2. Race-Condition Recovery: If concurrent workers try to insert the same new track,
-  //    catches duplicate key / unique constraint errors and updates the existing record cleanly.
+  // Validates a track and writes it. A unique-index error means a concurrent save
+  // took one of its IDs after dropIdsOwnedElsewhere ran; see recoverFromIdConflict.
   private async safeSaveTrack(newTrackData: NewTrack): Promise<Track> {
     const cleanTitle = newTrackData.title?.trim();
     if (!cleanTitle) {
@@ -1022,92 +1038,85 @@ export class TracksService implements OnApplicationBootstrap {
     };
 
     try {
-      if (sanitizedData.id) {
-        const saved = await this.db
-          .insert(tracks)
-          .values(sanitizedData)
-          .onConflictDoUpdate({
-            target: tracks.id,
-            set: {
-              ...sanitizedData,
-              updatedAt: new Date(),
-            },
-          })
-          .returning();
-        if (saved[0]) return saved[0];
-      } else {
-        const saved = await this.db
-          .insert(tracks)
-          .values(sanitizedData)
-          .returning();
-        if (saved[0]) {
-          this.activityService.recordTrackAdded(saved[0]);
-          return saved[0];
-        }
-      }
+      return await this.writeTrack(sanitizedData);
     } catch (err: unknown) {
-      // Concurrency race condition handling:
-      // If another concurrent request inserted a track with the same unique index,
-      // catch the unique violation error and update the existing row instead of throwing a 500 error!
-      const isUniqueConflict =
-        (err &&
-          typeof err === "object" &&
-          (err as { code?: string }).code === "23505") ||
-        (err instanceof Error &&
-          (err.message.includes("unique") ||
-            err.message.includes("duplicate key") ||
-            err.message.includes("violates unique constraint")));
+      if (!isUniqueViolation(err)) throw err;
+      return this.recoverFromIdConflict(sanitizedData);
+    }
+  }
 
-      if (isUniqueConflict) {
-        const conditions = collectPlatformIds({}, null, sanitizedData).map(
-          (ref) => eq(PLATFORM_ID_COLUMNS[ref.platform], ref.platformId),
-        );
-
-        let existing: Track | null = null;
-        if (conditions.length > 0) {
-          const res = await this.db
-            .select()
-            .from(tracks)
-            .where(or(...conditions))
-            .limit(1);
-          existing = res[0] || null;
-        }
-
-        if (existing) {
-          const updated = await this.db
-            .update(tracks)
-            .set({
-              ...sanitizedData,
-              id: existing.id,
-              isrc: existing.isrc || sanitizedData.isrc,
-              spotifyId: existing.spotifyId || sanitizedData.spotifyId,
-              deezerId: existing.deezerId || sanitizedData.deezerId,
-              neteaseId: existing.neteaseId || sanitizedData.neteaseId,
-              appleMusicId:
-                existing.appleMusicId || sanitizedData.appleMusicId,
-              qqMusicId: existing.qqMusicId || sanitizedData.qqMusicId,
-              artwork:
-                sanitizedData.artwork || existing.artwork,
-              lyrics: sanitizedData.lyrics || existing.lyrics,
-              lyricsType: sanitizedData.lyricsType || existing.lyricsType,
-              lyricsProvider:
-                sanitizedData.lyricsProvider || existing.lyricsProvider,
-              lyricsStoragePath:
-                sanitizedData.lyricsStoragePath ||
-                existing.lyricsStoragePath,
-              updatedAt: new Date(),
-            })
-            .where(eq(tracks.id, existing.id))
-            .returning();
-          if (updated[0]) return updated[0];
-          return existing;
-        }
+  // Inserts a new track, or updates the stored row it carries the id of
+  private async writeTrack(data: NewTrack): Promise<Track> {
+    if (data.id) {
+      const saved = await this.db
+        .insert(tracks)
+        .values(data)
+        .onConflictDoUpdate({
+          target: tracks.id,
+          set: { ...data, updatedAt: new Date() },
+        })
+        .returning();
+      if (saved[0]) return saved[0];
+    } else {
+      const saved = await this.db.insert(tracks).values(data).returning();
+      if (saved[0]) {
+        this.activityService.recordTrackAdded(saved[0]);
+        return saved[0];
       }
+    }
+    throw new BadRequestException("Failed to persist track metadata.");
+  }
 
-      throw err;
+  // Retries a save once after a concurrent save took one of its IDs. It never
+  // writes this track's details onto a row that is a different recording:
+  // - Updating a stored row: that row stays the target, saved without the taken IDs.
+  // - A new track: if a row holding its IDs is the same recording (most likely
+  //   the twin request saving it a moment earlier), the two are merged and that
+  //   row keeps its own details. Otherwise it is saved as its own row without them.
+  private async recoverFromIdConflict(data: NewTrack): Promise<Track> {
+    if (data.id) {
+      return this.writeTrack(await this.dropIdsOwnedElsewhere(data));
     }
 
-    throw new BadRequestException("Failed to persist track metadata.");
+    const twin = await this.findSameRecordingOwner(data);
+    if (!twin) {
+      return this.writeTrack(await this.dropIdsOwnedElsewhere(data));
+    }
+
+    const merged = await this.dropIdsOwnedElsewhere(
+      mergeIntoStoredTrack(twin, data),
+    );
+    const updated = await this.db
+      .update(tracks)
+      .set({ ...merged, updatedAt: new Date() })
+      .where(eq(tracks.id, twin.id))
+      .returning();
+    return updated[0] ?? twin;
+  }
+
+  // The stored track that holds some of these IDs and is the same recording
+  private async findSameRecordingOwner(data: NewTrack): Promise<Track | null> {
+    const ids = collectPlatformIds({}, null, data);
+    const owners = await this.findPlatformIdOwners(ids);
+    const ownerIds = new Set([...owners.values()].flatMap((set) => [...set]));
+    if (ownerIds.size === 0) return null;
+
+    const rows: Track[] = await this.db
+      .select()
+      .from(tracks)
+      .where(inArray(tracks.id, [...ownerIds]));
+
+    return pickTrackMatch(
+      rows
+        .filter((row) => isSameRecording(row, data))
+        .map((row) => ({
+          track: row,
+          matchedIds: ids.filter((ref) =>
+            owners.get(platformIdKey(ref))?.has(row.id),
+          ).length,
+          ownsSource: false,
+        })),
+    );
   }
 
   // Real-time EventStream (SSE) live track and lyrics resolution

@@ -1,5 +1,10 @@
-import type { EnrichedMusixmatchMetadata, ResolveOptions } from "../types.js";
+import type {
+  EnrichedMusixmatchMetadata,
+  ResolveOptions,
+  TrackMetadata,
+} from "../types.js";
 import { HttpClient } from "./http.js";
+import { isSameRecording } from "./query.js";
 import {
   MUSIXMATCH_API_BASE,
   MUSIXMATCH_APP_ID,
@@ -81,10 +86,35 @@ interface MusixmatchTrackResponse {
         commontrack_spotify_ids?: string[];
         commontrack_itunes_ids?: number[];
         commontrack_id?: number;
+        track_length?: number; // seconds
         instrumental?: number;
       };
     };
   };
+}
+
+// Whether a Musixmatch match may fill in a track's ISRC, album and links: it must
+// be the same recording (length and version tags). Even an ID lookup can answer
+// with another release, and a title search is fuzzy, so it also needs both
+// lengths known.
+export function isTrustedMusixmatchMatch(
+  enriched: EnrichedMusixmatchMetadata,
+  target: TrackMetadata,
+): boolean {
+  if (
+    enriched.matchedBy === "title" &&
+    (!enriched.durationMs || !target.durationMs)
+  ) {
+    return false;
+  }
+  return isSameRecording(
+    {
+      title: enriched.title,
+      album: enriched.album,
+      durationMs: enriched.durationMs,
+    },
+    target,
+  );
 }
 
 export async function matchTrackWithMusixmatch(
@@ -103,6 +133,13 @@ export async function matchTrackWithMusixmatch(
   }
 
   const baseUrl = options?.apiUrl || `${MUSIXMATCH_API_BASE}/matcher.track.get`;
+  const matchedBy: EnrichedMusixmatchMetadata["matchedBy"] = spotifyId
+    ? "spotify"
+    : appleMusicId
+      ? "apple"
+      : isrc
+        ? "isrc"
+        : "title";
 
   const executeMatcherCall = async (
     token: string,
@@ -166,28 +203,15 @@ export async function matchTrackWithMusixmatch(
     // A decoy is a different song, so it must not fill in this track's metadata
     if (!tr || isMusixmatchDecoyTrackId(tr.track_id)) return null;
 
-    const extractedIsrc =
-      tr.track_isrc?.trim() ||
-      (Array.isArray(tr.commontrack_isrcs) &&
-        tr.commontrack_isrcs[0]?.[0]?.trim()) ||
-      undefined;
-
-    const extractedSpotifyId =
-      tr.track_spotify_id?.trim() ||
-      (Array.isArray(tr.commontrack_spotify_ids) &&
-        tr.commontrack_spotify_ids[0]?.trim()) ||
-      undefined;
-
-    const extractedAppleId =
-      Array.isArray(tr.commontrack_itunes_ids) && tr.commontrack_itunes_ids[0]
-        ? String(tr.commontrack_itunes_ids[0])
-        : undefined;
-
+    // Only this exact track's own IDs. The commontrack_* lists cover every release
+    // and version sharing its lyrics (remasters, live takes, remixes), so their
+    // first entry is often a sibling. There is no per-track iTunes ID, so no
+    // single Apple ID is taken from them.
     return {
-      isrc: extractedIsrc,
-      spotifyId: extractedSpotifyId,
+      matchedBy,
+      isrc: tr.track_isrc?.trim() || undefined,
+      spotifyId: tr.track_spotify_id?.trim() || undefined,
       spotifyIds: tr.commontrack_spotify_ids?.filter(Boolean),
-      appleMusicId: extractedAppleId,
       appleMusicIds: tr.commontrack_itunes_ids
         ?.map((id) => String(id))
         .filter(Boolean),
@@ -195,6 +219,10 @@ export async function matchTrackWithMusixmatch(
       title: tr.track_name,
       artist: tr.artist_name,
       album: tr.album_name,
+      durationMs:
+        tr.track_length && tr.track_length > 0
+          ? tr.track_length * 1000
+          : undefined,
       raw: tr as unknown as Record<string, unknown>,
     };
   } catch {

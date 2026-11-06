@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getVersionTags, sameVersionTags } from "../src/utils/query.js";
+import {
+  getVersionTags,
+  sameVersionTags,
+  withVersionLabels,
+} from "../src/utils/query.js";
 
 describe("getVersionTags", () => {
   it("reads versions from a title's brackets and dash suffix", () => {
@@ -40,6 +44,26 @@ describe("getVersionTags", () => {
     assert.deepEqual(getVersionTags("Song", "MTV Unplugged"), ["acoustic"]);
     assert.deepEqual(getVersionTags("Song", "The Remixes"), ["remix"]);
     assert.deepEqual(getVersionTags("Song", "Live Through This"), []);
+    assert.deepEqual(getVersionTags("晴天", "周杰伦地表最强世界巡回演唱会"), [
+      "live",
+    ]);
+  });
+});
+
+describe("withVersionLabels", () => {
+  it("appends only labels that name a version", () => {
+    assert.equal(withVersionLabels("Song", ["Live"]), "Song (Live)");
+    assert.equal(withVersionLabels("Song", ["电视剧《某剧》主题曲"]), "Song");
+    assert.equal(withVersionLabels("Song", [null, "", undefined]), "Song");
+    assert.equal(withVersionLabels("Song (Live)", ["Live"]), "Song (Live)");
+    assert.equal(
+      withVersionLabels("Song (Live at Wembley)", ["Live"]),
+      "Song (Live at Wembley)",
+    );
+    assert.equal(
+      withVersionLabels("Live Forever", ["Live"]),
+      "Live Forever (Live)",
+    );
   });
 });
 
