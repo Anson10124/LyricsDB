@@ -64,3 +64,7 @@ ehthumbs.db
 *.key
 *.crt
 .claude/launch.json
+
+# Local database/storage backups
+backups/
+apps/api/scripts/
