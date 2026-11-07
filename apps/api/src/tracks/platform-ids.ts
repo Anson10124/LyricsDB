@@ -1,4 +1,5 @@
 import type { NewTrack, PlatformIdKey, Track } from "@repo/database";
+import type { RecordingInfo } from "@repo/music-resolver";
 
 // Shared with the resolver, which runs the same check on its own matches
 export {
@@ -6,6 +7,19 @@ export {
   SAME_RECORDING_MAX_DURATION_DELTA_MS,
   type RecordingInfo,
 } from "@repo/music-resolver";
+
+// A stored row as isSameRecording should see it. Imported rows still waiting for
+// enrichment carry a placeholder duration, so only their title and album count;
+// comparing it would split the real recording off into a duplicate row.
+export function storedRecordingInfo(
+  track: Pick<Track, "title" | "album" | "durationMs" | "needsEnrichment">,
+): RecordingInfo {
+  return {
+    title: track.title,
+    album: track.album,
+    durationMs: track.needsEnrichment ? null : track.durationMs,
+  };
+}
 
 export interface VerifiedPlatformIds {
   spotifyId?: string;

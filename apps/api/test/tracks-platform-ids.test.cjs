@@ -359,6 +359,38 @@ test("matching does not merge a recording with a different length", async () => 
   );
 });
 
+test("matching merges into an imported row despite its placeholder duration", async () => {
+  // AMLL imports guess the duration from the lyrics; the platform's is the real one
+  const imported = track({
+    id: "imported",
+    durationMs: 170000,
+    needsEnrichment: true,
+  });
+  const s = matchingService(
+    [imported],
+    new Map([[`isrc:${metadata.isrc}`, new Set(["imported"])]]),
+  );
+  const match = await s.findExistingTrackByPlatformLinks(directLink, metadata);
+  assert.equal(match.id, "imported");
+});
+
+test("matching still keeps another version apart from an imported row", async () => {
+  const importedLive = track({
+    id: "imported-live",
+    title: "Example (Live)",
+    durationMs: 170000,
+    needsEnrichment: true,
+  });
+  const s = matchingService(
+    [importedLive],
+    new Map([[`isrc:${metadata.isrc}`, new Set(["imported-live"])]]),
+  );
+  assert.equal(
+    await s.findExistingTrackByPlatformLinks(directLink, metadata),
+    null,
+  );
+});
+
 test("matching still returns the track that owns the requested ID", async () => {
   const owner = track({
     id: "owner",
@@ -537,6 +569,24 @@ test("a racing insert merges into its same-recording twin without overwriting it
   assert.equal(saved.id, "twin");
   assert.equal(saved.title, "Example");
   assert.equal(saved.album, "Album");
+});
+
+test("a racing insert merges into an imported twin despite its placeholder duration", async () => {
+  const twin = track({
+    id: "twin",
+    durationMs: 170000,
+    neteaseId: NEW_NETEASE,
+    needsEnrichment: true,
+  });
+  const { s, writes } = conflictService({
+    rows: [twin],
+    owners: new Map([[`netease:${NEW_NETEASE}`, new Set(["twin"])]]),
+  });
+
+  const saved = await s.safeSaveTrack(raceSave);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].kind, "update");
+  assert.equal(saved.id, "twin");
 });
 
 test("a racing insert never merges into a different version that holds its ID", async () => {

@@ -69,6 +69,7 @@ import {
   PLATFORM_TRACK_FIELDS,
   platformIdKey,
   type PlatformIdRef,
+  storedRecordingInfo,
   type VerifiedPlatformIds,
 } from "./platform-ids";
 
@@ -856,7 +857,11 @@ export class TracksService implements OnApplicationBootstrap {
           sourceKey && owners.get(sourceKey)?.has(track.id),
         ),
       }))
-      .filter((match) => match.ownsSource || isSameRecording(match.track, meta));
+      .filter(
+        (match) =>
+          match.ownsSource ||
+          isSameRecording(storedRecordingInfo(match.track), meta),
+      );
 
     return pickTrackMatch(matches);
   }
@@ -1108,7 +1113,7 @@ export class TracksService implements OnApplicationBootstrap {
 
     return pickTrackMatch(
       rows
-        .filter((row) => isSameRecording(row, data))
+        .filter((row) => isSameRecording(storedRecordingInfo(row), data))
         .map((row) => ({
           track: row,
           matchedIds: ids.filter((ref) =>
