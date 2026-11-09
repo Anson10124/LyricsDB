@@ -714,6 +714,20 @@ export class TracksService implements OnApplicationBootstrap {
     return this.lyricsEngine.formatLyrics(rawLyrics, options.format || "json");
   }
 
+  // Get formatted lyrics for the best search match that has lyrics
+  async getLyricsBySearch(
+    query: string,
+    format = "json",
+    clientIp = "127.0.0.1",
+  ): Promise<FormattedLyricsResult> {
+    const matches = await this.search(query, 20, clientIp);
+    const match = matches.find((t) => t.hasLyrics);
+    if (!match) {
+      throw new NotFoundException(`No lyrics found for search "${query}".`);
+    }
+    return this.getLyrics({ trackId: match.id, format }, clientIp);
+  }
+
   // Search tracks by title or artist in database (fast cache -> 60 RPM per IP)
   async search(
     query: string,

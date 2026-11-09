@@ -124,6 +124,21 @@ export class TrackSearchQueryDto {
 export class GetLyricsQueryDto extends TrackQueryDto {
   @ApiProperty({
     required: false,
+    description:
+      "Search keyword (title, artist, or album). Returns lyrics of the best indexed match with lyrics; used when no url or platform + id is given.",
+    example: "Rick Astley Never Gonna Give You Up",
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  q?: string;
+
+  @ApiProperty({
+    required: false,
     description: "Output lyric format (default: json)",
     example: "json",
   })

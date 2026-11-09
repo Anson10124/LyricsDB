@@ -45,21 +45,10 @@ async function bootstrap() {
     next();
   });
 
-  // CORS Configuration: Restrict allowed origins in production
-  const corsOriginsEnv = process.env.CORS_ORIGINS;
-  const allowedOrigins: (string | RegExp)[] | boolean =
-    corsOriginsEnv && corsOriginsEnv !== "*"
-      ? corsOriginsEnv.split(",").map((origin) => origin.trim())
-      : process.env.NODE_ENV === "production"
-        ? [
-            process.env.PUBLIC_URL || "",
-            process.env.SERVICE_URL_WEB || "",
-            "http://localhost:3000",
-          ].filter(Boolean)
-        : true; // In development, allow all origins
-
+  // CORS Configuration: the API is public, so every endpoint answers with
+  // Access-Control-Allow-Origin: * (no credentials are ever used)
   app.enableCors({
-    origin: allowedOrigins,
+    origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
     exposedHeaders: ["X-Preview-Start-Ms", "X-Preview-End-Ms", "Retry-After-medium"],

@@ -12,6 +12,16 @@ const nextConfig = {
     // Cover art URLs point at fixed files, so optimized copies can stay cached
     minimumCacheTTL: 60 * 60 * 24 * 31,
   },
+  async headers() {
+    // Only the web app's own route; the rest of /api is proxied and gets the
+    // header from the API itself (setting it here too would duplicate it)
+    return [
+      {
+        source: '/api/search',
+        headers: [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+      },
+    ];
+  },
   async rewrites() {
     // Determine backend API URL:
     // 1. Explicit internal service URL (e.g. http://api:4000 in Docker)

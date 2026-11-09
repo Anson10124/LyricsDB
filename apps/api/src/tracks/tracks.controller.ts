@@ -617,6 +617,13 @@ export class TracksController {
     example: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
   })
   @ApiQuery({
+    name: "q",
+    required: false,
+    description:
+      "Search keyword (title, artist, or album); returns lyrics of the best indexed match that has lyrics. Used when no url or platform + id is given.",
+    example: "Rick Astley Never Gonna Give You Up",
+  })
+  @ApiQuery({
     name: "format",
     required: false,
     enum: SUPPORTED_FORMATS,
@@ -682,6 +689,14 @@ export class TracksController {
     @ClientIp() clientIp: string,
     @Res() res?: Response,
   ) {
+    if (query.q && !query.url && !(query.platform && query.id)) {
+      const found = await this.tracksService.getLyricsBySearch(
+        query.q,
+        query.format || "json",
+        clientIp,
+      );
+      return this.sendLyricsResponse(found, res);
+    }
     const result = await this.tracksService.getLyrics(
       {
         platform: query.platform,
