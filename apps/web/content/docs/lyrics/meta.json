@@ -3,6 +3,7 @@
   "pages": [
     "getLyrics",
     "getLyricsById",
+    "getLyricsFuzzy",
     "streamLyrics"
   ]
 }
