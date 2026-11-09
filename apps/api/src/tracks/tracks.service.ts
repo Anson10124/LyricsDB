@@ -28,8 +28,11 @@ import {
 } from "@repo/database";
 import {
   buildPlatformUrl,
+  DeezerAdapter,
   derivePlatformAndIdFromUrl,
+  findBestMatch,
   normalizePlatform,
+  normalizeSongTitle,
   currentAbortSignal,
   rejectOnAbort,
   runWithAbortSignal,
@@ -701,6 +704,13 @@ export class TracksService implements OnApplicationBootstrap {
       track = await this.getOrSyncTrack(options, clientIp);
     }
 
+    return this.formatTrackLyrics(track, options.format || "json");
+  }
+
+  private async formatTrackLyrics(
+    track: Track,
+    format: string,
+  ): Promise<FormattedLyricsResult> {
     const rawLyrics = await this.resolveTrackLyrics(track);
 
     if (
@@ -711,7 +721,107 @@ export class TracksService implements OnApplicationBootstrap {
       throw new NotFoundException("Lyrics not available for this track.");
     }
 
-    return this.lyricsEngine.formatLyrics(rawLyrics, options.format || "json");
+    return this.lyricsEngine.formatLyrics(rawLyrics, format);
+  }
+
+  // Fuzzy lyrics lookup from loose metadata:
+  // 1. best-scoring indexed track that has lyrics (cached rate limit)
+  // 2. otherwise the best Deezer match, synced into the DB like any other track (uncached rate limit)
+  async getLyricsByFuzzy(
+    query: {
+      title: string;
+      artist?: string;
+      album?: string;
+      // seconds, or milliseconds when 10000 or more
+      duration?: number;
+      format?: string;
+    },
+    clientIp = "127.0.0.1",
+  ): Promise<{
+    result: FormattedLyricsResult;
+    score: number;
+    trackId: string;
+    // false when the track had to be fetched and saved by this request
+    cachedInDb: boolean;
+  }> {
+    const format = query.format || "json";
+    const durationMs =
+      query.duration && query.duration > 0
+        ? Math.round(query.duration >= 10_000 ? query.duration : query.duration * 1000)
+        : undefined;
+    const metadata: ResolverTrackMetadata = {
+      id: "fuzzy",
+      title: query.title,
+      artist: query.artist,
+      artists: query.artist ? [query.artist] : undefined,
+      album: query.album,
+      durationMs,
+      type: "song",
+    };
+
+    // Step 1: indexed tracks
+    this.ipRateLimiter.consume(clientIp, "cached");
+    const titleKey = normalizeSongTitle(query.title).cleanTitle || query.title;
+    const escaped = titleKey.trim().replace(/[%_\\]/g, "\\$&");
+    const rows = await this.db
+      .select()
+      .from(tracks)
+      .where(ilike(tracks.title, `%${escaped}%`))
+      .limit(50);
+    const withLyrics = rows.filter((t) => this.hasLyrics(t));
+    const byId = new Map(withLyrics.map((t) => [t.id, t]));
+    const { bestMatch: dbMatch } = findBestMatch(
+      withLyrics.map((t) => ({
+        title: t.title,
+        artist: t.artists[0],
+        artists: t.artists,
+        album: t.album ?? undefined,
+        durationMs: t.durationMs,
+        url: "",
+        id: t.id,
+      })),
+      metadata,
+      "db",
+    );
+    const dbTrack = dbMatch?.id ? byId.get(dbMatch.id) : undefined;
+    if (dbTrack && dbMatch?.isVerified && !dbMatch.notAvailable) {
+      return {
+        result: await this.formatTrackLyrics(dbTrack, format),
+        score: dbMatch.score ?? 0,
+        trackId: dbTrack.id,
+        cachedInDb: true,
+      };
+    }
+
+    // Step 2: Deezer lookup, then normal sync + cache
+    this.ipRateLimiter.consume(clientIp, "uncached");
+    const link = await new DeezerAdapter().search(
+      [query.artist, query.title].filter(Boolean).join(" "),
+      metadata,
+      { timeout: 8000, retries: 1 },
+    );
+    if (!link?.id || !link.isVerified || link.notAvailable) {
+      throw new NotFoundException(
+        "No matching track found for this title, artist, and duration.",
+      );
+    }
+
+    let track = await this.findByPlatformId("deezer", link.id);
+    const cachedInDb = Boolean(track);
+    if (track) {
+      track = await this.retryMissingLyrics(track, clientIp);
+    } else {
+      track = await this.syncDeduped(
+        `deezer:${link.id}`,
+        buildPlatformUrl("deezer", link.id),
+      );
+    }
+    return {
+      result: await this.formatTrackLyrics(track, format),
+      score: link.score ?? 0,
+      trackId: track.id,
+      cachedInDb,
+    };
   }
 
   // Get formatted lyrics for the best search match that has lyrics

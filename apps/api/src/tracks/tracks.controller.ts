@@ -40,6 +40,7 @@ import {
 } from "./dto/track-response.dto";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
 import {
+  FuzzyLyricsQueryDto,
   GetLyricsQueryDto,
   LyricsByIdQueryDto,
   TrackQueryDto,
@@ -706,6 +707,57 @@ export class TracksController {
       },
       clientIp,
     );
+    return this.sendLyricsResponse(result, res);
+  }
+
+  @ApiTags("Lyrics")
+  @ApiOperation({
+    summary: "Fuzzy lyrics lookup by title, artist, album, and duration",
+    description:
+      "Returns lyrics for the best indexed match. When none is good enough, finds the best Deezer match, saves the track and its lyrics to the database like a normal sync, and returns them (60 RPM for cached hits, 6 RPM for live resolutions).",
+  })
+  @ApiQuery({ name: "title", required: true, example: "Never Gonna Give You Up" })
+  @ApiQuery({ name: "artist", required: false, example: "Rick Astley" })
+  @ApiQuery({ name: "album", required: false, example: "Whenever You Need Somebody" })
+  @ApiQuery({
+    name: "duration",
+    required: false,
+    description: "Track length in seconds (10000 or more is read as milliseconds)",
+    example: 213,
+  })
+  @ApiQuery({
+    name: "format",
+    required: false,
+    enum: SUPPORTED_FORMATS,
+    description: "Output lyric format (default: json)",
+    example: "json",
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      "Formatted synchronized lyrics payload. Headers: X-Match-Score (0-1), X-Match-Track-Id (internal track UUID), X-Cached-In-DB (true if the track was already in the database, false if this request fetched and saved it).",
+    headers: {
+      "X-Match-Score": { description: "Match score from 0 to 1", schema: { type: "number", example: 0.97 } },
+      "X-Match-Track-Id": { description: "Internal track UUID", schema: { type: "string" } },
+      "X-Cached-In-DB": { description: "Whether the track was already in the database", schema: { type: "string", enum: ["true", "false"] } },
+    },
+  })
+  @ApiBadRequestResponse({ type: ErrorResponseDto, description: "Missing title or invalid parameters" })
+  @ApiNotFoundResponse({
+    type: ErrorResponseDto,
+    description: "No sufficiently close match, or the match has no lyrics",
+  })
+  @Get("lyrics/fuzzy")
+  async getLyricsFuzzy(
+    @Query() query: FuzzyLyricsQueryDto,
+    @ClientIp() clientIp: string,
+    @Res() res?: Response,
+  ) {
+    const { result, score, trackId, cachedInDb } =
+      await this.tracksService.getLyricsByFuzzy(query, clientIp);
+    res?.setHeader("X-Match-Score", score.toFixed(3));
+    res?.setHeader("X-Match-Track-Id", trackId);
+    res?.setHeader("X-Cached-In-DB", String(cachedInDb));
     return this.sendLyricsResponse(result, res);
   }
 

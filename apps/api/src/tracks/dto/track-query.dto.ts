@@ -152,6 +152,61 @@ export class GetLyricsQueryDto extends TrackQueryDto {
   format?: string = "json";
 }
 
+export class FuzzyLyricsQueryDto {
+  @ApiProperty({ required: true, description: "Song title", example: "Never Gonna Give You Up" })
+  @IsNotEmpty({ message: 'Query "title" cannot be empty.' })
+  @IsString()
+  @MaxLength(300)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  title!: string;
+
+  @ApiProperty({ required: false, description: "Artist name", example: "Rick Astley" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  artist?: string;
+
+  @ApiProperty({ required: false, description: "Album title", example: "Whenever You Need Somebody" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  album?: string;
+
+  @ApiProperty({
+    required: false,
+    description: "Track length in seconds (values of 10000 or more are read as milliseconds)",
+    example: 213,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(36_000_000)
+  duration?: number;
+
+  @ApiProperty({
+    required: false,
+    description: "Output lyric format (default: json)",
+    example: "json",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  @IsValidFormat()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  )
+  format?: string = "json";
+}
+
 export class LyricsByIdQueryDto {
   @ApiProperty({
     required: false,

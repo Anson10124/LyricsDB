@@ -1973,6 +1973,16 @@
             }
           },
           {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search keyword (title, artist, or album); returns lyrics of the best indexed match that has lyrics. Used when no url or platform + id is given.",
+            "schema": {
+              "example": "Rick Astley Never Gonna Give You Up",
+              "type": "string"
+            }
+          },
+          {
             "name": "format",
             "required": false,
             "in": "query",
@@ -2155,6 +2165,16 @@
             }
           },
           {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search keyword (title, artist, or album); returns lyrics of the best indexed match that has lyrics. Used when no url or platform + id is given.",
+            "schema": {
+              "example": "Rick Astley Never Gonna Give You Up",
+              "type": "string"
+            }
+          },
+          {
             "name": "format",
             "required": false,
             "in": "query",
@@ -2295,6 +2315,256 @@
           }
         },
         "summary": "Get synchronized lyrics by platform ID or URL",
+        "tags": [
+          "Tracks",
+          "Lyrics"
+        ]
+      }
+    },
+    "/api/lyrics/fuzzy": {
+      "get": {
+        "description": "Returns lyrics for the best indexed match. When none is good enough, finds the best Deezer match, saves the track and its lyrics to the database like a normal sync, and returns them (60 RPM for cached hits, 6 RPM for live resolutions).",
+        "operationId": "TracksController_getLyricsFuzzy[0]",
+        "parameters": [
+          {
+            "name": "title",
+            "required": true,
+            "in": "query",
+            "description": "Song title",
+            "schema": {
+              "example": "Never Gonna Give You Up",
+              "type": "string"
+            }
+          },
+          {
+            "name": "artist",
+            "required": false,
+            "in": "query",
+            "description": "Artist name",
+            "schema": {
+              "example": "Rick Astley",
+              "type": "string"
+            }
+          },
+          {
+            "name": "album",
+            "required": false,
+            "in": "query",
+            "description": "Album title",
+            "schema": {
+              "example": "Whenever You Need Somebody",
+              "type": "string"
+            }
+          },
+          {
+            "name": "duration",
+            "required": false,
+            "in": "query",
+            "description": "Track length in seconds (10000 or more is read as milliseconds)",
+            "schema": {
+              "example": 213,
+              "type": "number"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "Output lyric format (default: json)",
+            "schema": {
+              "enum": [
+                "ttml",
+                "lrc",
+                "lrca2",
+                "yrc",
+                "qrc",
+                "eslrc",
+                "ass",
+                "lyl",
+                "lys",
+                "lqe",
+                "json"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Formatted synchronized lyrics payload. Headers: X-Match-Score (0-1), X-Match-Track-Id (internal track UUID), X-Cached-In-DB (true if the track was already in the database, false if this request fetched and saved it).",
+            "headers": {
+              "X-Match-Score": {
+                "description": "Match score from 0 to 1",
+                "schema": {
+                  "type": "number",
+                  "example": 0.97
+                }
+              },
+              "X-Match-Track-Id": {
+                "description": "Internal track UUID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Cached-In-DB": {
+                "description": "Whether the track was already in the database",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing title or invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No sufficiently close match, or the match has no lyrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Fuzzy lyrics lookup by title, artist, album, and duration",
+        "tags": [
+          "Tracks",
+          "Lyrics"
+        ]
+      }
+    },
+    "/lyrics/fuzzy": {
+      "get": {
+        "description": "Returns lyrics for the best indexed match. When none is good enough, finds the best Deezer match, saves the track and its lyrics to the database like a normal sync, and returns them (60 RPM for cached hits, 6 RPM for live resolutions).",
+        "operationId": "TracksController_getLyricsFuzzy[1]",
+        "parameters": [
+          {
+            "name": "title",
+            "required": true,
+            "in": "query",
+            "description": "Song title",
+            "schema": {
+              "example": "Never Gonna Give You Up",
+              "type": "string"
+            }
+          },
+          {
+            "name": "artist",
+            "required": false,
+            "in": "query",
+            "description": "Artist name",
+            "schema": {
+              "example": "Rick Astley",
+              "type": "string"
+            }
+          },
+          {
+            "name": "album",
+            "required": false,
+            "in": "query",
+            "description": "Album title",
+            "schema": {
+              "example": "Whenever You Need Somebody",
+              "type": "string"
+            }
+          },
+          {
+            "name": "duration",
+            "required": false,
+            "in": "query",
+            "description": "Track length in seconds (10000 or more is read as milliseconds)",
+            "schema": {
+              "example": 213,
+              "type": "number"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "Output lyric format (default: json)",
+            "schema": {
+              "enum": [
+                "ttml",
+                "lrc",
+                "lrca2",
+                "yrc",
+                "qrc",
+                "eslrc",
+                "ass",
+                "lyl",
+                "lys",
+                "lqe",
+                "json"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Formatted synchronized lyrics payload. Headers: X-Match-Score (0-1), X-Match-Track-Id (internal track UUID), X-Cached-In-DB (true if the track was already in the database, false if this request fetched and saved it).",
+            "headers": {
+              "X-Match-Score": {
+                "description": "Match score from 0 to 1",
+                "schema": {
+                  "type": "number",
+                  "example": 0.97
+                }
+              },
+              "X-Match-Track-Id": {
+                "description": "Internal track UUID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Cached-In-DB": {
+                "description": "Whether the track was already in the database",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing title or invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No sufficiently close match, or the match has no lyrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Fuzzy lyrics lookup by title, artist, album, and duration",
         "tags": [
           "Tracks",
           "Lyrics"
