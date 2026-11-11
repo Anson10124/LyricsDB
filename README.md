@@ -17,7 +17,7 @@
 <p align="center">
   <img src=".github/assets/demo.webp" alt="Searching for Jingle Bells by Frank Sinatra in LyricsDB, watching the word-by-word synced lyrics and switching to the fullscreen player" width="800">
   <br>
-  <sub>Search → pick a song → lyrics play word by word → go fullscreen. <i>(Shown: "Jingle Bells" by Frank Sinatra. The lyrics date from 1857 and are in the public domain.)</i></sub>
+  <sub>Search → pick a song → lyrics play word by word → go fullscreen. </sub>
 </p>
 
 ---
