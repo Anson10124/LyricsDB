@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fetchLrcRedTtml } from "../src/fetchers/lrc-red.js";
+import { ProviderProtectionManager } from "@repo/music-resolver";
+import {
+  fetchLrcRedTtml,
+  LrcRedBlockedError,
+} from "../src/fetchers/lrc-red.js";
 import { hasWordTiming } from "../src/engine.js";
 import { parseTtml } from "../src/parsers/ttml.js";
 import { formatLyricsPayload } from "../src/utils/converter.js";
@@ -9,8 +13,10 @@ describe("lrc.red word-synced lyrics", () => {
   it("requests only the TTML endpoint using a normalized ISRC", async () => {
     const originalFetch = globalThis.fetch;
     let requestedUrl = "";
-    globalThis.fetch = async (input) => {
+    let userAgent: string | null = null;
+    globalThis.fetch = async (input, init) => {
       requestedUrl = String(input);
+      userAgent = new Headers(init?.headers).get("User-Agent");
       return new Response("<tt></tt>", { status: 200 });
     };
 
@@ -18,6 +24,63 @@ describe("lrc.red word-synced lyrics", () => {
       const result = await fetchLrcRedTtml(" gbum71029604 ");
       assert.equal(requestedUrl, "https://lrc.red/s/GBUM71029604.ttml");
       assert.equal(result, "<tt></tt>");
+      // lrc.red blocks Node's default "node" User-Agent.
+      assert.match(userAgent ?? "", /^LyricsDB\//);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("throws on 403 and 429 so the limiter backs off, but not on 404", async () => {
+    const originalFetch = globalThis.fetch;
+    let status = 403;
+    globalThis.fetch = async () =>
+      new Response("blocked", {
+        status,
+        headers: status === 429 ? { "Retry-After": "120" } : {},
+      });
+
+    try {
+      await assert.rejects(fetchLrcRedTtml("GBUM71029604"), (error) => {
+        assert.ok(error instanceof LrcRedBlockedError);
+        // No status: the limiter would otherwise count a 4xx as healthy.
+        assert.equal(error.status, undefined);
+        return true;
+      });
+
+      status = 429;
+      await assert.rejects(fetchLrcRedTtml("GBUM71029604"), (error) => {
+        assert.ok(error instanceof LrcRedBlockedError);
+        assert.equal(error.status, 429);
+        assert.equal(error.retryAfter, "120");
+        return true;
+      });
+
+      status = 404;
+      assert.equal(await fetchLrcRedTtml("GBUM71029604"), null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("a 403 counts as a limiter failure, a 404 as a healthy answer", async () => {
+    const limiter = new ProviderProtectionManager();
+    const metrics = () =>
+      limiter.getAllMetrics().find((m) => m.provider === "lrcred")!;
+    const originalFetch = globalThis.fetch;
+    let status = 404;
+    globalThis.fetch = async () => new Response("", { status });
+
+    try {
+      await limiter.schedule("lrcred", () => fetchLrcRedTtml("GBUM71029604"));
+      assert.equal(metrics().totalFailures, 0);
+
+      status = 403;
+      await assert.rejects(
+        limiter.schedule("lrcred", () => fetchLrcRedTtml("GBUM71029604")),
+      );
+      assert.equal(metrics().totalFailures, 1);
+      assert.match(metrics().lastError ?? "", /403/);
     } finally {
       globalThis.fetch = originalFetch;
     }
