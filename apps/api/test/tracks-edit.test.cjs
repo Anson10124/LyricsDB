@@ -121,6 +121,31 @@ test("a lyrics edit saves a revision first, then the lyrics, and clears verified
   assert.equal(saved.isVerified, false);
 });
 
+test("with object storage, the old lyrics are snapshotted and the edit gets its own object", async () => {
+  const track = baseTrack({ lyrics: null, lyricsStoragePath: "lyrics/old.json" });
+  const db = fakeDb({ track });
+  const saves = [];
+  const s3 = {
+    isConfigured: () => true,
+    getLyrics: async (path) => (path === "lyrics/old.json" ? lyrics : null),
+    saveLyrics: async (key, payload) => {
+      saves.push({ key, payload });
+      return `lyrics/${key}.json`;
+    },
+  };
+  const edited = [[[1, 1000, 500, "Edited "]]];
+
+  await new TrackEditService(db, s3, limiter).editTrack(TRACK_ID, { lyrics: edited });
+
+  const [revision, update] = db.log;
+  assert.deepEqual(revision.values.previous.lyrics, lyrics);
+  assert.equal(saves.length, 1);
+  assert.equal(saves[0].key, `${TRACK_ID}_edit_rev-1`);
+  assert.deepEqual(saves[0].payload, edited);
+  assert.equal(update.values.lyrics, null);
+  assert.equal(update.values.lyricsStoragePath, `lyrics/${TRACK_ID}_edit_rev-1.json`);
+});
+
 test("invalid lyrics edits are refused before anything is written", async () => {
   const cases = [
     [baseTrack(), [], /empty/],

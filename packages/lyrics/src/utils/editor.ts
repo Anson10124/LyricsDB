@@ -54,7 +54,12 @@ export function toEditableLines(payload: SyncedLyricsPayload): EditableLine[] {
     );
     const type = words[0]![0];
     lines.push({
-      words: words.map((w) => ({ start: w[1], length: w[2], text: w[3] })),
+      // Some providers store fractional milliseconds; saved edits must be whole
+      words: words.map((w) => ({
+        start: Math.max(0, Math.round(Number(w[1]) || 0)),
+        length: Math.max(0, Math.round(Number(w[2]) || 0)),
+        text: typeof w[3] === "string" ? w[3] : String(w[3] ?? ""),
+      })),
       bg: type === 2 || type === 4,
       duet: type === 3 || type === 4,
       translation: strings[0] ?? "",
@@ -186,13 +191,17 @@ function spreadTokens(tokens: string[], start: number, end: number): EditableWor
 
 /**
  * Replaces a line's text, keeping as much timing as possible:
- * - a line timed as one token (line-synced lyrics) stays one token;
+ * - a line timed as one token stays one token (always, with `lineSynced`);
  * - with the same number of words, unchanged words keep their (syllable)
  *   timing and a changed word takes over its old word's time span;
  * - a per-character line (CJK) with the same number of characters keeps them;
  * - otherwise the line's time span is split across the new words by length.
  */
-export function setLineText(line: EditableLine, text: string): EditableLine {
+export function setLineText(
+  line: EditableLine,
+  text: string,
+  { lineSynced = false }: { lineSynced?: boolean } = {},
+): EditableLine {
   const trimmed = text.trim();
   if (!trimmed || trimmed === lineText(line)) return line;
 
@@ -204,7 +213,7 @@ export function setLineText(line: EditableLine, text: string): EditableLine {
 
   if (line.words.length === 1) {
     const only = line.words[0]!;
-    if (/\s/.test(only.text.trim()) || !/\s/.test(trimmed)) {
+    if (lineSynced || /\s/.test(only.text.trim()) || !/\s/.test(trimmed)) {
       return { ...line, words: [{ ...only, text: trimmed + lastSpace }] };
     }
   }

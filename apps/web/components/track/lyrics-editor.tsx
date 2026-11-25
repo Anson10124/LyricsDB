@@ -447,13 +447,34 @@ export function LyricsEditor({
       ),
     [],
   );
+  // A new time that passes a neighbour moves the line into time order, so the
+  // saved lyrics never go backwards
   const onStart = useCallback(
-    (index: number, ms: number) => updateLine(index, (l) => setLineStart(l, ms)),
-    [updateLine],
+    (index: number, ms: number) =>
+      setRows((prev) => {
+        const row = prev[index];
+        if (!row) return prev;
+        const moved = { ...row, line: setLineStart(row.line, ms) };
+        const start = lineStart(moved.line);
+        const before = prev[index - 1];
+        const after = prev[index + 1];
+        const inOrder =
+          (!before || lineStart(before.line) <= start) &&
+          (!after || start <= lineStart(after.line));
+        if (inOrder) return prev.map((r, i) => (i === index ? moved : r));
+
+        const rest = prev.filter((_, i) => i !== index);
+        const at = rest.findIndex((r) => lineStart(r.line) > start);
+        rest.splice(at === -1 ? rest.length : at, 0, moved);
+        return rest;
+      }),
+    [],
   );
+  const lineSynced = track.lyricsType === "line";
   const onText = useCallback(
-    (index: number, text: string) => updateLine(index, (l) => setLineText(l, text)),
-    [updateLine],
+    (index: number, text: string) =>
+      updateLine(index, (l) => setLineText(l, text, { lineSynced })),
+    [updateLine, lineSynced],
   );
   const onAnnotation = useCallback(
     (index: number, field: AnnotationField, value: string) =>

@@ -41,6 +41,17 @@ describe("editable lines", () => {
     assert.deepEqual(fromEditableLines(lines), payload);
   });
 
+  it("rounds fractional and negative times so the result validates", () => {
+    const loaded = fromEditableLines(
+      toEditableLines([[[1, 4349.999999999999, 120.4, "Hi "], [1, -3, 10, "x "]]]),
+    );
+    assert.deepEqual(loaded[0]!.slice(0, 2), [
+      [1, 4350, 120, "Hi "],
+      [1, 0, 10, "x "],
+    ]);
+    assert.equal(validateEditedLyrics(loaded), null);
+  });
+
   it("keeps an empty translation slot when only romaji is set", () => {
     const [first] = toEditableLines(payload);
     const out = fromEditableLines([{ ...first!, translation: "" }]);
@@ -124,6 +135,14 @@ describe("text edits", () => {
       edited.words.map((w) => [w.start, w.text]),
       [[0, "君"], [300, "が"], [600, "名"]],
     );
+  });
+
+  it("never splits a line on line-synced lyrics", () => {
+    const edited = setLineText(line("Hello ", 0, 3000), "Hello there world", {
+      lineSynced: true,
+    });
+    assert.equal(edited.words.length, 1);
+    assert.equal(edited.words[0]!.text, "Hello there world ");
   });
 
   it("times Chinese and Japanese per character", () => {
