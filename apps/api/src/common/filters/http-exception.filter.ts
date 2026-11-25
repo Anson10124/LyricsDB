@@ -19,6 +19,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = "An internal server error occurred.";
     let error = "Internal Server Error";
+    // e.g. the track that already owns an ID, for a 409 from the editor
+    let trackId: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -35,6 +37,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
         if (typeof resObj.error === "string") {
           error = resObj.error;
+        }
+        if (typeof resObj.trackId === "string") {
+          trackId = resObj.trackId;
         }
       }
     } else if (exception instanceof Error) {
@@ -72,6 +77,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode: status,
         message,
         error,
+        ...(trackId ? { trackId } : {}),
       });
     }
   }

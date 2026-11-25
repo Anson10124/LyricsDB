@@ -138,6 +138,7 @@ test("a sync records the requested ID, the new version's IDs, the ISRC and the o
   s.dropIdsOwnedElsewhere = async (data) => data;
   s.safeSaveTrack = async (data) => ({ ...existing, ...data });
   s.findPlatformIdOwners = async () => new Map();
+  s.loadRejectedIds = async () => new Map();
   let recorded;
   s.recordPlatformIds = async (trackId, ids) => {
     recorded = { trackId, ids };

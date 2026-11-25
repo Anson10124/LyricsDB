@@ -112,3 +112,63 @@ export const trackPlatformIds = pgTable(
 
 export type TrackPlatformId = typeof trackPlatformIds.$inferSelect;
 export type NewTrackPlatformId = typeof trackPlatformIds.$inferInsert;
+
+// What a track looked like before a community edit, so a bad edit can be rolled
+// back (see apps/api/scripts/revert-track-edit.mts). Written before the edit is saved.
+export interface TrackRevisionSnapshot {
+  lyrics: SyncedLyricsPayload | string | Record<string, unknown> | null;
+  lyricsType: LyricsType | null;
+  lyricsProvider: string | null;
+  hasTranslation: boolean;
+  hasRomaji: boolean;
+  isVerified: boolean;
+  ids: {
+    isrc: string | null;
+    spotifyId: string | null;
+    appleMusicId: string | null;
+    deezerId: string | null;
+    neteaseId: string | null;
+    qqMusicId: string | null;
+  };
+}
+
+export const trackRevisions = pgTable(
+  "track_revisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    previous: jsonb("previous").$type<TrackRevisionSnapshot>().notNull(),
+    // Which parts the edit changed: 'lyrics' and/or 'ids'
+    changed: jsonb("changed").$type<string[]>().default([]).notNull(),
+    // Salted hash of the editor's IP, to spot repeat vandalism without storing IPs
+    editorHash: varchar("editor_hash", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("idx_track_revisions_track_id").on(table.trackId)],
+);
+
+export type TrackRevision = typeof trackRevisions.$inferSelect;
+
+// Platform IDs a person removed from a track because the match was wrong. A later
+// resolve never attaches them to that track again.
+export const trackRejectedPlatformIds = pgTable(
+  "track_rejected_platform_ids",
+  {
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    // normalizePlatform() names, as in track_platform_ids
+    platform: varchar("platform", { length: 16 }).notNull(),
+    platformId: varchar("platform_id", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.trackId, table.platform, table.platformId] }),
+  ],
+);

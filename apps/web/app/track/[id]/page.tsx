@@ -12,6 +12,7 @@ import type {
   TrackRecord,
 } from "@repo/types";
 import { TrackView } from "@/components/track/track-view";
+import { LyricsEditor } from "@/components/track/lyrics-editor";
 import { SiteHeader } from "@/components/site-header";
 import { fade, spring } from "@/lib/motion";
 import { TaskProgressState, TaskRows } from "@/components/task-rows";
@@ -69,6 +70,7 @@ export default function TrackPage({ params }: TrackPageProps) {
   );
   const [refreshing, setRefreshing] = useState(false);
   const [markingCorrect, setMarkingCorrect] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [progress, setProgress] = useState<TaskProgressState>(initialProgress);
   const [panel, setPanel] = useState<RefreshPanelState>({
     open: false,
@@ -151,8 +153,31 @@ export default function TrackPage({ params }: TrackPageProps) {
     }
   };
 
+  // A fresh single-use challenge per save (undefined when Turnstile is off)
+  const requestTurnstileToken = async (action: string) => {
+    const container = turnstileContainerRef.current;
+    if (!container) throw new Error("Human verification is not ready yet.");
+    return getTurnstileToken(container, action);
+  };
+
+  const handleEdited = (
+    updated: SanitizedTrack<TrackRecord>,
+    editedLyrics: SyncedLyricsPayload | null,
+  ) => {
+    setTrack(updated);
+    if (editedLyrics) setLyrics(editedLyrics);
+    setEditorOpen(false);
+  };
+
   const handleRefresh = () => {
-    if (!track || refreshing || track.isVerified) return;
+    if (
+      !track ||
+      refreshing ||
+      track.isVerified ||
+      track.lyricsProvider === "community"
+    ) {
+      return;
+    }
 
     const source = getRefreshSource(track);
     if (!source) {
@@ -312,15 +337,27 @@ export default function TrackPage({ params }: TrackPageProps) {
               isRefreshing={refreshing}
               onMarkCorrect={handleMarkCorrect}
               isMarkingCorrect={markingCorrect}
+              onEdit={() => setEditorOpen(true)}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
+      {track && (
+        <LyricsEditor
+          open={editorOpen}
+          track={track}
+          lyrics={Array.isArray(lyrics) ? lyrics : null}
+          onClose={() => setEditorOpen(false)}
+          onSaved={handleEdited}
+          getTurnstileToken={requestTurnstileToken}
+        />
+      )}
+
       {/* Turnstile only shows here when Cloudflare needs the visitor to interact */}
       <div
         ref={turnstileContainerRef}
-        className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 empty:hidden"
+        className="fixed bottom-4 left-1/2 z-[60] -translate-x-1/2 empty:hidden"
       />
 
       {/* Live refresh progress, docked to the side so the lyrics stay visible */}

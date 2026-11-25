@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileDown,
   Music2,
+  PencilLine,
   RefreshCw,
 } from "lucide-react";
 import type {
@@ -32,6 +33,7 @@ interface TrackViewProps {
   isRefreshing?: boolean;
   onMarkCorrect?: () => void;
   isMarkingCorrect?: boolean;
+  onEdit?: () => void;
 }
 
 const glassButton =
@@ -182,6 +184,7 @@ export function TrackView({
   isRefreshing = false,
   onMarkCorrect,
   isMarkingCorrect = false,
+  onEdit,
 }: TrackViewProps) {
   const [playing, setPlaying] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -201,6 +204,9 @@ export function TrackView({
   const artistLine =
     uniqueArtists(track.artists).join(", ") || "Unknown Artist";
   const isSynced = Array.isArray(rawLyrics);
+  // Community-edited lyrics can't be replaced by a refresh (the API refuses it)
+  const isRefreshLocked =
+    track.isVerified || track.lyricsProvider === "community";
   // TTML strings have no player here; the sheet shows them as code
   const plainText =
     typeof rawLyrics === "string" && !rawLyrics.trim().startsWith("<")
@@ -312,7 +318,22 @@ export function TrackView({
                 </motion.button>
               ))}
 
-            {onRefresh && !track.isVerified && (
+            {onEdit && (
+              <motion.button
+                type="button"
+                onClick={onEdit}
+                disabled={isRefreshing || isMarkingCorrect}
+                whileTap={press}
+                transition={spring.snappy}
+                title="Fix lyrics, timing, translations or platform IDs"
+                className={`${glassButton} px-3.5 py-2`}
+              >
+                <PencilLine className="size-4" />
+                Edit
+              </motion.button>
+            )}
+
+            {onRefresh && !isRefreshLocked && (
               <motion.button
                 type="button"
                 onClick={onRefresh}

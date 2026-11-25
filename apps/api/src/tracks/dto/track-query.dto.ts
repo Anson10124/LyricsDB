@@ -1,8 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import {
+  IsArray,
   IsBoolean,
+  IsDateString,
   IsInt,
+  IsObject,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -234,4 +237,63 @@ export class VerifyTrackDto {
   @IsString()
   @MaxLength(2048)
   turnstileToken?: string;
+}
+
+export class EditTrackIdsDto {
+  @ApiProperty({ required: false, nullable: true, example: "4cOdK2wGLETKBW3PvgPWqT" })
+  spotifyId?: string | null;
+  @ApiProperty({ required: false, nullable: true, example: "1559523359" })
+  appleMusicId?: string | null;
+  @ApiProperty({ required: false, nullable: true, example: "3135556" })
+  deezerId?: string | null;
+  @ApiProperty({ required: false, nullable: true, example: "5257138" })
+  neteaseId?: string | null;
+  @ApiProperty({ required: false, nullable: true, example: "0039MnYb0qxYhV" })
+  qqMusicId?: string | null;
+  @ApiProperty({ required: false, nullable: true, example: "GBARL9300135" })
+  isrc?: string | null;
+}
+
+export class EditTrackDto {
+  @ApiProperty({
+    required: false,
+    description:
+      "Single-use Cloudflare Turnstile token (cf-turnstile-response) for the `edit-track` action. Required when human verification is enabled.",
+    example: "0.AbCdEf...",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  turnstileToken?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      "The track's `updatedAt` when the editor was opened. If the track changed since, the edit is refused with 409 so it can't overwrite someone else's.",
+    example: "2026-11-25T10:00:00.000Z",
+  })
+  @IsOptional()
+  @IsDateString()
+  baseUpdatedAt?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      "The full edited lyrics in the compact JSON format (the same shape `format=json` returns). Omit to leave the lyrics unchanged.",
+    type: "array",
+    items: { type: "array", items: {} },
+  })
+  @IsOptional()
+  @IsArray()
+  lyrics?: unknown[];
+
+  @ApiProperty({
+    required: false,
+    type: EditTrackIdsDto,
+    description:
+      "Platform IDs to change. Only the fields present are changed; null or an empty string removes an ID. A removed ID is never matched to this track again.",
+  })
+  @IsOptional()
+  @IsObject()
+  ids?: Record<string, string | null>;
 }

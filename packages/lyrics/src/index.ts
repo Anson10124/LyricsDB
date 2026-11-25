@@ -16,6 +16,7 @@ export * from "./fetchers/lyricify.js";
 export * from "./parsers/lyricify.js";
 export * from "./utils/qrc-decoder.js";
 export * from "./utils/converter.js";
+export * from "./utils/editor.js";
 export * from "./utils/info-lines.js";
 export * from "./utils/explicit.js";
 export * from "./utils/syllable-sanitizer.js";

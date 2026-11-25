@@ -3,6 +3,7 @@ import * as path from "path";
 import { config } from "dotenv";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import * as fs from "fs";
 import { AppModule } from "./app.module";
@@ -24,7 +25,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Edited lyrics are sent whole; a long word-synced song is a few hundred KB
+  app.useBodyParser("json", { limit: "2mb" });
   const expressApp = app.getHttpAdapter().getInstance();
 
   // Security Hardening: Disable X-Powered-By header to prevent technology fingerprinting

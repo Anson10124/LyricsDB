@@ -4,6 +4,7 @@
     "getTrack",
     "postTrack",
     "getTrackById",
-    "searchTracks"
+    "searchTracks",
+    "editTrack"
   ]
 }

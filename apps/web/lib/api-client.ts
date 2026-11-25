@@ -2,6 +2,7 @@ import type {
   LibraryStats,
   SanitizedTrack,
   SupportedLyricFormat,
+  SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
 
@@ -188,6 +189,62 @@ export async function markTrackVerified(
 /**
  * Fetches the public Turnstile site key (null when verification is disabled).
  */
+export type TrackIdField =
+  | "spotifyId"
+  | "appleMusicId"
+  | "deezerId"
+  | "neteaseId"
+  | "qqMusicId"
+  | "isrc";
+
+export interface TrackEdit {
+  baseUpdatedAt?: string;
+  lyrics?: SyncedLyricsPayload;
+  ids?: Partial<Record<TrackIdField, string | null>>;
+}
+
+// A refused edit. `trackId` names the track that already owns an ID (409).
+export class TrackEditError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly trackId?: string,
+  ) {
+    super(message);
+    this.name = "TrackEditError";
+  }
+}
+
+export async function editTrack(
+  id: string,
+  edit: TrackEdit,
+  turnstileToken?: string,
+): Promise<SanitizedTrack<TrackRecord>> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(
+    `${apiBase}/api/tracks/${encodeURIComponent(id)}/edit`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...edit, ...(turnstileToken ? { turnstileToken } : {}) }),
+    },
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as {
+      message?: string;
+      trackId?: string;
+    } | null;
+    const message =
+      res.status === 403
+        ? "Human verification failed. Please try again."
+        : res.status === 429
+          ? "Too many edits. Please wait a moment."
+          : body?.message || "Failed to save your edit.";
+    throw new TrackEditError(message, res.status, body?.trackId);
+  }
+  return (await res.json()) as SanitizedTrack<TrackRecord>;
+}
+
 export async function fetchTurnstileConfig(): Promise<{
   siteKey: string | null;
 }> {

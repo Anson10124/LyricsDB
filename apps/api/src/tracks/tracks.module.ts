@@ -4,11 +4,12 @@ import { ActivityModule } from "../activity/activity.module";
 import { TurnstileModule } from "../turnstile/turnstile.module";
 import { TracksController } from "./tracks.controller";
 import { TracksService } from "./tracks.service";
+import { TrackEditService } from "./track-edit.service";
 
 @Module({
   imports: [ResolverModule, ActivityModule, TurnstileModule],
   controllers: [TracksController],
-  providers: [TracksService],
+  providers: [TracksService, TrackEditService],
   exports: [TracksService],
 })
 export class TracksModule {}

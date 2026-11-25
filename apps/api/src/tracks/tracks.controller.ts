@@ -14,6 +14,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBody,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -34,12 +35,14 @@ import {
   type ProgressLogEvent,
 } from "@repo/types";
 import { TracksService } from "./tracks.service";
+import { TrackEditService } from "./track-edit.service";
 import {
   SanitizedTrackDto,
   TrackNeighborsDto,
 } from "./dto/track-response.dto";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
 import {
+  EditTrackDto,
   FuzzyLyricsQueryDto,
   GetLyricsQueryDto,
   LyricsByIdQueryDto,
@@ -60,6 +63,7 @@ export class TracksController {
   constructor(
     private readonly tracksService: TracksService,
     private readonly turnstileService: TurnstileService,
+    private readonly trackEditService: TrackEditService,
   ) {}
 
   // ==========================================
@@ -499,6 +503,56 @@ export class TracksController {
       clientIp,
     );
     const track = await this.tracksService.markVerified(id, clientIp);
+    return this.tracksService.sanitizeTrack(track);
+  }
+
+  @ApiOperation({
+    summary: "Edit a track's lyrics or platform IDs",
+    description:
+      "Saves a community edit (10 RPM/IP). Send the full edited lyrics in the compact JSON format and/or the platform IDs to change. The edit goes live immediately, the previous version is kept as a revision, and the Verified badge is removed. Edited lyrics can no longer be replaced by a refresh. When Cloudflare Turnstile is configured, every call must carry a fresh single-use token for the `edit-track` action.",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Track internal database UUID v4",
+    example: "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  })
+  @ApiBody({ type: EditTrackDto })
+  @ApiOkResponse({ type: SanitizedTrackDto, description: "The updated track" })
+  @ApiBadRequestResponse({
+    type: ErrorResponseDto,
+    description: "Invalid lyrics or ID, or nothing changed",
+  })
+  @ApiForbiddenResponse({
+    type: ErrorResponseDto,
+    description: "Turnstile token missing, expired, or invalid",
+  })
+  @ApiNotFoundResponse({
+    type: ErrorResponseDto,
+    description: "Track ID not found in database",
+  })
+  @ApiConflictResponse({
+    type: ErrorResponseDto,
+    description:
+      "The track changed since the editor opened, or a new ID already belongs to another track (its ID is in `trackId`)",
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post("tracks/:id/edit")
+  @HttpCode(200)
+  async edit(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @Body() dto: EditTrackDto,
+    @ClientIp() clientIp: string,
+  ) {
+    await this.turnstileService.verify(
+      dto.turnstileToken,
+      "edit-track",
+      clientIp,
+    );
+    const track = await this.trackEditService.editTrack(
+      id,
+      { baseUpdatedAt: dto.baseUpdatedAt, lyrics: dto.lyrics, ids: dto.ids },
+      clientIp,
+    );
     return this.tracksService.sanitizeTrack(track);
   }
 

@@ -23,6 +23,7 @@ import {
   sql,
   Track,
   trackPlatformIds,
+  trackRejectedPlatformIds,
   tracks,
   type NewTrack,
 } from "@repo/database";
@@ -75,6 +76,7 @@ import {
   storedRecordingInfo,
   type VerifiedPlatformIds,
 } from "./platform-ids";
+import { refreshLockError } from "./refresh-lock";
 
 // Postgres unique_violation, or a driver message saying the same
 function isUniqueViolation(err: unknown): boolean {
@@ -119,8 +121,6 @@ export interface TrackPreviewAudio {
   endMs: number;
 }
 
-const VERIFIED_REFRESH_ERROR =
-  "This track has been verified as correct and can't be refreshed.";
 
 @Injectable()
 
@@ -872,12 +872,14 @@ export class TracksService implements OnApplicationBootstrap {
   private async executeSyncAndStore(url: string): Promise<Track> {
 
     const resolved: ResolveResult = await this.resolverService.resolveUrl(url);
-    const meta = resolved.metadata;
-
-    const validIds = this.extractHighConfidencePlatformIds(resolved.links, meta);
     const existingTrack = await this.findExistingTrackByPlatformLinks(
       resolved.links,
-      meta,
+      resolved.metadata,
+    );
+    const { meta, validIds } = await this.withoutRejectedIds(
+      resolved.metadata,
+      this.extractHighConfidencePlatformIds(resolved.links, resolved.metadata),
+      existingTrack,
     );
 
     const lyricsData = await this.resolveAndStoreLyrics(
@@ -918,6 +920,58 @@ export class TracksService implements OnApplicationBootstrap {
       ),
     );
     return saved;
+  }
+
+  // IDs a person removed from each track because the match was wrong
+  private async loadRejectedIds(
+    trackIds: string[],
+  ): Promise<Map<string, Set<string>>> {
+    const rejected = new Map<string, Set<string>>();
+    if (trackIds.length === 0) return rejected;
+    const rows = await this.db
+      .select()
+      .from(trackRejectedPlatformIds)
+      .where(inArray(trackRejectedPlatformIds.trackId, trackIds));
+    for (const row of rows) {
+      const set = rejected.get(row.trackId) ?? new Set<string>();
+      set.add(`${row.platform}:${row.platformId}`);
+      rejected.set(row.trackId, set);
+    }
+    return rejected;
+  }
+
+  // Drops resolved IDs a person rejected for this track, so a refresh can't bring
+  // back a wrong match. On a platform someone corrected, the stored ID also wins
+  // over the resolver's pick when looking up lyrics.
+  private async withoutRejectedIds(
+    meta: ResolverTrackMetadata,
+    validIds: VerifiedPlatformIds,
+    existingTrack: Track | null | undefined,
+  ): Promise<{ meta: ResolverTrackMetadata; validIds: VerifiedPlatformIds }> {
+    if (!existingTrack) return { meta, validIds };
+    const rejected = (await this.loadRejectedIds([existingTrack.id])).get(
+      existingTrack.id,
+    );
+    if (!rejected || rejected.size === 0) return { meta, validIds };
+
+    const corrected = new Set(
+      [...rejected].map((key) => key.slice(0, key.indexOf(":"))),
+    );
+    const cleanIds: VerifiedPlatformIds = { ...validIds };
+    for (const [platform, field] of Object.entries(PLATFORM_TRACK_FIELDS)) {
+      if (field === "isrc") continue;
+      const id = cleanIds[field];
+      if (id && rejected.has(`${platform}:${id}`)) cleanIds[field] = undefined;
+      if (corrected.has(platform) && existingTrack[field]) {
+        cleanIds[field] = existingTrack[field] ?? undefined;
+      }
+    }
+
+    const isrcRejected = meta.isrc && rejected.has(`isrc:${meta.isrc}`);
+    return {
+      meta: isrcRejected ? { ...meta, isrc: undefined } : meta,
+      validIds: cleanIds,
+    };
   }
 
   private extractHighConfidencePlatformIds(
@@ -970,21 +1024,31 @@ export class TracksService implements OnApplicationBootstrap {
       .select()
       .from(tracks)
       .where(inArray(tracks.id, [...candidateIds]));
+    const rejected = await this.loadRejectedIds([...candidateIds]);
 
     const matches = candidates
-      .map((track) => ({
-        track,
-        matchedIds: ids.filter((ref) =>
-          owners.get(platformIdKey(ref))?.has(track.id),
-        ).length,
-        ownsSource: Boolean(
-          sourceKey && owners.get(sourceKey)?.has(track.id),
-        ),
-      }))
+      .map((track) => {
+        const rejectedHere = rejected.get(track.id);
+        return {
+          track,
+          matchedIds: ids.filter(
+            (ref) =>
+              owners.get(platformIdKey(ref))?.has(track.id) &&
+              !rejectedHere?.has(platformIdKey(ref)),
+          ).length,
+          ownsSource: Boolean(
+            sourceKey && owners.get(sourceKey)?.has(track.id),
+          ),
+          // A person said this link is not this track
+          rejectsSource: Boolean(sourceKey && rejectedHere?.has(sourceKey)),
+        };
+      })
       .filter(
         (match) =>
-          match.ownsSource ||
-          isSameRecording(storedRecordingInfo(match.track), meta),
+          !match.rejectsSource &&
+          (match.ownsSource ||
+            (match.matchedIds > 0 &&
+              isSameRecording(storedRecordingInfo(match.track), meta))),
       );
 
     return pickTrackMatch(matches);
@@ -1310,14 +1374,15 @@ export class TracksService implements OnApplicationBootstrap {
       cachedTrack = await this.findByPlatformId(targetPlatform, targetId);
     }
 
-    // Verified tracks are locked; reject before spending any upstream budget
+    // Verified and community-edited tracks are locked; reject before spending any upstream budget
     if (forceRefresh && targetPlatform && targetId) {
       this.ipRateLimiter.consume(clientIp, "cached");
       const lockedTrack = await this.findByPlatformId(targetPlatform, targetId);
-      if (lockedTrack?.isVerified) {
+      const lockError = refreshLockError(lockedTrack);
+      if (lockedTrack && lockError) {
         emitEvent({
           stage: "error",
-          data: { error: VERIFIED_REFRESH_ERROR, trackId: lockedTrack.id },
+          data: { error: lockError, trackId: lockedTrack.id },
           timestamp: Date.now(),
         });
         return;
@@ -1442,25 +1507,30 @@ export class TracksService implements OnApplicationBootstrap {
         },
       );
 
-      const meta = resolved.metadata;
-      const validIds = this.extractHighConfidencePlatformIds(
-        resolved.links,
-        meta,
-      );
       const existingTrack = await this.findExistingTrackByPlatformLinks(
         resolved.links,
-        meta,
+        resolved.metadata,
       );
 
-      // The refresh may reach a verified track through another platform's link
-      if (forceRefresh && existingTrack?.isVerified) {
+      // The refresh may reach a locked track through another platform's link
+      const lockError = forceRefresh ? refreshLockError(existingTrack) : null;
+      if (existingTrack && lockError) {
         emitEvent({
           stage: "error",
-          data: { error: VERIFIED_REFRESH_ERROR, trackId: existingTrack.id },
+          data: { error: lockError, trackId: existingTrack.id },
           timestamp: Date.now(),
         });
         return;
       }
+
+      const { meta, validIds } = await this.withoutRejectedIds(
+        resolved.metadata,
+        this.extractHighConfidencePlatformIds(
+          resolved.links,
+          resolved.metadata,
+        ),
+        existingTrack,
+      );
 
       // Step 5: Live Lyrics Fetching with onProgress
       const lyricsData = await this.resolveAndStoreLyrics(

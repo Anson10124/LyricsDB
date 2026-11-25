@@ -1631,6 +1631,174 @@
         ]
       }
     },
+    "/api/tracks/{id}/edit": {
+      "post": {
+        "description": "Saves a community edit (10 RPM/IP). Send the full edited lyrics in the compact JSON format and/or the platform IDs to change. The edit goes live immediately, the previous version is kept as a revision, and the Verified badge is removed. Edited lyrics can no longer be replaced by a refresh. When Cloudflare Turnstile is configured, every call must carry a fresh single-use token for the `edit-track` action.",
+        "operationId": "TracksController_edit[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTrackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated track",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lyrics or ID, or nothing changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Turnstile token missing, expired, or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The track changed since the editor opened, or a new ID already belongs to another track (its ID is in `trackId`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit a track's lyrics or platform IDs",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/tracks/{id}/edit": {
+      "post": {
+        "description": "Saves a community edit (10 RPM/IP). Send the full edited lyrics in the compact JSON format and/or the platform IDs to change. The edit goes live immediately, the previous version is kept as a revision, and the Verified badge is removed. Edited lyrics can no longer be replaced by a refresh. When Cloudflare Turnstile is configured, every call must carry a fresh single-use token for the `edit-track` action.",
+        "operationId": "TracksController_edit[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTrackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated track",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SanitizedTrackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lyrics or ID, or nothing changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Turnstile token missing, expired, or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The track changed since the editor opened, or a new ID already belongs to another track (its ID is in `trackId`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit a track's lyrics or platform IDs",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
     "/api/tracks/{id}/lyrics": {
       "get": {
         "description": "Retrieves synchronized lyrics formatted into JSON, TTML, LRC, YRC, QRC, ASS, or other supported formats for an existing database track ID (60 RPM/IP).",
@@ -3379,6 +3547,72 @@
             "type": "string",
             "description": "Single-use Cloudflare Turnstile token (cf-turnstile-response). Required when human verification is enabled.",
             "example": "0.AbCdEf..."
+          }
+        }
+      },
+      "EditTrackIdsDto": {
+        "type": "object",
+        "properties": {
+          "spotifyId": {
+            "type": "object",
+            "nullable": true,
+            "example": "4cOdK2wGLETKBW3PvgPWqT"
+          },
+          "appleMusicId": {
+            "type": "object",
+            "nullable": true,
+            "example": "1559523359"
+          },
+          "deezerId": {
+            "type": "object",
+            "nullable": true,
+            "example": "3135556"
+          },
+          "neteaseId": {
+            "type": "object",
+            "nullable": true,
+            "example": "5257138"
+          },
+          "qqMusicId": {
+            "type": "object",
+            "nullable": true,
+            "example": "0039MnYb0qxYhV"
+          },
+          "isrc": {
+            "type": "object",
+            "nullable": true,
+            "example": "GBARL9300135"
+          }
+        }
+      },
+      "EditTrackDto": {
+        "type": "object",
+        "properties": {
+          "turnstileToken": {
+            "type": "string",
+            "description": "Single-use Cloudflare Turnstile token (cf-turnstile-response) for the `edit-track` action. Required when human verification is enabled.",
+            "example": "0.AbCdEf..."
+          },
+          "baseUpdatedAt": {
+            "type": "string",
+            "description": "The track's `updatedAt` when the editor was opened. If the track changed since, the edit is refused with 409 so it can't overwrite someone else's.",
+            "example": "2026-11-25T10:00:00.000Z"
+          },
+          "lyrics": {
+            "type": "array",
+            "description": "The full edited lyrics in the compact JSON format (the same shape `format=json` returns). Omit to leave the lyrics unchanged.",
+            "items": {
+              "type": "array",
+              "items": {}
+            }
+          },
+          "ids": {
+            "description": "Platform IDs to change. Only the fields present are changed; null or an empty string removes an ID. A removed ID is never matched to this track again.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EditTrackIdsDto"
+              }
+            ]
           }
         }
       },
