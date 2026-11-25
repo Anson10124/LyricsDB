@@ -1,10 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  formatPlatformName,
-  PLATFORM_DISPLAY_NAMES,
-} from "@repo/music-resolver/platforms";
+import { formatPlatformName } from "@repo/music-resolver/platforms";
 import { formatDuration } from "@/lib/utils";
 
 

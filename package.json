@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
+    "test": "turbo run test",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:push": "pnpm --filter @repo/database db:push",
