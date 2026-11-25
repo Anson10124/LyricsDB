@@ -67,6 +67,16 @@ describe("editable lines", () => {
   });
 });
 
+describe("background vocals", () => {
+  it("maps the background flag to vocal types 2 and 4", () => {
+    const lines = toEditableLines(payload).map((l) => ({ ...l, bg: !l.bg }));
+    const out = fromEditableLines(lines);
+    assert.equal((out[0]![0] as unknown[])[0], 2); // lead -> background
+    assert.equal((out[1]![0] as unknown[])[0], 1); // background -> lead
+    assert.equal((out[2]![0] as unknown[])[0], 4); // duet lead -> duet background
+  });
+});
+
 describe("timing edits", () => {
   it("moves every word of a line with its start time", () => {
     const [first] = toEditableLines(payload);

@@ -162,8 +162,12 @@ interface LineRowProps {
   onStart: (index: number, ms: number) => void;
   onText: (index: number, text: string) => void;
   onDuet: (index: number) => void;
+  onBg: (index: number) => void;
   onRemove: (index: number) => void;
 }
+
+const checkboxClass =
+  "size-4 cursor-pointer appearance-none rounded-full ring-2 ring-white/25 transition checked:bg-sky-400 checked:ring-sky-400";
 
 const LineRow = memo(function LineRow({
   index,
@@ -172,6 +176,7 @@ const LineRow = memo(function LineRow({
   onStart,
   onText,
   onDuet,
+  onBg,
   onRemove,
 }: LineRowProps) {
   const text = lineText(line);
@@ -194,14 +199,6 @@ const LineRow = memo(function LineRow({
         onCommit={(ms) => onStart(index, ms - offset)}
         label={`Start time of line ${index + 1}`}
       />
-      {line.bg && (
-        <span
-          title="Background vocals"
-          className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/55 uppercase"
-        >
-          BG
-        </span>
-      )}
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -225,7 +222,19 @@ const LineRow = memo(function LineRow({
           checked={line.duet}
           onChange={() => onDuet(index)}
           aria-label={`Line ${index + 1} is a duet part`}
-          className="size-4 cursor-pointer appearance-none rounded-full ring-2 ring-white/25 transition checked:bg-sky-400 checked:ring-sky-400"
+          className={checkboxClass}
+        />
+      </label>
+      <label
+        className="flex w-9 shrink-0 cursor-pointer justify-center"
+        title="Background vocals (shown smaller, under the main line)"
+      >
+        <input
+          type="checkbox"
+          checked={line.bg}
+          onChange={() => onBg(index)}
+          aria-label={`Line ${index + 1} is background vocals`}
+          className={checkboxClass}
         />
       </label>
       <button
@@ -478,6 +487,10 @@ export function LyricsEditor({
     (index: number) => updateLine(index, (l) => ({ ...l, duet: !l.duet })),
     [updateLine],
   );
+  const onBg = useCallback(
+    (index: number) => updateLine(index, (l) => ({ ...l, bg: !l.bg })),
+    [updateLine],
+  );
   const onRemove = useCallback(
     (index: number) => setRows((prev) => prev.filter((_, i) => i !== index)),
     [],
@@ -712,6 +725,7 @@ export function LyricsEditor({
                     <span className="w-[5.75rem] px-1.5 sm:w-[6.5rem] sm:px-2">Time</span>
                     <span className="flex-1 px-2">Lyrics</span>
                     <span className="w-9 text-center">Duet</span>
+                    <span className="w-9 text-center">BG</span>
                     <span className="w-8" />
                   </div>
                   <span className={cn("min-w-0 flex-[2] pl-7", columnVisibility("translation"))}>
@@ -745,6 +759,7 @@ export function LyricsEditor({
                               onStart={onStart}
                               onText={onText}
                               onDuet={onDuet}
+                              onBg={onBg}
                               onRemove={onRemove}
                             />
                           ))}
