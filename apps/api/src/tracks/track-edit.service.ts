@@ -85,9 +85,9 @@ export class TrackEditService {
   ) {}
 
   /**
-   * Saves a community edit of a track's lyrics and/or platform IDs. The previous
-   * state is stored in track_revisions first, saving clears the Verified badge, and
-   * edited lyrics are marked as community lyrics so a refresh can't replace them.
+   * Saves a community edit of a track's lyrics and/or platform IDs. Verified
+   * tracks can't be edited. The previous state is stored in track_revisions first,
+   * and edited lyrics are marked as community lyrics so a refresh can't replace them.
    */
   async editTrack(
     id: string,
@@ -102,6 +102,12 @@ export class TrackEditService {
       .where(eq(tracks.id, id))
       .limit(1);
     if (!track) throw new NotFoundException(`Track with id ${id} not found.`);
+    // Verified tracks are locked against every change, like refreshes
+    if (track.isVerified) {
+      throw new ConflictException(
+        "This track has been verified as correct and can't be edited.",
+      );
+    }
 
     if (
       input.baseUpdatedAt &&
@@ -134,7 +140,7 @@ export class TrackEditService {
       })
       .returning({ id: trackRevisions.id });
 
-    const update: Partial<Track> = { isVerified: false, updatedAt: new Date() };
+    const update: Partial<Track> = { updatedAt: new Date() };
     if (newLyrics) {
       Object.assign(update, await this.storeLyrics(track, newLyrics, revision?.id));
     }

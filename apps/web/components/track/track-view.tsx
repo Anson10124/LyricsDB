@@ -318,18 +318,19 @@ export function TrackView({
                 </motion.button>
               ))}
 
-            {onEdit && (
+            {/* Verified tracks are locked, so they can't be edited either */}
+            {onEdit && !track.isVerified && (
               <motion.button
                 type="button"
                 onClick={onEdit}
                 disabled={isRefreshing || isMarkingCorrect}
                 whileTap={press}
                 transition={spring.snappy}
-                title="Fix lyrics, timing, translations or platform IDs"
-                className={`${glassButton} px-3.5 py-2`}
+                aria-label="Edit lyrics"
+                title="Edit lyrics, timing, translations or platform IDs"
+                className={`${glassButton} size-9`}
               >
                 <PencilLine className="size-4" />
-                Edit
               </motion.button>
             )}
 

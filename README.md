@@ -43,7 +43,7 @@ It's useful if you're building a music player, a karaoke app, a Discord or Spoti
 - **11 export formats**: TTML, LRC, LRCA2, YRC, QRC, ESLRC, ASS, LYL, LYS, LQE and JSON
 - **Live progress** over Server-Sent Events while new lyrics are being fetched
 - **Community verification**: anyone can mark a track as correct, and verified tracks are protected from being overwritten
-- **Built-in lyrics editor**: fix timing (per line or with a global offset), text, duet parts and misplaced translations or romaji, delete lines, or correct a wrong platform match. Edits go live right away and every previous version is kept
+- **Built-in lyrics editor**: fix timing (per line or with a global offset), text, duet parts and misplaced translations or romaji, delete lines, or correct a wrong platform match. Edits go live right away, every previous version is kept, and verified tracks are locked
 - **Library stats page** showing what's cached, which sources it came from, and how it's synced
 - **Cheap to host**: PostgreSQL plus optional S3-compatible storage. It fits on Supabase or Cloudflare R2 free tiers.
 
@@ -179,7 +179,7 @@ Once it's running:
 1. **Search.** Type a song or artist, or paste a Spotify, Apple Music or Deezer link. Use <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> to pick a result.
 2. **Listen along.** The **Interactive** tab plays the lyrics in sync. Use the buttons to restart, show or hide the translation and romanization, or open the **fullscreen** player.
 3. **Export.** Switch to any format tab (TTML, LRC, YRC, QRC, ASS, JSON…) to view the file, then **Copy** or **Download** it.
-4. **Help keep it accurate.** If the song and lyrics are right, click **Mark as Correct**. Verified tracks are locked against automatic refreshes. If something looks wrong, **Refresh** fetches the lyrics again, or click **Edit** to fix them yourself: change line times or the whole offset, fix text, drag a translation or romaji onto the right line, mark duet parts, delete lines, or correct the platform IDs if the wrong song was matched. Edits go live immediately (after a Cloudflare Turnstile check) and remove the Verified badge. Lyrics someone edited can't be replaced by a refresh, and an ID someone removed is never matched to that track again.
+4. **Help keep it accurate.** If the song and lyrics are right, click **Mark as Correct**. Verified tracks are locked against automatic refreshes. If something looks wrong, **Refresh** fetches the lyrics again, or click **Edit** to fix them yourself: change line times or the whole offset, fix text, drag a translation or romaji onto the right line, mark duet parts, delete lines, or correct the platform IDs if the wrong song was matched. Edits go live immediately (after a Cloudflare Turnstile check). Verified tracks can't be edited. Lyrics someone edited can't be replaced by a refresh, and an ID someone removed is never matched to that track again.
 
 The **Stats** page (top right) shows how many tracks are cached, how they're synced, and which sources they came from.
 

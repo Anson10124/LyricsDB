@@ -11,28 +11,13 @@ import {
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  closestCenter,
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  pointerWithin,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  ArrowDown,
-  ArrowUp,
-  GripVertical,
-  Loader2,
-  Trash2,
-  X,
-} from "lucide-react";
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DraggableProvided,
+  type DropResult,
+} from "@hello-pangea/dnd";
+import { GripVertical, Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import type {
   SanitizedTrack,
@@ -95,10 +80,13 @@ const ANNOTATION_LABELS: Record<AnnotationField, string> = {
   romaji: "Romaji",
 };
 
-// Drops on the line under the pointer; keyboard drags (no pointer) use the nearest
-const lineUnderPointer: CollisionDetection = (args) => {
-  const hits = pointerWithin(args);
-  return hits.length > 0 ? hits : closestCenter(args);
+// Every row in every column has this height, so a translation dragged one slot
+// lines up with the next lyric line
+const ROW_HEIGHT = 52;
+const rowHeight = { height: ROW_HEIGHT };
+// Alternating row shading behind all columns, so rows read across
+const rowStripes = {
+  backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 ${ROW_HEIGHT}px, rgb(255 255 255 / 0.03) ${ROW_HEIGHT}px ${ROW_HEIGHT * 2}px)`,
 };
 
 // 83085 -> "01:23.085"
@@ -127,7 +115,7 @@ function initialIds(track: SanitizedTrack<TrackRecord>) {
   ) as Record<TrackIdField, string>;
 }
 
-// ---------- Rows ----------
+// ---------- Line column ----------
 
 function TimeInput({
   value,
@@ -162,82 +150,8 @@ function TimeInput({
       }}
       aria-label={label}
       inputMode="decimal"
-      className="w-[6.5rem] rounded-lg bg-transparent px-2 py-1.5 font-mono text-sm font-semibold tabular-nums text-white/90 ring-1 ring-transparent transition hover:ring-white/15 focus:bg-white/5 focus:ring-white/30 focus:outline-none"
+      className="w-[5.75rem] shrink-0 rounded-lg bg-transparent px-1.5 py-1.5 font-mono text-[13px] font-semibold tabular-nums text-white/90 ring-1 ring-transparent transition hover:ring-white/15 focus:bg-white/5 focus:ring-white/30 focus:outline-none sm:w-[6.5rem] sm:px-2 sm:text-sm"
     />
-  );
-}
-
-function AnnotationChip({
-  index,
-  field,
-  value,
-  lineCount,
-  onChange,
-  onMove,
-}: {
-  index: number;
-  field: AnnotationField;
-  value: string;
-  lineCount: number;
-  onChange: (index: number, field: AnnotationField, value: string) => void;
-  onMove: (field: AnnotationField, from: number, to: number) => void;
-}) {
-  const id = `${field}:${index}`;
-  const drag = useDraggable({ id, data: { field, index } });
-  const drop = useDroppable({ id, data: { field, index } });
-  const label = ANNOTATION_LABELS[field];
-
-  return (
-    <div
-      ref={drop.setNodeRef}
-      className={cn(
-        "group/chip flex items-center gap-1 rounded-lg transition-colors",
-        drop.isOver && !drag.isDragging && "bg-sky-400/15 ring-1 ring-sky-300/50",
-        drag.isDragging && "opacity-30",
-      )}
-    >
-      <button
-        ref={drag.setNodeRef}
-        type="button"
-        {...drag.listeners}
-        {...drag.attributes}
-        aria-label={`Drag ${label.toLowerCase()} of line ${index + 1} to another line`}
-        title={`Drag to move this ${label.toLowerCase()} to another line`}
-        className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-white/30 hover:text-white/70 active:cursor-grabbing"
-      >
-        <GripVertical className="size-3.5" />
-      </button>
-      <input
-        value={value}
-        onChange={(e) => onChange(index, field, e.target.value)}
-        placeholder={label}
-        aria-label={`${label} of line ${index + 1}`}
-        className={cn(
-          "min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-xs text-white/60 placeholder:text-white/20 focus:bg-white/5 focus:text-white/85 focus:outline-none",
-          field === "romaji" && "italic",
-        )}
-      />
-      <div className="flex shrink-0 opacity-0 transition-opacity group-hover/chip:opacity-100 group-focus-within/chip:opacity-100">
-        <button
-          type="button"
-          disabled={index === 0}
-          onClick={() => onMove(field, index, index - 1)}
-          aria-label={`Move ${label.toLowerCase()} of line ${index + 1} up`}
-          className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
-        >
-          <ArrowUp className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          disabled={index === lineCount - 1}
-          onClick={() => onMove(field, index, index + 1)}
-          aria-label={`Move ${label.toLowerCase()} of line ${index + 1} down`}
-          className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
-        >
-          <ArrowDown className="size-3.5" />
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -245,12 +159,8 @@ interface LineRowProps {
   index: number;
   line: EditableLine;
   offset: number;
-  lineCount: number;
-  showRomaji: boolean;
   onStart: (index: number, ms: number) => void;
   onText: (index: number, text: string) => void;
-  onAnnotation: (index: number, field: AnnotationField, value: string) => void;
-  onMove: (field: AnnotationField, from: number, to: number) => void;
   onDuet: (index: number) => void;
   onRemove: (index: number) => void;
 }
@@ -259,12 +169,8 @@ const LineRow = memo(function LineRow({
   index,
   line,
   offset,
-  lineCount,
-  showRomaji,
   onStart,
   onText,
-  onAnnotation,
-  onMove,
   onDuet,
   onRemove,
 }: LineRowProps) {
@@ -282,59 +188,36 @@ const LineRow = memo(function LineRow({
   };
 
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 border-b border-white/5 px-2 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-3">
+    <li style={rowHeight} className="flex items-center gap-1 pr-1 sm:gap-2">
       <TimeInput
         value={lineStart(line) + offset}
         onCommit={(ms) => onStart(index, ms - offset)}
         label={`Start time of line ${index + 1}`}
       />
-
-      <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-0.5 sm:col-span-1 sm:row-start-auto">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {line.bg && (
-            <span
-              title="Background vocals"
-              className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/55 uppercase"
-            >
-              BG
-            </span>
-          )}
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitText}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            aria-label={`Lyrics of line ${index + 1}`}
-            className={cn(
-              "min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-[15px] font-semibold text-white ring-1 ring-transparent transition hover:ring-white/15 focus:bg-white/5 focus:ring-white/30 focus:outline-none",
-              line.bg && "text-white/70",
-            )}
-          />
-        </div>
-        <AnnotationChip
-          index={index}
-          field="translation"
-          value={line.translation}
-          lineCount={lineCount}
-          onChange={onAnnotation}
-          onMove={onMove}
-        />
-        {showRomaji && (
-          <AnnotationChip
-            index={index}
-            field="romaji"
-            value={line.romaji}
-            lineCount={lineCount}
-            onChange={onAnnotation}
-            onMove={onMove}
-          />
+      {line.bg && (
+        <span
+          title="Background vocals"
+          className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/55 uppercase"
+        >
+          BG
+        </span>
+      )}
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitText}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        title={draft}
+        aria-label={`Lyrics of line ${index + 1}`}
+        className={cn(
+          "min-w-0 flex-1 truncate rounded-lg bg-transparent px-2 py-1.5 text-[15px] font-semibold text-white ring-1 ring-transparent transition hover:ring-white/15 focus:bg-white/5 focus:ring-white/30 focus:outline-none",
+          line.bg && "text-white/70",
         )}
-      </div>
-
+      />
       <label
-        className="col-start-2 row-start-1 flex cursor-pointer items-center justify-end gap-1.5 self-center text-xs text-white/50 sm:col-start-auto sm:row-start-auto sm:w-14 sm:justify-center"
+        className="flex w-9 shrink-0 cursor-pointer justify-center"
         title="Sung by the second singer (shown on the other side)"
       >
         <input
@@ -344,19 +227,122 @@ const LineRow = memo(function LineRow({
           aria-label={`Line ${index + 1} is a duet part`}
           className="size-4 cursor-pointer appearance-none rounded-full ring-2 ring-white/25 transition checked:bg-sky-400 checked:ring-sky-400"
         />
-        <span className="sm:hidden">Duet</span>
       </label>
-
       <button
         type="button"
         onClick={() => onRemove(index)}
         aria-label={`Delete line ${index + 1}`}
         title="Delete line"
-        className="col-start-3 row-start-1 flex size-8 items-center justify-center self-center rounded-full text-white/35 transition-colors hover:bg-red-500/15 hover:text-red-300 sm:col-start-auto sm:row-start-auto"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-red-500/15 hover:text-red-300"
       >
         <Trash2 className="size-4" />
       </button>
     </li>
+  );
+});
+
+// ---------- Translation / romaji columns ----------
+
+function AnnotationChip({
+  provided,
+  field,
+  index,
+  value,
+  dragging = false,
+  onChange,
+}: {
+  provided: DraggableProvided;
+  field: AnnotationField;
+  index: number;
+  value: string;
+  dragging?: boolean;
+  onChange?: (index: number, field: AnnotationField, value: string) => void;
+}) {
+  const label = ANNOTATION_LABELS[field];
+  return (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      style={{ ...provided.draggableProps.style, ...rowHeight }}
+      className="flex items-center"
+    >
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-0.5 rounded-lg py-0.5 pr-1 transition-colors",
+          dragging
+            ? "bg-zinc-800 shadow-2xl ring-1 ring-sky-300/60"
+            : "hover:bg-white/5",
+        )}
+      >
+        <span
+          {...provided.dragHandleProps}
+          aria-label={`Move the ${label.toLowerCase()} of line ${index + 1}. Press space to pick it up, arrow keys to move it, space to drop it.`}
+          title={`Drag to move this ${label.toLowerCase()} to another line`}
+          className="flex h-8 w-6 shrink-0 cursor-grab items-center justify-center rounded text-white/30 hover:text-white/70 active:cursor-grabbing"
+        >
+          <GripVertical className="size-4" />
+        </span>
+        <input
+          value={value}
+          readOnly={!onChange}
+          onChange={(e) => onChange?.(index, field, e.target.value)}
+          placeholder="—"
+          title={value}
+          aria-label={`${label} of line ${index + 1}`}
+          className={cn(
+            "min-w-0 flex-1 truncate rounded-md bg-transparent px-1.5 py-1.5 text-sm text-white/70 placeholder:text-white/15 focus:bg-white/5 focus:text-white focus:outline-none",
+            field === "romaji" && "italic",
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+const AnnotationColumn = memo(function AnnotationColumn({
+  field,
+  values,
+  className,
+  onChange,
+}: {
+  field: AnnotationField;
+  values: string[];
+  className?: string;
+  onChange: (index: number, field: AnnotationField, value: string) => void;
+}) {
+  return (
+    // The dragged item is position: fixed, so no ancestor of this list may have
+    // a transform, filter or backdrop-filter (the dialog uses a solid background)
+    <Droppable droppableId={field}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className={cn(
+            "min-w-0 flex-[2] rounded-lg transition-colors",
+            snapshot.isDraggingOver && "bg-sky-400/5",
+            className,
+          )}
+        >
+          {values.map((value, index) => (
+            // Slots are positional: a move shifts the values, not the slots
+            <Draggable key={index} draggableId={`${field}-${index}`} index={index}>
+              {(dragProvided, dragSnapshot) => (
+                <AnnotationChip
+                  provided={dragProvided}
+                  field={field}
+                  index={index}
+                  value={value}
+                  dragging={dragSnapshot.isDragging}
+                  onChange={onChange}
+                />
+              )}
+            </Draggable>
+          ))}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
   );
 });
 
@@ -389,7 +375,9 @@ export function LyricsEditor({
   const [ids, setIds] = useState(() => initialIds(track));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ message: string; trackId?: string } | null>(null);
-  const [dragging, setDragging] = useState<{ field: AnnotationField; value: string } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  // Small screens show one annotation column at a time
+  const [mobileColumn, setMobileColumn] = useState<AnnotationField>("translation");
 
   // Reset to the track's current state every time the editor opens
   useEffect(() => {
@@ -400,6 +388,7 @@ export function LyricsEditor({
     setOffsetDraft("0");
     setIds(initialIds(track));
     setError(null);
+    setMobileColumn("translation");
   }, [open, lyrics, track, toRows]);
 
   const original = useMemo(
@@ -421,7 +410,10 @@ export function LyricsEditor({
   }, [ids, track]);
   const idsChanged = Object.keys(idChanges).length > 0;
   const dirty = lyricsChanged || idsChanged;
-  const showRomaji = rows.some((r) => r.line.romaji);
+
+  const translations = useMemo(() => rows.map((r) => r.line.translation), [rows]);
+  const romaji = useMemo(() => rows.map((r) => r.line.romaji), [rows]);
+  const showRomaji = romaji.some(Boolean);
 
   const requestClose = useCallback(() => {
     if (saving) return;
@@ -432,6 +424,7 @@ export function LyricsEditor({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      // Escape also cancels a keyboard drag; don't close the editor then
       if (e.key === "Escape" && !dragging) requestClose();
     };
     window.addEventListener("keydown", onKey);
@@ -489,46 +482,22 @@ export function LyricsEditor({
     (index: number) => setRows((prev) => prev.filter((_, i) => i !== index)),
     [],
   );
-  const onMove = useCallback(
-    (field: AnnotationField, from: number, to: number) =>
-      setRows((prev) => {
-        const moved = moveAnnotation(
-          prev.map((r) => r.line),
-          field,
-          from,
-          to,
-        );
-        return prev.map((row, i) => ({ ...row, line: moved[i]! }));
-      }),
-    [],
-  );
 
-  // ----- Drag and drop of translations / romaji -----
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor),
-  );
-  const handleDragStart = (event: DragStartEvent) => {
-    const data = event.active.data.current as
-      | { field: AnnotationField; index: number }
-      | undefined;
-    if (!data) return;
-    setDragging({
-      field: data.field,
-      value: rows[data.index]?.line[data.field] ?? "",
+  const handleDragEnd = (result: DropResult) => {
+    setDragging(false);
+    const { source, destination } = result;
+    if (!destination || destination.droppableId !== source.droppableId) return;
+    if (destination.index === source.index) return;
+    const field = source.droppableId as AnnotationField;
+    setRows((prev) => {
+      const moved = moveAnnotation(
+        prev.map((r) => r.line),
+        field,
+        source.index,
+        destination.index,
+      );
+      return prev.map((row, i) => ({ ...row, line: moved[i]! }));
     });
-  };
-  const handleDragEnd = (event: DragEndEvent) => {
-    setDragging(null);
-    const from = event.active.data.current as
-      | { field: AnnotationField; index: number }
-      | undefined;
-    const to = event.over?.data.current as
-      | { field: AnnotationField; index: number }
-      | undefined;
-    if (!from || !to || from.field !== to.field) return;
-    onMove(from.field, from.index, to.index);
   };
 
   const commitOffset = () => {
@@ -545,12 +514,6 @@ export function LyricsEditor({
     if (!dirty || saving) return;
     if (rows.length === 0) {
       toast.error("Lyrics can't be empty. Keep at least one line.");
-      return;
-    }
-    if (
-      track.isVerified &&
-      !window.confirm("Saving removes this track's Verified badge until someone confirms it again. Save anyway?")
-    ) {
       return;
     }
 
@@ -578,6 +541,10 @@ export function LyricsEditor({
     }
   };
 
+  // Which annotation columns show on small screens (all show from `sm` up)
+  const columnVisibility = (field: AnnotationField) =>
+    showRomaji && mobileColumn !== field ? "hidden sm:block" : "";
+
   return (
     <AnimatePresence>
       {open && (
@@ -601,7 +568,9 @@ export function LyricsEditor({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
             transition={spring.soft}
-            className="relative flex h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[28px] bg-zinc-900/90 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:h-[88dvh] sm:rounded-[28px]"
+            // Solid background, no backdrop-filter: the drag-and-drop lists
+            // need fixed positioning relative to the viewport
+            className="relative flex h-[94dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[28px] bg-zinc-900 text-white shadow-2xl ring-1 ring-white/10 sm:h-[88dvh] sm:rounded-[28px]"
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 pt-4 pb-3 sm:px-6">
@@ -637,7 +606,7 @@ export function LyricsEditor({
             </div>
 
             {/* Tabs and toolbar */}
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
               <div
                 role="tablist"
                 aria-label="Editor section"
@@ -683,12 +652,38 @@ export function LyricsEditor({
                     }}
                     inputMode="numeric"
                     aria-describedby="offset-hint"
-                    className="w-24 rounded-lg bg-white/5 px-2.5 py-1.5 font-mono text-sm tabular-nums ring-1 ring-white/10 focus:ring-white/30 focus:outline-none"
+                    className="w-20 rounded-lg bg-white/5 px-2.5 py-1.5 font-mono text-sm tabular-nums ring-1 ring-white/10 focus:ring-white/30 focus:outline-none"
                   />
                   <span id="offset-hint" className="text-xs text-white/45">
                     ms · positive = later
                   </span>
                 </label>
+              )}
+
+              {tab === "lyrics" && showRomaji && (
+                <div
+                  role="radiogroup"
+                  aria-label="Column to show"
+                  className="flex gap-1 rounded-xl bg-white/5 p-0.5 ring-1 ring-white/10 sm:hidden"
+                >
+                  {(["translation", "romaji"] as const).map((field) => (
+                    <button
+                      key={field}
+                      type="button"
+                      role="radio"
+                      aria-checked={mobileColumn === field}
+                      onClick={() => setMobileColumn(field)}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium",
+                        mobileColumn === field
+                          ? "bg-white/15 text-white"
+                          : "text-white/55",
+                      )}
+                    >
+                      {ANNOTATION_LABELS[field]}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -712,54 +707,70 @@ export function LyricsEditor({
             {/* Body */}
             {tab === "lyrics" ? (
               <div className="flex min-h-0 flex-1 flex-col">
-                <div className="hidden grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2 border-y border-white/10 px-3 py-2 text-xs font-semibold text-white/50 sm:mx-3 sm:grid">
-                  <span className="w-[6.5rem] px-2">Time</span>
-                  <span className="px-2">Lyrics · translation · romaji</span>
-                  <span className="w-14 text-center">Duet</span>
-                  <span className="w-8" />
+                <div className="flex gap-2 border-y border-white/10 px-3 py-2 text-xs font-semibold text-white/50 sm:px-5">
+                  <div className="flex min-w-0 flex-[3] gap-1 sm:gap-2">
+                    <span className="w-[5.75rem] px-1.5 sm:w-[6.5rem] sm:px-2">Time</span>
+                    <span className="flex-1 px-2">Lyrics</span>
+                    <span className="w-9 text-center">Duet</span>
+                    <span className="w-8" />
+                  </div>
+                  <span className={cn("min-w-0 flex-[2] pl-7", columnVisibility("translation"))}>
+                    Translation
+                  </span>
+                  {showRomaji && (
+                    <span className={cn("min-w-0 flex-[2] pl-7", columnVisibility("romaji"))}>
+                      Romaji
+                    </span>
+                  )}
                 </div>
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={lineUnderPointer}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={() => setDragging(null)}
-                >
-                  <ol className="min-h-0 flex-1 overflow-y-auto px-1 pb-6 sm:px-3">
-                    {rows.map((row, index) => (
-                      <LineRow
-                        key={row.key}
-                        index={index}
-                        line={row.line}
-                        offset={offset}
-                        lineCount={rows.length}
-                        showRomaji={showRomaji}
-                        onStart={onStart}
-                        onText={onText}
-                        onAnnotation={onAnnotation}
-                        onMove={onMove}
-                        onDuet={onDuet}
-                        onRemove={onRemove}
-                      />
-                    ))}
-                    {rows.length === 0 && (
-                      <li className="py-16 text-center text-sm text-white/50">
-                        Every line was deleted. Close the editor to start over.
-                      </li>
-                    )}
-                  </ol>
-                  <DragOverlay dropAnimation={null}>
-                    {dragging && (
-                      <div className="max-w-xs truncate rounded-lg bg-sky-400/90 px-2.5 py-1 text-xs font-medium text-black shadow-xl">
-                        {dragging.value || `(empty ${ANNOTATION_LABELS[dragging.field].toLowerCase()})`}
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 sm:px-5">
+                  {rows.length === 0 ? (
+                    <p className="py-16 text-center text-sm text-white/50">
+                      Every line was deleted. Close the editor to start over.
+                    </p>
+                  ) : (
+                    <DragDropContext
+                      onDragStart={() => setDragging(true)}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <div className="flex gap-2" style={rowStripes}>
+                        <ol className="min-w-0 flex-[3]">
+                          {rows.map((row, index) => (
+                            <LineRow
+                              key={row.key}
+                              index={index}
+                              line={row.line}
+                              offset={offset}
+                              onStart={onStart}
+                              onText={onText}
+                              onDuet={onDuet}
+                              onRemove={onRemove}
+                            />
+                          ))}
+                        </ol>
+                        <AnnotationColumn
+                          field="translation"
+                          values={translations}
+                          className={columnVisibility("translation")}
+                          onChange={onAnnotation}
+                        />
+                        {showRomaji && (
+                          <AnnotationColumn
+                            field="romaji"
+                            values={romaji}
+                            className={columnVisibility("romaji")}
+                            onChange={onAnnotation}
+                          />
+                        )}
                       </div>
-                    )}
-                  </DragOverlay>
-                </DndContext>
+                    </DragDropContext>
+                  )}
+                </div>
                 <p className="border-t border-white/10 px-4 py-2.5 text-xs text-white/45 sm:px-6">
-                  Drag a translation or romaji by its handle onto another line.
-                  The ones in between shift by one line, so a drift is fixed in
-                  one move.
+                  Drag a translation or romaji by its handle to the line it
+                  belongs to. The ones in between shift by one line, so a drift
+                  is fixed in one move.
                 </p>
               </div>
             ) : (

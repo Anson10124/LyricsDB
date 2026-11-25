@@ -24,7 +24,7 @@ function baseTrack(overrides = {}) {
     title: "Example",
     durationMs: 180000,
     needsEnrichment: false,
-    isVerified: true,
+    isVerified: false,
     lyrics,
     lyricsStoragePath: null,
     lyricsType: "word",
@@ -92,7 +92,7 @@ function editService(db) {
   return new TrackEditService(db, storage, limiter);
 }
 
-test("a lyrics edit saves a revision first, then the lyrics, and clears verified", async () => {
+test("a lyrics edit saves a revision first, then the lyrics", async () => {
   const db = fakeDb({ track: baseTrack() });
   const edited = [
     [[1, 1200, 500, "Hello "], [1, 1700, 500, "there "], "", "romaji"],
@@ -107,7 +107,7 @@ test("a lyrics edit saves a revision first, then the lyrics, and clears verified
   assert.equal(revision.op, "insert");
   assert.equal(revision.table, trackRevisions);
   assert.deepEqual(revision.values.previous.lyrics, lyrics);
-  assert.equal(revision.values.previous.isVerified, true);
+  assert.equal(revision.values.previous.isVerified, false);
   assert.deepEqual(revision.values.changed, ["lyrics"]);
   assert.match(revision.values.editorHash, /^[0-9a-f]{64}$/);
 
@@ -115,10 +115,21 @@ test("a lyrics edit saves a revision first, then the lyrics, and clears verified
   assert.equal(update.table, tracks);
   assert.deepEqual(update.values.lyrics, edited);
   assert.equal(update.values.lyricsProvider, "community");
-  assert.equal(update.values.isVerified, false);
   assert.equal(update.values.hasTranslation, false);
   assert.equal(update.values.hasRomaji, true);
-  assert.equal(saved.isVerified, false);
+  assert.equal(saved.lyricsProvider, "community");
+});
+
+test("a verified track can't be edited", async () => {
+  const db = fakeDb({ track: baseTrack({ isVerified: true }) });
+  await assert.rejects(
+    editService(db).editTrack(TRACK_ID, {
+      lyrics: [[[1, 0, 100, "x "]]],
+      ids: { spotifyId: "7GhIk7Il098yCjg4BQjzvb" },
+    }),
+    (err) => err.getStatus() === 409 && /verified/.test(err.message),
+  );
+  assert.equal(db.log.length, 0);
 });
 
 test("with object storage, the old lyrics are snapshotted and the edit gets its own object", async () => {

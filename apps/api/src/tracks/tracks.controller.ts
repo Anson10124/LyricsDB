@@ -509,7 +509,7 @@ export class TracksController {
   @ApiOperation({
     summary: "Edit a track's lyrics or platform IDs",
     description:
-      "Saves a community edit (10 RPM/IP). Send the full edited lyrics in the compact JSON format and/or the platform IDs to change. The edit goes live immediately, the previous version is kept as a revision, and the Verified badge is removed. Edited lyrics can no longer be replaced by a refresh. When Cloudflare Turnstile is configured, every call must carry a fresh single-use token for the `edit-track` action.",
+      "Saves a community edit (10 RPM/IP). Send the full edited lyrics in the compact JSON format and/or the platform IDs to change. Verified tracks can't be edited (409). The edit goes live immediately and the previous version is kept as a revision. Edited lyrics can no longer be replaced by a refresh. When Cloudflare Turnstile is configured, every call must carry a fresh single-use token for the `edit-track` action.",
   })
   @ApiParam({
     name: "id",
@@ -533,7 +533,7 @@ export class TracksController {
   @ApiConflictResponse({
     type: ErrorResponseDto,
     description:
-      "The track changed since the editor opened, or a new ID already belongs to another track (its ID is in `trackId`)",
+      "The track is verified, it changed since the editor opened, or a new ID already belongs to another track (its ID is in `trackId`)",
   })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post("tracks/:id/edit")
