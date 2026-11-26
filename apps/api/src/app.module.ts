@@ -12,6 +12,7 @@ import { CustomThrottlerGuard } from "./common/guards/throttler.guard";
 import { RateLimiterModule } from "./common/rate-limiter/rate-limiter.module";
 
 import { ActivityModule } from "./activity/activity.module";
+import { MatchModule } from "./match/match.module";
 import { StatsModule } from "./stats/stats.module";
 
 @Module({
@@ -35,6 +36,7 @@ import { StatsModule } from "./stats/stats.module";
     TracksModule,
     ActivityModule,
     StatsModule,
+    MatchModule,
   ],
   controllers: [AppController, SystemController],
   providers: [
