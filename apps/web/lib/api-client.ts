@@ -1,6 +1,8 @@
 import type {
   LibraryStats,
+  PlatformSearchResponse,
   SanitizedTrack,
+  SearchablePlatform,
   SupportedLyricFormat,
   SyncedLyricsPayload,
   TrackRecord,
@@ -243,6 +245,50 @@ export async function editTrack(
     throw new TrackEditError(message, res.status, body?.trackId);
   }
   return (await res.json()) as SanitizedTrack<TrackRecord>;
+}
+
+// A platform search that didn't return results (rate limit, platform down, ...)
+export class PlatformSearchError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "PlatformSearchError";
+  }
+}
+
+/**
+ * Searches one platform for this track (using its stored details) to fill in
+ * a missing ID. Nothing is saved.
+ */
+export async function searchPlatformId(
+  trackId: string,
+  platform: SearchablePlatform,
+  signal?: AbortSignal,
+): Promise<PlatformSearchResponse> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(
+    `${apiBase}/api/tracks/${encodeURIComponent(trackId)}/platform-search?platform=${encodeURIComponent(platform)}`,
+    { signal },
+  );
+  if (!res.ok) {
+    if (res.status === 429) {
+      const wait = Number(res.headers.get("Retry-After-medium"));
+      throw new PlatformSearchError(
+        Number.isFinite(wait) && wait > 0
+          ? `Too many searches. Try again in ${Math.ceil(wait)}s.`
+          : "Too many searches. Please wait a moment.",
+        429,
+      );
+    }
+    const body = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw new PlatformSearchError(
+      body?.message || "The search didn't work. Please try again.",
+      res.status,
+    );
+  }
+  return (await res.json()) as PlatformSearchResponse;
 }
 
 export async function fetchTurnstileConfig(): Promise<{

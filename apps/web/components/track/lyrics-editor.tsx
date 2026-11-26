@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
@@ -24,6 +25,7 @@ import {
   Music2,
   Redo2,
   RotateCcw,
+  Search,
   Trash2,
   Undo2,
   X,
@@ -31,6 +33,7 @@ import {
 import { toast } from "sonner";
 import type {
   SanitizedTrack,
+  SearchablePlatform,
   SyncedLyricsPayload,
   TrackRecord,
 } from "@repo/types";
@@ -48,12 +51,18 @@ import {
 } from "@repo/lyrics/editor";
 import {
   editTrack,
+  PlatformSearchError,
+  searchPlatformId,
   TrackEditError,
   type TrackEdit,
   type TrackIdField,
 } from "@/lib/api-client";
 import { CoverImage } from "@/components/cover-image";
 import { LyricsPreview } from "@/components/track/lyrics-preview";
+import {
+  PlatformMatchPanel,
+  type PlatformSearchState,
+} from "@/components/track/platform-match-panel";
 import { formatArtworkUrl } from "@/lib/artwork";
 import { fade, press, spring } from "@/lib/motion";
 import { cn, formatDuration, uniqueArtists } from "@/lib/utils";
@@ -143,6 +152,8 @@ interface IdFieldConfig {
   placeholder: string;
   // The song's page on that platform, so a match can be checked in one click
   href?: (id: string) => string;
+  // When set, an empty ID can be searched for on this platform
+  platform?: SearchablePlatform;
 }
 
 const ID_FIELDS: IdFieldConfig[] = [
@@ -151,30 +162,35 @@ const ID_FIELDS: IdFieldConfig[] = [
     label: "Spotify",
     placeholder: "4cOdK2wGLETKBW3PvgPWqT",
     href: (id) => `https://open.spotify.com/track/${encodeURIComponent(id)}`,
+    platform: "spotify",
   },
   {
     field: "appleMusicId",
     label: "Apple Music",
     placeholder: "1559523359",
     href: (id) => `https://music.apple.com/song/${encodeURIComponent(id)}`,
+    platform: "apple",
   },
   {
     field: "deezerId",
     label: "Deezer",
     placeholder: "3135556",
     href: (id) => `https://www.deezer.com/track/${encodeURIComponent(id)}`,
+    platform: "deezer",
   },
   {
     field: "neteaseId",
     label: "NetEase",
     placeholder: "5257138",
     href: (id) => `https://music.163.com/#/song?id=${encodeURIComponent(id)}`,
+    platform: "netease",
   },
   {
     field: "qqMusicId",
     label: "QQ Music",
     placeholder: "0039MnYb0qxYhV",
     href: (id) => `https://y.qq.com/n/ryqq/songDetail/${encodeURIComponent(id)}`,
+    platform: "qq",
   },
   { field: "isrc", label: "ISRC", placeholder: "GBARL9300135" },
 ];
@@ -507,8 +523,9 @@ function SongReference({ track }: { track: SanitizedTrack<TrackRecord> }) {
   );
 }
 
+// Fixed width, so Open and Search line up and the inputs keep one width
 const openLinkClass =
-  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-medium text-white/75 transition-colors";
+  "inline-flex h-9 w-[5.5rem] shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-medium text-white/75 transition-colors";
 
 function IdRow({
   config,
@@ -516,12 +533,22 @@ function IdRow({
   original,
   changed,
   onChange,
+  onSearch,
+  searching = false,
+  searchOpen = false,
+  children,
 }: {
   config: IdFieldConfig;
   value: string;
   original: string;
   changed: boolean;
   onChange: (value: string) => void;
+  // Offered in place of Open while the box is empty
+  onSearch?: () => void;
+  searching?: boolean;
+  searchOpen?: boolean;
+  // The search results, shown under the row
+  children?: ReactNode;
 }) {
   const { field, label, placeholder, href } = config;
   const id = value.trim();
@@ -534,68 +561,92 @@ function IdRow({
   );
 
   return (
-    <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
-      <div className="flex items-center gap-2 sm:w-32 sm:shrink-0 sm:flex-col sm:items-start sm:gap-1">
-        <label htmlFor={inputId} className="text-sm font-semibold text-white/80">
-          {label}
-        </label>
-        {changed && (
-          <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-            {id ? "changed" : "will be removed"}
-          </span>
-        )}
-      </div>
-
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <input
-          id={inputId}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          spellCheck={false}
-          autoComplete="off"
-          className={cn(
-            "min-w-0 flex-1 rounded-xl bg-white/5 px-3 py-2 font-mono text-sm ring-1 ring-white/10 placeholder:text-white/20 focus:ring-white/30 focus:outline-none",
-            changed && "ring-primary/40",
-          )}
-        />
-
-        {/* Reset slot keeps its width so the inputs stay aligned */}
-        <div className="flex size-9 shrink-0 items-center justify-center">
+    <li className="py-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex items-center gap-2 sm:w-32 sm:shrink-0 sm:flex-col sm:items-start sm:gap-1">
+          <label htmlFor={inputId} className="text-sm font-semibold text-white/80">
+            {label}
+          </label>
           {changed && (
-            <button
-              type="button"
-              onClick={() => onChange(original)}
-              aria-label={`Restore the saved ${label} ID`}
-              title={original ? `Restore ${original}` : "Restore (no ID)"}
-              className="flex size-9 cursor-pointer items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <RotateCcw className="size-4" />
-            </button>
+            <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+              {id ? "changed" : "will be removed"}
+            </span>
           )}
         </div>
 
-        {/* Opens what is typed, so a new ID can be checked before saving */}
-        {href && id ? (
-          <a
-            href={href(id)}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Open this ID on ${label}`}
-            className={cn(openLinkClass, "hover:bg-white/20 hover:text-white")}
-          >
-            {openContent}
-          </a>
-        ) : (
-          <span
-            aria-hidden
-            title={href ? "Enter an ID to open it" : undefined}
-            className={cn(openLinkClass, href ? "opacity-40" : "invisible")}
-          >
-            {openContent}
-          </span>
-        )}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <input
+            id={inputId}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            spellCheck={false}
+            autoComplete="off"
+            className={cn(
+              "min-w-0 flex-1 rounded-xl bg-white/5 px-3 py-2 font-mono text-sm ring-1 ring-white/10 placeholder:text-white/20 focus:ring-white/30 focus:outline-none",
+              changed && "ring-primary/40",
+            )}
+          />
+
+          {/* Reset slot keeps its width so the inputs stay aligned */}
+          <div className="flex size-9 shrink-0 items-center justify-center">
+            {changed && (
+              <button
+                type="button"
+                onClick={() => onChange(original)}
+                aria-label={`Restore the saved ${label} ID`}
+                title={original ? `Restore ${original}` : "Restore (no ID)"}
+                className="flex size-9 cursor-pointer items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <RotateCcw className="size-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Opens what is typed, so a new ID can be checked before saving */}
+          {href && id ? (
+            <a
+              href={href(id)}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open this ID on ${label}`}
+              className={cn(openLinkClass, "hover:bg-white/20 hover:text-white")}
+            >
+              {openContent}
+            </a>
+          ) : onSearch ? (
+            // No ID yet: look for this track on the platform instead
+            <button
+              type="button"
+              onClick={onSearch}
+              aria-expanded={searchOpen}
+              aria-label={`Search ${label} for this track`}
+              title={`Search ${label} for this track`}
+              className={cn(
+                openLinkClass,
+                "cursor-pointer hover:bg-white/20 hover:text-white",
+                searchOpen && "bg-white/20 text-white",
+              )}
+            >
+              {searching ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Search className="size-3" />
+              )}
+              Search
+            </button>
+          ) : (
+            <span
+              aria-hidden
+              title={href ? "Enter an ID to open it" : undefined}
+              className={cn(openLinkClass, href ? "opacity-40" : "invisible")}
+            >
+              {openContent}
+            </span>
+          )}
+        </div>
       </div>
+      {children}
     </li>
   );
 }
@@ -630,6 +681,13 @@ export function LyricsEditor({
   const canRedo = history.future.length > 0;
   const [offsetDraft, setOffsetDraft] = useState("0");
   const [ids, setIds] = useState(() => initialIds(track));
+  // Platform searches for empty IDs, kept while the editor is open so reopening
+  // a panel doesn't search again. One panel shows at a time.
+  const [searches, setSearches] = useState<
+    Partial<Record<TrackIdField, PlatformSearchState>>
+  >({});
+  const [openSearch, setOpenSearch] = useState<TrackIdField | null>(null);
+  const searchRequests = useRef(new Map<TrackIdField, AbortController>());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ message: string; trackId?: string } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -645,7 +703,63 @@ export function LyricsEditor({
     setIds(initialIds(track));
     setError(null);
     setMobileColumn("translation");
+    // A saved edit can change which IDs are rejected or taken, so search afresh
+    for (const request of searchRequests.current.values()) request.abort();
+    searchRequests.current.clear();
+    setSearches({});
+    setOpenSearch(null);
   }, [open, lyrics, track, toRows]);
+
+  useEffect(() => {
+    const requests = searchRequests.current;
+    return () => {
+      for (const request of requests.values()) request.abort();
+    };
+  }, []);
+
+  // Opens a platform's results, searching unless they are already here (or
+  // `again` asks for a retry)
+  const searchPlatform = useCallback(
+    (config: IdFieldConfig, again = false) => {
+      const { field, platform } = config;
+      if (!platform) return;
+      setOpenSearch(field);
+      const current = searches[field];
+      if (!again && current && current.status !== "error") return;
+
+      searchRequests.current.get(field)?.abort();
+      const request = new AbortController();
+      searchRequests.current.set(field, request);
+      setSearches((prev) => ({ ...prev, [field]: { status: "loading" } }));
+
+      searchPlatformId(track.id, platform, request.signal)
+        .then(({ results }) => {
+          setSearches((prev) => ({ ...prev, [field]: { status: "done", results } }));
+        })
+        .catch((err: unknown) => {
+          if (request.signal.aborted) return;
+          const status = err instanceof PlatformSearchError ? err.status : 0;
+          setSearches((prev) => ({
+            ...prev,
+            [field]: {
+              status: "error",
+              message:
+                err instanceof Error && status
+                  ? err.message
+                  : "The search didn't work. Check your connection and try again.",
+              // A missing or verified track won't change on retry
+              canRetry: status !== 400 && status !== 404 && status !== 409,
+            },
+          }));
+        })
+        .finally(() => {
+          if (searchRequests.current.get(field) === request) {
+            searchRequests.current.delete(field);
+          }
+        });
+    },
+    [searches, track.id],
+  );
 
   const original = useMemo(
     () => (lyrics ? JSON.stringify(fromEditableLines(toEditableLines(lyrics))) : ""),
@@ -705,7 +819,9 @@ export function LyricsEditor({
     const onKey = (e: KeyboardEvent) => {
       // Escape also cancels a keyboard drag; don't close the editor then
       if (e.key === "Escape" && !dragging) {
-        requestClose();
+        // An open results panel closes first
+        if (openSearch) setOpenSearch(null);
+        else requestClose();
         return;
       }
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return;
@@ -722,7 +838,7 @@ export function LyricsEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, requestClose, dragging, saving, tab, undo, redo]);
+  }, [open, requestClose, dragging, saving, tab, undo, redo, openSearch]);
 
   // ----- Row edits (stable callbacks so unchanged rows don't re-render) -----
 
@@ -1123,23 +1239,55 @@ export function LyricsEditor({
 
                   <div className="min-w-0 flex-1">
                     <ul className="divide-y divide-white/[0.06] rounded-2xl bg-white/[0.03] px-3 ring-1 ring-white/10 sm:px-4">
-                      {ID_FIELDS.map((config) => (
-                        <IdRow
-                          key={config.field}
-                          config={config}
-                          value={ids[config.field]}
-                          original={track[config.field] ?? ""}
-                          changed={config.field in idChanges}
-                          onChange={(value) =>
-                            setIds((prev) => ({ ...prev, [config.field]: value }))
-                          }
-                        />
-                      ))}
+                      {ID_FIELDS.map((config) => {
+                        const search = searches[config.field];
+                        const searchOpen = openSearch === config.field;
+                        return (
+                          <IdRow
+                            key={config.field}
+                            config={config}
+                            value={ids[config.field]}
+                            original={track[config.field] ?? ""}
+                            changed={config.field in idChanges}
+                            onChange={(value) =>
+                              setIds((prev) => ({ ...prev, [config.field]: value }))
+                            }
+                            onSearch={
+                              config.platform
+                                ? () =>
+                                    searchOpen
+                                      ? setOpenSearch(null)
+                                      : searchPlatform(config)
+                                : undefined
+                            }
+                            searching={search?.status === "loading"}
+                            searchOpen={searchOpen}
+                          >
+                            <AnimatePresence initial={false}>
+                              {searchOpen && search && (
+                                <PlatformMatchPanel
+                                  key="results"
+                                  track={track}
+                                  platformLabel={config.label}
+                                  state={search}
+                                  onUse={(id) => {
+                                    setIds((prev) => ({ ...prev, [config.field]: id }));
+                                    setOpenSearch(null);
+                                  }}
+                                  onRetry={() => searchPlatform(config, true)}
+                                  onClose={() => setOpenSearch(null)}
+                                />
+                              )}
+                            </AnimatePresence>
+                          </IdRow>
+                        );
+                      })}
                     </ul>
                     <p className="mt-3 max-w-2xl text-xs text-white/45">
                       When you change or clear an ID, the old one is remembered
                       as a wrong match and won&apos;t be linked to this track
-                      again.
+                      again. An empty ID can be searched for: pick the result
+                      that is the same recording, then save.
                     </p>
                   </div>
                 </div>
