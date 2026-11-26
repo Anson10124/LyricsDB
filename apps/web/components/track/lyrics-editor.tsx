@@ -711,6 +711,28 @@ export function LyricsEditor({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {tab !== "ids" &&
+                  (
+                    [
+                      ["Undo", "Ctrl+Z", Undo2, undo, canUndo],
+                      ["Redo", "Ctrl+Shift+Z", Redo2, redo, canRedo],
+                    ] as const
+                  ).map(([label, shortcut, Icon, action, enabled]) => (
+                    <motion.button
+                      key={label}
+                      type="button"
+                      whileTap={enabled ? press : undefined}
+                      transition={spring.snappy}
+                      onClick={action}
+                      disabled={!enabled}
+                      aria-label={label}
+                      aria-keyshortcuts={shortcut.replace("Ctrl", "Control")}
+                      title={`${label} (${shortcut})`}
+                      className="flex size-9 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white/70 transition-colors hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10 disabled:hover:text-white/70"
+                    >
+                      <Icon className="size-4" />
+                    </motion.button>
+                  ))}
                 <motion.button
                   type="button"
                   whileTap={press}
@@ -770,30 +792,6 @@ export function LyricsEditor({
                   </button>
                 ))}
               </div>
-
-              {tab !== "ids" && (
-                <div className="flex gap-1">
-                  {(
-                    [
-                      ["Undo", "Ctrl+Z", Undo2, undo, canUndo],
-                      ["Redo", "Ctrl+Shift+Z", Redo2, redo, canRedo],
-                    ] as const
-                  ).map(([label, shortcut, Icon, action, enabled]) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={action}
-                      disabled={!enabled}
-                      aria-label={label}
-                      aria-keyshortcuts={shortcut.replace("Ctrl", "Control")}
-                      title={`${label} (${shortcut})`}
-                      className="flex size-9 cursor-pointer items-center justify-center rounded-full bg-white/5 text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white/5 disabled:hover:text-white/70"
-                    >
-                      <Icon className="size-4" />
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {tab !== "ids" && (
                 <label className="flex items-center gap-2 text-sm">
