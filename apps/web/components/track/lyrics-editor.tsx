@@ -17,7 +17,17 @@ import {
   type DraggableProvided,
   type DropResult,
 } from "@hello-pangea/dnd";
-import { GripVertical, Loader2, Redo2, Trash2, Undo2, X } from "lucide-react";
+import {
+  ExternalLink,
+  GripVertical,
+  Loader2,
+  Music2,
+  Redo2,
+  RotateCcw,
+  Trash2,
+  Undo2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import type {
   SanitizedTrack,
@@ -42,9 +52,11 @@ import {
   type TrackEdit,
   type TrackIdField,
 } from "@/lib/api-client";
+import { CoverImage } from "@/components/cover-image";
 import { LyricsPreview } from "@/components/track/lyrics-preview";
+import { formatArtworkUrl } from "@/lib/artwork";
 import { fade, press, spring } from "@/lib/motion";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration, uniqueArtists } from "@/lib/utils";
 
 interface LyricsEditorProps {
   open: boolean;
@@ -125,15 +137,47 @@ function isTextField(target: EventTarget | null): boolean {
   );
 }
 
-const ID_FIELDS: { field: TrackIdField; label: string; placeholder: string }[] =
-  [
-    { field: "spotifyId", label: "Spotify", placeholder: "4cOdK2wGLETKBW3PvgPWqT" },
-    { field: "appleMusicId", label: "Apple Music", placeholder: "1559523359" },
-    { field: "deezerId", label: "Deezer", placeholder: "3135556" },
-    { field: "neteaseId", label: "NetEase", placeholder: "5257138" },
-    { field: "qqMusicId", label: "QQ Music", placeholder: "0039MnYb0qxYhV" },
-    { field: "isrc", label: "ISRC", placeholder: "GBARL9300135" },
-  ];
+interface IdFieldConfig {
+  field: TrackIdField;
+  label: string;
+  placeholder: string;
+  // The song's page on that platform, so a match can be checked in one click
+  href?: (id: string) => string;
+}
+
+const ID_FIELDS: IdFieldConfig[] = [
+  {
+    field: "spotifyId",
+    label: "Spotify",
+    placeholder: "4cOdK2wGLETKBW3PvgPWqT",
+    href: (id) => `https://open.spotify.com/track/${encodeURIComponent(id)}`,
+  },
+  {
+    field: "appleMusicId",
+    label: "Apple Music",
+    placeholder: "1559523359",
+    href: (id) => `https://music.apple.com/song/${encodeURIComponent(id)}`,
+  },
+  {
+    field: "deezerId",
+    label: "Deezer",
+    placeholder: "3135556",
+    href: (id) => `https://www.deezer.com/track/${encodeURIComponent(id)}`,
+  },
+  {
+    field: "neteaseId",
+    label: "NetEase",
+    placeholder: "5257138",
+    href: (id) => `https://music.163.com/#/song?id=${encodeURIComponent(id)}`,
+  },
+  {
+    field: "qqMusicId",
+    label: "QQ Music",
+    placeholder: "0039MnYb0qxYhV",
+    href: (id) => `https://y.qq.com/n/ryqq/songDetail/${encodeURIComponent(id)}`,
+  },
+  { field: "isrc", label: "ISRC", placeholder: "GBARL9300135" },
+];
 
 const ANNOTATION_LABELS: Record<AnnotationField, string> = {
   translation: "Translation",
@@ -423,6 +467,138 @@ const AnnotationColumn = memo(function AnnotationColumn({
     </Droppable>
   );
 });
+
+// ---------- Platform IDs ----------
+
+// The song every ID should match: a card beside the list, a strip on phones
+function SongReference({ track }: { track: SanitizedTrack<TrackRecord> }) {
+  const coverUrl = formatArtworkUrl(track.artwork, 400);
+  const artists = uniqueArtists(track.artists).join(", ");
+  const details = [track.album, formatDuration(track.durationMs)].filter(Boolean);
+
+  return (
+    <aside
+      aria-label="The song these IDs should point to"
+      className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-3 ring-1 ring-white/10 sm:sticky sm:top-0 sm:w-56 sm:shrink-0 sm:flex-col sm:items-stretch"
+    >
+      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-white/5 sm:aspect-square sm:h-auto sm:w-full">
+        {coverUrl ? (
+          <CoverImage
+            src={coverUrl}
+            alt={track.album || track.title}
+            sizes="(min-width: 640px) 224px, 56px"
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center text-white/30">
+            <Music2 className="size-6 sm:size-10" />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1 sm:px-1 sm:pb-1">
+        <p className="truncate font-semibold sm:line-clamp-2 sm:whitespace-normal">
+          {track.title}
+        </p>
+        <p className="truncate text-sm text-white/60">{artists || "Unknown artist"}</p>
+        {details.length > 0 && (
+          <p className="mt-0.5 truncate text-xs text-white/40">{details.join(" · ")}</p>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+const openLinkClass =
+  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-medium text-white/75 transition-colors";
+
+function IdRow({
+  config,
+  value,
+  original,
+  changed,
+  onChange,
+}: {
+  config: IdFieldConfig;
+  value: string;
+  original: string;
+  changed: boolean;
+  onChange: (value: string) => void;
+}) {
+  const { field, label, placeholder, href } = config;
+  const id = value.trim();
+  const inputId = `track-id-${field}`;
+  const openContent = (
+    <>
+      Open
+      <ExternalLink className="size-3" />
+    </>
+  );
+
+  return (
+    <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex items-center gap-2 sm:w-32 sm:shrink-0 sm:flex-col sm:items-start sm:gap-1">
+        <label htmlFor={inputId} className="text-sm font-semibold text-white/80">
+          {label}
+        </label>
+        {changed && (
+          <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            {id ? "changed" : "will be removed"}
+          </span>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <input
+          id={inputId}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          autoComplete="off"
+          className={cn(
+            "min-w-0 flex-1 rounded-xl bg-white/5 px-3 py-2 font-mono text-sm ring-1 ring-white/10 placeholder:text-white/20 focus:ring-white/30 focus:outline-none",
+            changed && "ring-primary/40",
+          )}
+        />
+
+        {/* Reset slot keeps its width so the inputs stay aligned */}
+        <div className="flex size-9 shrink-0 items-center justify-center">
+          {changed && (
+            <button
+              type="button"
+              onClick={() => onChange(original)}
+              aria-label={`Restore the saved ${label} ID`}
+              title={original ? `Restore ${original}` : "Restore (no ID)"}
+              className="flex size-9 cursor-pointer items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <RotateCcw className="size-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Opens what is typed, so a new ID can be checked before saving */}
+        {href && id ? (
+          <a
+            href={href(id)}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open this ID on ${label}`}
+            className={cn(openLinkClass, "hover:bg-white/20 hover:text-white")}
+          >
+            {openContent}
+          </a>
+        ) : (
+          <span
+            aria-hidden
+            title={href ? "Enter an ID to open it" : undefined}
+            className={cn(openLinkClass, href ? "opacity-40" : "invisible")}
+          >
+            {openContent}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
 
 // ---------- Editor ----------
 
@@ -941,41 +1117,31 @@ export function LyricsEditor({
                 </p>
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 sm:px-6">
-                <p className="mb-4 max-w-2xl text-sm text-white/60">
-                  Fix these if LyricsDB matched the wrong song on a platform.
-                  When you change or clear an ID, the old one is remembered as a
-                  wrong match and won&apos;t be linked to this track again.
-                </p>
-                <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
-                  {ID_FIELDS.map(({ field, label, placeholder }) => {
-                    const changed = field in idChanges;
-                    return (
-                      <label key={field} className="flex flex-col gap-1.5">
-                        <span className="flex items-center gap-2 text-xs font-semibold text-white/70">
-                          {label}
-                          {changed && (
-                            <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">
-                              {ids[field].trim() ? "changed" : "will be removed"}
-                            </span>
-                          )}
-                        </span>
-                        <input
-                          value={ids[field]}
-                          onChange={(e) =>
-                            setIds((prev) => ({ ...prev, [field]: e.target.value }))
+              <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 pt-5 pb-6 sm:px-6">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+                  <SongReference track={track} />
+
+                  <div className="min-w-0 flex-1">
+                    <ul className="divide-y divide-white/[0.06] rounded-2xl bg-white/[0.03] px-3 ring-1 ring-white/10 sm:px-4">
+                      {ID_FIELDS.map((config) => (
+                        <IdRow
+                          key={config.field}
+                          config={config}
+                          value={ids[config.field]}
+                          original={track[config.field] ?? ""}
+                          changed={config.field in idChanges}
+                          onChange={(value) =>
+                            setIds((prev) => ({ ...prev, [config.field]: value }))
                           }
-                          placeholder={placeholder}
-                          spellCheck={false}
-                          autoComplete="off"
-                          className={cn(
-                            "rounded-xl bg-white/5 px-3 py-2 font-mono text-sm ring-1 ring-white/10 placeholder:text-white/20 focus:ring-white/30 focus:outline-none",
-                            changed && "ring-primary/40",
-                          )}
                         />
-                      </label>
-                    );
-                  })}
+                      ))}
+                    </ul>
+                    <p className="mt-3 max-w-2xl text-xs text-white/45">
+                      When you change or clear an ID, the old one is remembered
+                      as a wrong match and won&apos;t be linked to this track
+                      again.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
