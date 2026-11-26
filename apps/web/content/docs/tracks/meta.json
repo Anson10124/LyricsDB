@@ -5,6 +5,7 @@
     "postTrack",
     "getTrackById",
     "searchTracks",
-    "editTrack"
+    "editTrack",
+    "searchPlatform"
   ]
 }

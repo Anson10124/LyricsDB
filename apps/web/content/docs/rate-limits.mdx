@@ -24,6 +24,7 @@ LyricsDB differentiates between **cached lookups** (fast sub-millisecond databas
 | :--- | :--- | :--- | :--- |
 | **Cached Lookups** | **60 req / min** | Sliding 60s | Fast reads for tracks, lyrics, and searches already indexed in PostgreSQL (~2ms response). |
 | **Uncached Live Resolutions** | **6 req / min** | Sliding 60s | Heavy live resolution across upstream platforms when a song is queried for the first time. |
+| **Platform ID Searches** | **10 req / min** | Fixed 60s | Live search of one streaming platform to fill in a track's missing ID (editor feature). |
 | **Burst Protection** | **15 req / sec** | Sliding 1s | Global anti-flood burst limit applied across all API endpoints. |
 
 ### Applicable Endpoints
@@ -43,6 +44,11 @@ LyricsDB differentiates between **cached lookups** (fast sub-millisecond databas
 - `GET /api/resolver` *(live cross-platform matching)*
 - `POST /api/resolver` *(live cross-platform matching via body)*
 - `GET /api/lyrics/stream` *(live resolution SSE stream or `forceRefresh=true`)*
+
+#### Platform ID Searches (10 RPM per IP)
+- `GET /api/tracks/:id/platform-search` *(searches one platform using the stored track's details)*
+
+This budget is separate from the two above, so filling in a track's missing IDs never uses up your live resolutions, and the other way round. Over the limit, the response is `429` with a `Retry-After-medium` header giving the seconds to wait. Results are cached for 10 minutes per track and platform. These searches also run behind normal resolutions in each provider's queue, and while a provider is cooling down (see below) they fail straight away with `503` instead of waiting.
 
 ```mermaid
 flowchart TD

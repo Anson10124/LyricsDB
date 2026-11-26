@@ -1503,6 +1503,228 @@
         ]
       }
     },
+    "/api/tracks/{id}/platform-search": {
+      "get": {
+        "description": "Searches one streaming platform for this track, using the track's stored title, artists, album, duration and ISRC (there is no free-text query), and returns the catalog entries scored against it, best first. Meant for filling in a missing platform ID in the editor; nothing is saved. IDs already marked as wrong for this track are left out, and IDs that belong to another track carry `takenByTrackId`. Limited to 10 searches per minute per IP, separately from other endpoints; results are cached for 10 minutes.",
+        "operationId": "TracksController_searchPlatform[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          },
+          {
+            "name": "platform",
+            "required": true,
+            "in": "query",
+            "description": "Platform to search for this track",
+            "schema": {
+              "example": "deezer",
+              "type": "string",
+              "enum": [
+                "spotify",
+                "apple",
+                "deezer",
+                "netease",
+                "qq"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSearchResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown platform",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The track is verified and can't be edited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "More than 10 searches in a minute; Retry-After-medium gives the seconds to wait",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform's search failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The platform is cooling down after errors or rate limits; try again later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search a platform for a track's missing ID",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
+    "/tracks/{id}/platform-search": {
+      "get": {
+        "description": "Searches one streaming platform for this track, using the track's stored title, artists, album, duration and ISRC (there is no free-text query), and returns the catalog entries scored against it, best first. Meant for filling in a missing platform ID in the editor; nothing is saved. IDs already marked as wrong for this track are left out, and IDs that belong to another track carry `takenByTrackId`. Limited to 10 searches per minute per IP, separately from other endpoints; results are cached for 10 minutes.",
+        "operationId": "TracksController_searchPlatform[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Track internal database UUID v4",
+            "schema": {
+              "example": "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+              "type": "string"
+            }
+          },
+          {
+            "name": "platform",
+            "required": true,
+            "in": "query",
+            "description": "Platform to search for this track",
+            "schema": {
+              "example": "deezer",
+              "type": "string",
+              "enum": [
+                "spotify",
+                "apple",
+                "deezer",
+                "netease",
+                "qq"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSearchResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown platform",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track ID not found in database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The track is verified and can't be edited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "More than 10 searches in a minute; Retry-After-medium gives the seconds to wait",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform's search failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The platform is cooling down after errors or rate limits; try again later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search a platform for a track's missing ID",
+        "tags": [
+          "Tracks"
+        ]
+      }
+    },
     "/api/tracks/{id}/verify": {
       "post": {
         "description": "Flags a track's metadata and lyrics as confirmed by a human (10 RPM/IP). When Cloudflare Turnstile is configured, every call must carry a fresh single-use token.",
@@ -3538,6 +3760,100 @@
         "required": [
           "prev",
           "next"
+        ]
+      },
+      "PlatformSearchResultDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "3135556",
+            "description": "The track's ID on the platform"
+          },
+          "url": {
+            "type": "string",
+            "example": "https://www.deezer.com/track/3135556"
+          },
+          "title": {
+            "type": "string",
+            "example": "Never Gonna Give You Up"
+          },
+          "artists": {
+            "example": [
+              "Rick Astley"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "album": {
+            "type": "string",
+            "example": "Whenever You Need Somebody"
+          },
+          "durationMs": {
+            "type": "number",
+            "example": 213000,
+            "description": "Length in ms"
+          },
+          "isrc": {
+            "type": "string",
+            "example": "GBARL9300135"
+          },
+          "artworkUrl": {
+            "type": "string",
+            "example": "https://e-cdns-images.dzcdn.net/images/cover/0123/250x250.jpg"
+          },
+          "score": {
+            "type": "number",
+            "example": 0.97,
+            "description": "Similarity to the stored track, 0 to 1"
+          },
+          "confident": {
+            "type": "boolean",
+            "example": true,
+            "description": "Close enough to be the same recording without a second look"
+          },
+          "takenByTrackId": {
+            "type": "string",
+            "example": "11111111-2222-4333-8444-555555555555",
+            "description": "Set when another track already owns this ID; it can't be used here"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "title",
+          "artists",
+          "score",
+          "confident"
+        ]
+      },
+      "PlatformSearchResponseDto": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "spotify",
+              "apple",
+              "deezer",
+              "netease",
+              "qq"
+            ],
+            "example": "deezer"
+          },
+          "results": {
+            "description": "Best match first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSearchResultDto"
+            }
+          }
+        },
+        "required": [
+          "platform",
+          "results"
         ]
       },
       "VerifyTrackDto": {
