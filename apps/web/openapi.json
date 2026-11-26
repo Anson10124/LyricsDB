@@ -3218,6 +3218,172 @@
           "Stats"
         ]
       }
+    },
+    "/api/match": {
+      "post": {
+        "description": "Recognises the song in a short audio clip, like Shazam, and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a fingerprint made by NetEase's afp.wasm (the /listen page makes it in the browser; no audio is uploaded) and matched with NetEase's song recognition. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
+        "operationId": "MatchController_match[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchAudioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioMatchResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or malformed fingerprint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No song matched the clip (the body carries NetEase's noMatchReason)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "More than 12 matches in a minute; Retry-After-medium gives the seconds to wait",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "NetEase's song recognition failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "NetEase is cooling down after errors or rate limits; try again later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Identify a song from an audio fingerprint",
+        "tags": [
+          "Lyrics"
+        ]
+      }
+    },
+    "/match": {
+      "post": {
+        "description": "Recognises the song in a short audio clip, like Shazam, and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a fingerprint made by NetEase's afp.wasm (the /listen page makes it in the browser; no audio is uploaded) and matched with NetEase's song recognition. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
+        "operationId": "MatchController_match[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchAudioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioMatchResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or malformed fingerprint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No song matched the clip (the body carries NetEase's noMatchReason)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "More than 12 matches in a minute; Retry-After-medium gives the seconds to wait",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "NetEase's song recognition failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "NetEase is cooling down after errors or rate limits; try again later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Identify a song from an audio fingerprint",
+        "tags": [
+          "Lyrics"
+        ]
+      }
     }
   },
   "info": {
@@ -4194,6 +4360,121 @@
           "platforms",
           "dailyAdded",
           "recentlyAdded"
+        ]
+      },
+      "MatchAudioDto": {
+        "type": "object",
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "Base64 audio fingerprint of a short clip, as made by NetEase's afp.wasm (lyricsdb's /listen page makes it in the browser from 3 s of 8 kHz mono audio)",
+            "example": "LZ/yfarQHqXkyBgtLEu/LzGrKMGmJUfwlNVxidKfSVJL…"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Length of the fingerprinted clip in seconds (default 3)",
+            "example": 3
+          },
+          "expectedTrackId": {
+            "type": "string",
+            "description": "While following a song: the track the listener is on. With expectedOffsetMs, a clip heard near that position is answered with this track without searching again",
+            "example": "89de8b58-f846-444d-8973-48a14052cc97"
+          },
+          "expectedOffsetMs": {
+            "type": "number",
+            "description": "While following a song: where in it the listener expects this clip to start, in ms. Helps pick the right repeat of a chorus",
+            "example": 74500
+          }
+        },
+        "required": [
+          "fingerprint"
+        ]
+      },
+      "AudioMatchCandidateDto": {
+        "type": "object",
+        "properties": {
+          "neteaseId": {
+            "type": "string",
+            "example": "1496089152",
+            "description": "NetEase song ID"
+          },
+          "title": {
+            "type": "string",
+            "example": "I Really Want to Stay at Your House"
+          },
+          "artists": {
+            "example": [
+              "Rosa Walton",
+              "Hallie Coggins"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "album": {
+            "type": "string",
+            "example": "Cyberpunk 2077 (Original Soundtrack)",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "number",
+            "example": 246652,
+            "nullable": true,
+            "description": "Length in ms"
+          },
+          "offsetMs": {
+            "type": "number",
+            "example": 51880,
+            "description": "Where in this song the clip started, in ms"
+          }
+        },
+        "required": [
+          "neteaseId",
+          "title",
+          "artists",
+          "album",
+          "durationMs",
+          "offsetMs"
+        ]
+      },
+      "AudioMatchResponseDto": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "description": "The recording the clip is from",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SanitizedTrackDto"
+              }
+            ]
+          },
+          "offsetMs": {
+            "type": "number",
+            "example": 51870,
+            "description": "Where in `track` the clip started, in ms. Add the time since recording began to follow along"
+          },
+          "lyrics": {
+            "type": "array",
+            "nullable": true,
+            "description": "The track's synced lyrics in the compact JSON format, or null when it has none",
+            "items": {
+              "type": "object"
+            }
+          },
+          "candidates": {
+            "description": "Every upload NetEase heard in the clip, best guess first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AudioMatchCandidateDto"
+            }
+          }
+        },
+        "required": [
+          "track",
+          "offsetMs",
+          "lyrics",
+          "candidates"
         ]
       }
     }

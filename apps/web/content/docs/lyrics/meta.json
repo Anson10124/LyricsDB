@@ -4,6 +4,7 @@
     "getLyrics",
     "getLyricsById",
     "getLyricsFuzzy",
+    "matchAudio",
     "streamLyrics"
   ]
 }
