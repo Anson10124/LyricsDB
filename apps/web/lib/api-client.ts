@@ -1,4 +1,5 @@
 import type {
+  AudioMatchResponse,
   LibraryStats,
   PlatformSearchResponse,
   SanitizedTrack,
@@ -289,6 +290,79 @@ export async function searchPlatformId(
     );
   }
   return (await res.json()) as PlatformSearchResponse;
+}
+
+export type MatchErrorKind = "no-match" | "rate-limited" | "busy" | "failed";
+
+// A song recognition that didn't find a track
+export class MatchError extends Error {
+  constructor(
+    message: string,
+    readonly kind: MatchErrorKind,
+    readonly retryAfterSec?: number,
+  ) {
+    super(message);
+    this.name = "MatchError";
+  }
+}
+
+export interface MatchAudioRequest {
+  fingerprint: string;
+  duration: number;
+  // While following a song: the track and where in it the clip should start
+  expectedTrackId?: string;
+  expectedOffsetMs?: number;
+}
+
+/**
+ * Identifies the song in a fingerprinted clip and returns the track, where in
+ * it the clip started, and its synced lyrics.
+ */
+export async function matchAudio(
+  request: MatchAudioRequest,
+  signal?: AbortSignal,
+): Promise<AudioMatchResponse> {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(`${apiBase}/api/match`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...request,
+      expectedOffsetMs:
+        request.expectedOffsetMs === undefined
+          ? undefined
+          : Math.max(0, Math.round(request.expectedOffsetMs)),
+    }),
+    signal,
+  });
+  if (res.ok) return (await res.json()) as AudioMatchResponse;
+
+  const body = (await res.json().catch(() => null)) as {
+    message?: string;
+    retryAfter?: number;
+  } | null;
+  if (res.status === 404) {
+    throw new MatchError(body?.message || "No song matched.", "no-match");
+  }
+  if (res.status === 429) {
+    const wait = Number(res.headers.get("Retry-After-medium"));
+    const seconds = Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : undefined;
+    throw new MatchError(
+      seconds
+        ? `Listening too often. Try again in ${seconds}s.`
+        : "Listening too often. Please wait a moment.",
+      "rate-limited",
+      seconds,
+    );
+  }
+  if (res.status === 503) {
+    throw new MatchError(
+      body?.message || "Song recognition is busy. Try again shortly.",
+      "busy",
+      body?.retryAfter,
+    );
+  }
+  throw new MatchError(body?.message || "Song recognition didn't work.", "failed");
 }
 
 export async function fetchTurnstileConfig(): Promise<{

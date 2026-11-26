@@ -1,5 +1,7 @@
 import { FingerprintRuntime } from "./runtime.js";
 
+export { resample } from "./resample.js";
+
 // NetEase's fingerprinter only works on 8 kHz mono audio
 export const FP_SAMPLE_RATE = 8000;
 // Length of the clip the audio match endpoint expects

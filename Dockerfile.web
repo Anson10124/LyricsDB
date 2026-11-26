@@ -11,6 +11,7 @@ WORKDIR /app
 # Copy package manifests first for layer caching
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY apps/web/package.json ./apps/web/
+COPY packages/audio-fingerprint/package.json ./packages/audio-fingerprint/
 COPY packages/database/package.json ./packages/database/
 COPY packages/lyrics/package.json ./packages/lyrics/
 COPY packages/music-resolver/package.json ./packages/music-resolver/

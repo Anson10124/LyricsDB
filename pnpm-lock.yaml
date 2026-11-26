@@ -120,6 +120,9 @@ importers:
       '@hello-pangea/dnd':
         specifier: 18.0.1
         version: 18.0.1(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@repo/audio-fingerprint':
+        specifier: workspace:*
+        version: link:../../packages/audio-fingerprint
       '@repo/lyrics':
         specifier: workspace:*
         version: link:../../packages/lyrics
