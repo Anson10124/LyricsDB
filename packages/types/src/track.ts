@@ -63,3 +63,38 @@ export type SanitizedTrack<T extends { lyrics?: unknown }> = Omit<
   hasTranslation?: boolean;
   hasRomaji?: boolean;
 };
+
+// Platforms the editor can search for a missing ID (names as in track_platform_ids)
+export const SEARCHABLE_PLATFORMS = [
+  "spotify",
+  "apple",
+  "deezer",
+  "netease",
+  "qq",
+] as const;
+
+export type SearchablePlatform = (typeof SEARCHABLE_PLATFORMS)[number];
+
+// One catalog entry a platform search found, scored against the stored track
+export interface PlatformSearchResult {
+  id: string;
+  url: string;
+  title: string;
+  artists: string[];
+  album?: string;
+  durationMs?: number;
+  isrc?: string;
+  artworkUrl?: string;
+  // 0-1 similarity to the stored track
+  score: number;
+  // High enough to be the same recording without a second look
+  confident: boolean;
+  // Set when the ID already belongs to another track, so it can't be used here
+  takenByTrackId?: string;
+}
+
+export interface PlatformSearchResponse {
+  platform: SearchablePlatform;
+  // Best match first
+  results: PlatformSearchResult[];
+}

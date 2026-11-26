@@ -170,3 +170,56 @@ export class TrackNeighborsDto {
   })
   next!: string | null;
 }
+
+export class PlatformSearchResultDto {
+  @ApiProperty({ example: "3135556", description: "The track's ID on the platform" })
+  id!: string;
+
+  @ApiProperty({ example: "https://www.deezer.com/track/3135556" })
+  url!: string;
+
+  @ApiProperty({ example: "Never Gonna Give You Up" })
+  title!: string;
+
+  @ApiProperty({ example: ["Rick Astley"], type: [String] })
+  artists!: string[];
+
+  @ApiProperty({ required: false, example: "Whenever You Need Somebody" })
+  album?: string;
+
+  @ApiProperty({ required: false, example: 213000, description: "Length in ms" })
+  durationMs?: number;
+
+  @ApiProperty({ required: false, example: "GBARL9300135" })
+  isrc?: string;
+
+  @ApiProperty({
+    required: false,
+    example: "https://e-cdns-images.dzcdn.net/images/cover/0123/250x250.jpg",
+  })
+  artworkUrl?: string;
+
+  @ApiProperty({ example: 0.97, description: "Similarity to the stored track, 0 to 1" })
+  score!: number;
+
+  @ApiProperty({
+    example: true,
+    description: "Close enough to be the same recording without a second look",
+  })
+  confident!: boolean;
+
+  @ApiProperty({
+    required: false,
+    example: "11111111-2222-4333-8444-555555555555",
+    description: "Set when another track already owns this ID; it can't be used here",
+  })
+  takenByTrackId?: string;
+}
+
+export class PlatformSearchResponseDto {
+  @ApiProperty({ enum: ["spotify", "apple", "deezer", "netease", "qq"], example: "deezer" })
+  platform!: string;
+
+  @ApiProperty({ type: [PlatformSearchResultDto], description: "Best match first" })
+  results!: PlatformSearchResultDto[];
+}

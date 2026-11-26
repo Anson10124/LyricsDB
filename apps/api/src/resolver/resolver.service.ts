@@ -92,6 +92,14 @@ export class ResolverService {
     }
   }
 
+  // Ranked catalog entries from one platform. Callers apply their own rate limit;
+  // upstream failures throw (see MusicResolver.searchPlatform).
+  searchPlatform(
+    ...args: Parameters<MusicResolver["searchPlatform"]>
+  ): ReturnType<MusicResolver["searchPlatform"]> {
+    return this.resolver.searchPlatform(...args);
+  }
+
   async resolveSample(clientIp?: string): Promise<ResolveResult> {
     // Sample track: "Never Gonna Give You Up"
     const sampleUrl = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT";

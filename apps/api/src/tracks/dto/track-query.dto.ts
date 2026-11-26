@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsIn,
   IsInt,
   IsObject,
   IsNotEmpty,
@@ -14,7 +15,11 @@ import {
   Min,
   MinLength,
 } from "class-validator";
-import type { GetOrSyncTrackOptions } from "@repo/types";
+import {
+  SEARCHABLE_PLATFORMS,
+  type GetOrSyncTrackOptions,
+  type SearchablePlatform,
+} from "@repo/types";
 import {
   IsValidFormat,
   IsValidPlatform,
@@ -224,6 +229,16 @@ export class LyricsByIdQueryDto {
     typeof value === "string" ? value.trim().toLowerCase() : value,
   )
   format?: string = "json";
+}
+
+export class PlatformSearchQueryDto {
+  @ApiProperty({
+    enum: SEARCHABLE_PLATFORMS,
+    description: "Platform to search for this track",
+    example: "deezer",
+  })
+  @IsIn(SEARCHABLE_PLATFORMS)
+  platform!: SearchablePlatform;
 }
 
 export class VerifyTrackDto {

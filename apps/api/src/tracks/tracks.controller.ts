@@ -23,6 +23,7 @@ import {
   ApiProduces,
   ApiQuery,
   ApiResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
@@ -36,7 +37,9 @@ import {
 } from "@repo/types";
 import { TracksService } from "./tracks.service";
 import { TrackEditService } from "./track-edit.service";
+import { PlatformSearchService } from "./platform-search.service";
 import {
+  PlatformSearchResponseDto,
   SanitizedTrackDto,
   TrackNeighborsDto,
 } from "./dto/track-response.dto";
@@ -46,6 +49,7 @@ import {
   FuzzyLyricsQueryDto,
   GetLyricsQueryDto,
   LyricsByIdQueryDto,
+  PlatformSearchQueryDto,
   TrackQueryDto,
   TrackSearchQueryDto,
   TrackStreamQueryDto,
@@ -64,6 +68,7 @@ export class TracksController {
     private readonly tracksService: TracksService,
     private readonly turnstileService: TurnstileService,
     private readonly trackEditService: TrackEditService,
+    private readonly platformSearchService: PlatformSearchService,
   ) {}
 
   // ==========================================
@@ -464,6 +469,54 @@ export class TracksController {
     res.send(
       Buffer.from(clip.audio.buffer, clip.audio.byteOffset, clip.audio.byteLength),
     );
+  }
+
+  @ApiOperation({
+    summary: "Search a platform for a track's missing ID",
+    description:
+      "Searches one streaming platform for this track, using the track's stored title, artists, album, duration and ISRC (there is no free-text query), and returns the catalog entries scored against it, best first. Meant for filling in a missing platform ID in the editor; nothing is saved. IDs already marked as wrong for this track are left out, and IDs that belong to another track carry `takenByTrackId`. Limited to 10 searches per minute per IP, separately from other endpoints; results are cached for 10 minutes.",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Track internal database UUID v4",
+    example: "791f8b9b-9593-46ce-9852-b1801d88a5d1",
+  })
+  @ApiOkResponse({ type: PlatformSearchResponseDto })
+  @ApiBadRequestResponse({
+    type: ErrorResponseDto,
+    description: "Unknown platform",
+  })
+  @ApiNotFoundResponse({
+    type: ErrorResponseDto,
+    description: "Track ID not found in database",
+  })
+  @ApiConflictResponse({
+    type: ErrorResponseDto,
+    description: "The track is verified and can't be edited",
+  })
+  @ApiTooManyRequestsResponse({
+    type: ErrorResponseDto,
+    description:
+      "More than 10 searches in a minute; Retry-After-medium gives the seconds to wait",
+  })
+  @ApiResponse({
+    status: 502,
+    type: ErrorResponseDto,
+    description: "The platform's search failed",
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorResponseDto,
+    description: "The platform is cooling down after errors or rate limits; try again later",
+  })
+  // Its own budget, like the preview: overriding the global "medium" throttler
+  // gives this route a separate per-IP limit
+  @Throttle({ medium: { limit: 10, ttl: 60_000 } })
+  @Get("tracks/:id/platform-search")
+  async searchPlatform(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @Query() query: PlatformSearchQueryDto,
+  ) {
+    return this.platformSearchService.search(id, query.platform);
   }
 
   @ApiOperation({

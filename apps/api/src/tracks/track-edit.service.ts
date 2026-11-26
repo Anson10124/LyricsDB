@@ -43,7 +43,7 @@ export interface TrackEditInput {
 
 // What each platform's IDs look like. Loose enough for every catalog's real IDs,
 // strict enough to catch a pasted URL or a typo.
-const ID_FORMATS: Record<PlatformIdKey, RegExp> = {
+export const ID_FORMATS: Record<PlatformIdKey, RegExp> = {
   spotify: /^[A-Za-z0-9]{22}$/,
   apple: /^\d{1,20}$/,
   deezer: /^\d{1,20}$/,
