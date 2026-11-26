@@ -17,7 +17,7 @@ import {
   type DraggableProvided,
   type DropResult,
 } from "@hello-pangea/dnd";
-import { GripVertical, Loader2, Trash2, X } from "lucide-react";
+import { GripVertical, Loader2, Redo2, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import type {
   SanitizedTrack,
@@ -65,6 +65,65 @@ interface Row {
 }
 
 type EditorTab = "lyrics" | "preview" | "ids";
+
+// ---------- Undo / redo ----------
+
+interface Snapshot {
+  rows: Row[];
+  offset: number;
+}
+
+interface History {
+  past: Snapshot[];
+  present: Snapshot;
+  future: Snapshot[];
+  // Edits sharing this key fold into one step (typing in the same box)
+  mergeKey: string | null;
+}
+
+const HISTORY_LIMIT = 200;
+
+function freshHistory(rows: Row[]): History {
+  return { past: [], present: { rows, offset: 0 }, future: [], mergeKey: null };
+}
+
+function record(h: History, next: Snapshot, mergeKey: string | null = null): History {
+  if (mergeKey && mergeKey === h.mergeKey) {
+    return { ...h, present: next, future: [] };
+  }
+  return {
+    past: [...h.past, h.present].slice(-HISTORY_LIMIT),
+    present: next,
+    future: [],
+    mergeKey,
+  };
+}
+
+function undoStep(h: History): History {
+  const previous = h.past[h.past.length - 1];
+  if (!previous) return h;
+  return {
+    past: h.past.slice(0, -1),
+    present: previous,
+    future: [h.present, ...h.future],
+    mergeKey: null,
+  };
+}
+
+function redoStep(h: History): History {
+  const [next, ...future] = h.future;
+  if (!next) return h;
+  return { past: [...h.past, h.present], present: next, future, mergeKey: null };
+}
+
+// Text fields keep the browser's own undo for the text being typed
+function isTextField(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) return !target.readOnly;
+  if (!(target instanceof HTMLInputElement) || target.readOnly) return false;
+  return ["text", "search", "url", "email", "tel", "password", "number"].includes(
+    target.type,
+  );
+}
 
 const ID_FIELDS: { field: TrackIdField; label: string; placeholder: string }[] =
   [
@@ -260,6 +319,7 @@ function AnnotationChip({
   value,
   dragging = false,
   onChange,
+  onFocus,
 }: {
   provided: DraggableProvided;
   field: AnnotationField;
@@ -267,6 +327,7 @@ function AnnotationChip({
   value: string;
   dragging?: boolean;
   onChange?: (index: number, field: AnnotationField, value: string) => void;
+  onFocus?: () => void;
 }) {
   const label = ANNOTATION_LABELS[field];
   return (
@@ -296,6 +357,10 @@ function AnnotationChip({
           value={value}
           readOnly={!onChange}
           onChange={(e) => onChange?.(index, field, e.target.value)}
+          onFocus={onFocus}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
           placeholder="—"
           title={value}
           aria-label={`${label} of line ${index + 1}`}
@@ -314,11 +379,13 @@ const AnnotationColumn = memo(function AnnotationColumn({
   values,
   className,
   onChange,
+  onFocus,
 }: {
   field: AnnotationField;
   values: string[];
   className?: string;
   onChange: (index: number, field: AnnotationField, value: string) => void;
+  onFocus: () => void;
 }) {
   return (
     // The dragged item is position: fixed, so no ancestor of this list may have
@@ -345,6 +412,7 @@ const AnnotationColumn = memo(function AnnotationColumn({
                   value={value}
                   dragging={dragSnapshot.isDragging}
                   onChange={onChange}
+                  onFocus={onFocus}
                 />
               )}
             </Draggable>
@@ -379,8 +447,11 @@ export function LyricsEditor({
   );
 
   const [tab, setTab] = useState<EditorTab>("lyrics");
-  const [rows, setRows] = useState<Row[]>(() => toRows(lyrics));
-  const [offset, setOffset] = useState(0);
+  // Lines and offset live in one undo history
+  const [history, setHistory] = useState<History>(() => freshHistory(toRows(lyrics)));
+  const { rows, offset } = history.present;
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
   const [offsetDraft, setOffsetDraft] = useState("0");
   const [ids, setIds] = useState(() => initialIds(track));
   const [saving, setSaving] = useState(false);
@@ -393,8 +464,7 @@ export function LyricsEditor({
   useEffect(() => {
     if (!open) return;
     setTab(lyrics ? "lyrics" : "ids");
-    setRows(toRows(lyrics));
-    setOffset(0);
+    setHistory(freshHistory(toRows(lyrics)));
     setOffsetDraft("0");
     setIds(initialIds(track));
     setError(null);
@@ -431,24 +501,67 @@ export function LyricsEditor({
     onClose();
   }, [dirty, onClose, saving]);
 
+  // ----- History -----
+
+  // Records a change to the lines as one undo step (no step when nothing changed)
+  const setRows = useCallback(
+    (update: (prev: Row[]) => Row[], mergeKey: string | null = null) =>
+      setHistory((h) => {
+        const next = update(h.present.rows);
+        if (next === h.present.rows) return h;
+        return record(h, { ...h.present, rows: next }, mergeKey);
+      }),
+    [],
+  );
+  const undo = useCallback(() => setHistory(undoStep), []);
+  const redo = useCallback(() => setHistory(redoStep), []);
+  // Focusing an annotation box starts a new step, so separate visits undo separately
+  const breakMerge = useCallback(
+    () => setHistory((h) => (h.mergeKey ? { ...h, mergeKey: null } : h)),
+    [],
+  );
+
+  // Undo can change the offset, so the box follows it
+  useEffect(() => setOffsetDraft(String(offset)), [offset]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       // Escape also cancels a keyboard drag; don't close the editor then
-      if (e.key === "Escape" && !dragging) requestClose();
+      if (e.key === "Escape" && !dragging) {
+        requestClose();
+        return;
+      }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return;
+      if (dragging || saving || tab === "ids" || isTextField(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (key === "y" && !e.shiftKey) {
+        e.preventDefault();
+        redo();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, requestClose, dragging]);
+  }, [open, requestClose, dragging, saving, tab, undo, redo]);
 
   // ----- Row edits (stable callbacks so unchanged rows don't re-render) -----
 
   const updateLine = useCallback(
-    (index: number, update: (line: EditableLine) => EditableLine) =>
-      setRows((prev) =>
-        prev.map((row, i) => (i === index ? { ...row, line: update(row.line) } : row)),
+    (
+      index: number,
+      update: (line: EditableLine) => EditableLine,
+      mergeKey: string | null = null,
+    ) =>
+      setRows(
+        (prev) =>
+          prev.map((row, i) => (i === index ? { ...row, line: update(row.line) } : row)),
+        mergeKey,
       ),
-    [],
+    [setRows],
   );
   // A new time that passes a neighbour moves the line into time order, so the
   // saved lyrics never go backwards
@@ -471,7 +584,7 @@ export function LyricsEditor({
         rest.splice(at === -1 ? rest.length : at, 0, moved);
         return rest;
       }),
-    [],
+    [setRows],
   );
   const lineSynced = track.lyricsType === "line";
   const onText = useCallback(
@@ -481,7 +594,7 @@ export function LyricsEditor({
   );
   const onAnnotation = useCallback(
     (index: number, field: AnnotationField, value: string) =>
-      updateLine(index, (l) => ({ ...l, [field]: value })),
+      updateLine(index, (l) => ({ ...l, [field]: value }), `${field}:${index}`),
     [updateLine],
   );
   const onDuet = useCallback(
@@ -494,7 +607,7 @@ export function LyricsEditor({
   );
   const onRemove = useCallback(
     (index: number) => setRows((prev) => prev.filter((_, i) => i !== index)),
-    [],
+    [setRows],
   );
 
   const handleDragEnd = (result: DropResult) => {
@@ -520,8 +633,11 @@ export function LyricsEditor({
       setOffsetDraft(String(offset));
       return;
     }
-    setOffset(Math.round(parsed));
-    setOffsetDraft(String(Math.round(parsed)));
+    const next = Math.round(parsed);
+    setOffsetDraft(String(next));
+    if (next !== offset) {
+      setHistory((h) => record(h, { ...h.present, offset: next }));
+    }
   };
 
   const handleSave = async () => {
@@ -656,6 +772,30 @@ export function LyricsEditor({
               </div>
 
               {tab !== "ids" && (
+                <div className="flex gap-1">
+                  {(
+                    [
+                      ["Undo", "Ctrl+Z", Undo2, undo, canUndo],
+                      ["Redo", "Ctrl+Shift+Z", Redo2, redo, canRedo],
+                    ] as const
+                  ).map(([label, shortcut, Icon, action, enabled]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={action}
+                      disabled={!enabled}
+                      aria-label={label}
+                      aria-keyshortcuts={shortcut.replace("Ctrl", "Control")}
+                      title={`${label} (${shortcut})`}
+                      className="flex size-9 cursor-pointer items-center justify-center rounded-full bg-white/5 text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white/5 disabled:hover:text-white/70"
+                    >
+                      <Icon className="size-4" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {tab !== "ids" && (
                 <label className="flex items-center gap-2 text-sm">
                   <span className="font-semibold">Offset</span>
                   <input
@@ -781,6 +921,7 @@ export function LyricsEditor({
                           values={translations}
                           className={columnVisibility("translation")}
                           onChange={onAnnotation}
+                          onFocus={breakMerge}
                         />
                         {showRomaji && (
                           <AnnotationColumn
@@ -788,6 +929,7 @@ export function LyricsEditor({
                             values={romaji}
                             className={columnVisibility("romaji")}
                             onChange={onAnnotation}
+                            onFocus={breakMerge}
                           />
                         )}
                       </div>

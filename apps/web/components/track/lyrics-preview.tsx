@@ -101,7 +101,7 @@ export function LyricsPreview({
   const progress = Math.min(100, (currentTime / durationMs) * 100);
 
   return (
-    <div className="relative h-full w-full select-none overflow-hidden font-[family-name:var(--font-inter)] text-white">
+    <div className="relative h-full w-full select-none overflow-hidden p-8 font-[family-name:var(--font-inter)] text-white">
       <div className="lyrics-mask lyrics-interactive h-full w-full overflow-hidden">
         <LyricPlayer
           lyricLines={lyricLines}
