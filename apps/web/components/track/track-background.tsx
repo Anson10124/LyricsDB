@@ -30,14 +30,14 @@ export function TrackBackground({
   const albumIsVideo = !imageCover && Boolean(videoCover);
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-0 bg-black">
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
       <motion.div
         initial={{ opacity: 0, scale: 1.08 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
         className="absolute inset-0"
       >
-        {album ? (
+        {album && (
           <BackgroundRender
             album={album}
             albumIsVideo={albumIsVideo}
@@ -47,12 +47,8 @@ export function TrackBackground({
             renderScale={0.5}
             className="size-full"
           />
-        ) : (
-          <div className="size-full bg-[radial-gradient(ellipse_at_20%_10%,oklch(0.55_0.12_75/0.55),transparent_60%),radial-gradient(ellipse_at_85%_90%,oklch(0.4_0.08_40/0.6),transparent_60%)]" />
         )}
       </motion.div>
-      {/* Keeps white text readable on bright covers */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/15 to-black/45" />
     </div>
   );
 }

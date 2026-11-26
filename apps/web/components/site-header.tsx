@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { press, spring } from "@/lib/motion";
 
 const NAV_LINKS = [
+  { href: "/listen", label: "Listen" },
   { href: "/stats", label: "Stats" },
   { href: "/docs", label: "Docs" },
 ];

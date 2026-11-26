@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
+    "dev": "node scripts/copy-fingerprint-wasm.mjs && next dev --port 3000",
+    "build": "node scripts/copy-fingerprint-wasm.mjs && next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
     "check-types": "next typegen && tsc --noEmit",
@@ -17,6 +17,7 @@
     "@applemusic-like-lyrics/react": "^0.5.2",
     "@applemusic-like-lyrics/react-full": "^0.4.2",
     "@hello-pangea/dnd": "18.0.1",
+    "@repo/audio-fingerprint": "workspace:*",
     "@repo/lyrics": "workspace:*",
     "@repo/music-resolver": "workspace:*",
     "@repo/types": "workspace:*",

@@ -61,6 +61,20 @@ interface AmllPlayerProps {
   rawLyrics: SyncedLyricsPayload;
   // Lets the page react to playback (artwork scale, background flow)
   onPlayingChange?: (playing: boolean) => void;
+  // Follow a clock kept elsewhere, such as music heard through the mic: each
+  // new value moves the lyrics to positionMs as measured at atPerfMs
+  // (performance.now() time) and plays or pauses them
+  syncTo?: PlayerSyncPoint;
+  // The NetEase audio preview button (default on)
+  allowPreview?: boolean;
+  // Previous/next song in fullscreen move to neighbouring track pages (default on)
+  allowTrackNavigation?: boolean;
+}
+
+export interface PlayerSyncPoint {
+  positionMs: number;
+  atPerfMs: number;
+  playing?: boolean;
 }
 
 // Volume ramps at the edges of the preview clip so it doesn't cut in or out
@@ -126,6 +140,9 @@ export function AmllPlayer({
   track,
   rawLyrics,
   onPlayingChange,
+  syncTo,
+  allowPreview = true,
+  allowTrackNavigation = true,
 }: AmllPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -183,7 +200,7 @@ export function AmllPlayer({
 
   // Audio preview: nothing is downloaded until the visitor turns it on. It
   // then stays on across track switches until turned off again.
-  const canPreview = Boolean(track.neteaseId);
+  const canPreview = allowPreview && Boolean(track.neteaseId);
   const [audioOn, setAudioOn] = useState(false);
   // Downloaded clip, tagged with its track so a switch drops the old one
   const [preview, setPreview] = useState<
@@ -383,6 +400,15 @@ export function AmllPlayer({
     [syncAudio],
   );
 
+  // Runs after the track-switch reset above, so a new song starts at the synced
+  // position rather than at 0
+  useEffect(() => {
+    if (!syncTo) return;
+    const elapsed = Math.max(0, performance.now() - syncTo.atPerfMs);
+    handleSeek(Math.min(durationMs, syncTo.positionMs + elapsed));
+    setIsPlaying(syncTo.playing ?? true);
+  }, [syncTo, durationMs, handleSeek]);
+
   // A freshly turned-on clip plays from its start unless the lyrics are
   // already inside it
   const startedClipRef = useRef<string | null>(null);
@@ -489,6 +515,7 @@ export function AmllPlayer({
   const pendingMoveRef = useRef<"prev" | "next" | null>(null);
 
   useEffect(() => {
+    if (!allowTrackNavigation) return;
     let active = true;
     setNeighbors(null);
     fetchTrackNeighbors(track.id)
@@ -505,7 +532,7 @@ export function AmllPlayer({
     return () => {
       active = false;
     };
-  }, [track.id, moveTo]);
+  }, [track.id, moveTo, allowTrackNavigation]);
 
   // Loaded ahead while fullscreen is open so a switch is instant
   useEffect(() => {
@@ -515,14 +542,16 @@ export function AmllPlayer({
   }, [isFullscreen, neighbors]);
 
   const handlePrevSong = useCallback(() => {
+    if (!allowTrackNavigation) return;
     if (neighbors) moveTo("prev", neighbors);
     else pendingMoveRef.current = "prev";
-  }, [neighbors, moveTo]);
+  }, [neighbors, moveTo, allowTrackNavigation]);
 
   const handleNextSong = useCallback(() => {
+    if (!allowTrackNavigation) return;
     if (neighbors) moveTo("next", neighbors);
     else pendingMoveRef.current = "next";
-  }, [neighbors, moveTo]);
+  }, [neighbors, moveTo, allowTrackNavigation]);
 
   const handleTogglePlay = useCallback(() => {
     // Pressing play after the track ended starts it over
