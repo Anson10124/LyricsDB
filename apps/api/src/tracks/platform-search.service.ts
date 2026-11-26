@@ -208,7 +208,8 @@ export class PlatformSearchService {
     track: Track,
     platform: SearchablePlatform,
   ): Promise<ScoredCandidateResult[]> {
-    const key = `${track.id}:${platform}`;
+    // Results are scored against the ISRC, which the same editor can change
+    const key = `${track.id}:${platform}:${track.isrc ?? ""}`;
     const now = Date.now();
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > now) return cached.results;

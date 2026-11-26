@@ -183,6 +183,16 @@ test("a second search for the same track and platform is served from the cache",
   assert.deepEqual(res.results.map((r) => r.id), ["222"]);
 });
 
+test("a changed ISRC searches again instead of reusing results scored against the old one", async () => {
+  const resolver = resolverReturning([match("222")]);
+  const service = new PlatformSearchService(fakeDb({ track: baseTrack() }), resolver);
+  await service.search(TRACK_ID, "netease");
+  service.db = fakeDb({ track: baseTrack({ isrc: "USRC17607839" }) });
+  await service.search(TRACK_ID, "netease");
+  assert.equal(resolver.calls.length, 2);
+  assert.equal(resolver.calls[1][1].isrc, "USRC17607839");
+});
+
 test("requests that arrive while a search runs share it", async () => {
   let finish;
   const resolver = resolverReturning(() => new Promise((r) => (finish = () => r([match("222")]))));
