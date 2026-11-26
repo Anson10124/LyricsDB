@@ -172,6 +172,47 @@ test("finds the original release behind the covers NetEase heard", async () => {
   assert.equal(src.calls.deezer, 0);
 });
 
+test("picks the original when an intro matches several edits at once", async () => {
+  // 2 s into the song every edit sounds the same: NetEase heard a longer
+  // upload and a remix (one recording by length) and the AI cover of the original
+  const intro = {
+    noMatchReason: null,
+    candidates: [
+      { ...HEARD.candidates[1], offsetMs: 2040 },
+      {
+        neteaseId: "2612278517",
+        title: "I Really Want to Stay At Your House (Bryan Remix)",
+        artists: ["诗人月 Bryan"],
+        album: null,
+        durationMs: 259200,
+        offsetMs: 2200,
+      },
+      { ...HEARD.candidates[0], offsetMs: 2200 },
+    ],
+  };
+  const db = fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]);
+  const service = new MatchService(db, fakeTracks(), sources({ heard: intro }));
+
+  const res = await service.match(DTO, "1.2.3.4");
+
+  assert.equal(res.track.id, ORIGINAL.id);
+  assert.equal(res.offsetMs, 2200);
+  assert.equal(res.candidates[0].neteaseId, "3445819726");
+  // Both groups share a title, so the database was searched once
+  assert.deepEqual(db.calls, ["select"]);
+});
+
+test("keeps the larger group when the recordings disagree on position", async () => {
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    fakeTracks(),
+    sources(),
+  );
+  const res = await service.match(DTO, "1.2.3.4");
+  // The long edit (one candidate, elsewhere in its song) doesn't compete
+  assert.equal(res.offsetMs, 51870);
+});
+
 test("syncs Deezer's original when no indexed copy is an official release", async () => {
   const tracksService = fakeTracks({ synced: { "deezer:1144909952": ORIGINAL } });
   const src = sources({

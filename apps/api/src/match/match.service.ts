@@ -10,6 +10,7 @@ import {
 import { DatabaseClient, ilike, type Track, tracks } from "@repo/database";
 import {
   AUDIO_MATCH_EXPECTED_TOLERANCE_MS,
+  AUDIO_MATCH_OFFSET_TOLERANCE_MS,
   cleanSearchQuery,
   DeezerAdapter,
   groupAudioMatches,
@@ -95,8 +96,7 @@ export class MatchService {
     const groups = groupAudioMatches(heard.candidates, {
       expectedOffsetMs: dto.expectedOffsetMs,
     });
-    const best = groups[0];
-    if (!best) {
+    if (groups.length === 0) {
       throw new NotFoundException({
         statusCode: HttpStatus.NOT_FOUND,
         message: "No song matched this clip.",
@@ -105,30 +105,67 @@ export class MatchService {
       });
     }
 
-    const track = await this.trackFor(best, dto, clientIp);
+    const lookups = new Map<string, Promise<Track[]>>();
+    const best = await this.pickGroup(groups, dto, lookups);
+    const track = await this.trackFor(best, dto, clientIp, lookups);
     return {
       track: this.tracksService.sanitizeTrack(track),
       offsetMs: best.offsetMs,
       lyrics: await this.lyricsFor(track, clientIp),
-      candidates: groups.flatMap((g) => g.entries),
+      candidates: [best, ...groups.filter((g) => g !== best)].flatMap((g) => g.entries),
     };
+  }
+
+  // Where every edit of a song shares the same audio (an intro, say), NetEase
+  // hears several recordings at the same position and the clip can't tell them
+  // apart. Then the recording whose indexed copy is the most widely catalogued
+  // wins: usually the original release rather than an extended upload or remix.
+  private async pickGroup(
+    groups: AudioMatchGroup[],
+    dto: MatchAudioDto,
+    lookups: Map<string, Promise<Track[]>>,
+  ): Promise<AudioMatchGroup> {
+    const first = groups[0]!;
+    if (groups.length === 1 || this.isFollowedPosition(first, dto)) return first;
+
+    const contenders = groups.filter(
+      (g) => Math.abs(g.offsetMs - first.offsetMs) <= AUDIO_MATCH_OFFSET_TOLERANCE_MS,
+    );
+    if (contenders.length === 1) return first;
+
+    let best = first;
+    let bestScore = -1;
+    for (const group of contenders) {
+      const [copy] = await this.indexedCopies(group, lookups);
+      const score = copy ? catalogPresence(copy) + (copy.isrc ? 1 : 0) : 0;
+      if (score > bestScore) {
+        best = group;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  private isFollowedPosition(group: AudioMatchGroup, dto: MatchAudioDto): boolean {
+    return (
+      dto.expectedTrackId !== undefined &&
+      dto.expectedOffsetMs !== undefined &&
+      Math.abs(group.offsetMs - dto.expectedOffsetMs) <= AUDIO_MATCH_EXPECTED_TOLERANCE_MS
+    );
   }
 
   private async trackFor(
     group: AudioMatchGroup,
     dto: MatchAudioDto,
     clientIp: string,
+    lookups: Map<string, Promise<Track[]>>,
   ): Promise<Track> {
     // Still on the song the listener is following: no need to look it up again
-    if (
-      dto.expectedTrackId &&
-      dto.expectedOffsetMs !== undefined &&
-      Math.abs(group.offsetMs - dto.expectedOffsetMs) <= AUDIO_MATCH_EXPECTED_TOLERANCE_MS
-    ) {
-      const expected = await this.tracksService.findById(dto.expectedTrackId, clientIp);
+    if (this.isFollowedPosition(group, dto)) {
+      const expected = await this.tracksService.findById(dto.expectedTrackId!, clientIp);
       if (this.isSameSong(expected, group)) return expected;
     }
-    return this.resolveGroup(group, clientIp);
+    return this.resolveGroup(group, clientIp, lookups);
   }
 
   // The best track for a recording NetEase heard. The uploads it names are often
@@ -138,8 +175,12 @@ export class MatchService {
   // 3. any indexed copy of the recording, best catalogued first
   // 4. NetEase's own uploads, plain ones before covers
   // At most one track is fetched live per request.
-  private async resolveGroup(group: AudioMatchGroup, clientIp: string): Promise<Track> {
-    const indexed = await this.indexedCopies(group);
+  private async resolveGroup(
+    group: AudioMatchGroup,
+    clientIp: string,
+    lookups: Map<string, Promise<Track[]>>,
+  ): Promise<Track> {
+    const indexed = await this.indexedCopies(group, lookups);
     const official = indexed.find((t) => t.isrc);
     if (official) return official;
 
@@ -180,15 +221,27 @@ export class MatchService {
   }
 
   // Indexed tracks with lyrics that are this recording (same name, same length,
-  // no cover or version tags), best catalogued first
-  private async indexedCopies(group: AudioMatchGroup): Promise<Track[]> {
+  // no cover or version tags), best catalogued first. Groups of one song share
+  // a title, so the search runs once per title per request.
+  private async indexedCopies(
+    group: AudioMatchGroup,
+    lookups: Map<string, Promise<Track[]>>,
+  ): Promise<Track[]> {
     const pattern = group.cleanTitle.trim().replace(/[%_\\]/g, "\\$&");
     if (!pattern) return [];
-    const rows = await this.db
-      .select()
-      .from(tracks)
-      .where(ilike(tracks.title, `%${pattern}%`))
-      .limit(50);
+    let search = lookups.get(pattern);
+    if (!search) {
+      // Promise.resolve runs the query builder once; awaiting it again would re-run it
+      search = Promise.resolve(
+        this.db
+          .select()
+          .from(tracks)
+          .where(ilike(tracks.title, `%${pattern}%`))
+          .limit(50),
+      );
+      lookups.set(pattern, search);
+    }
+    const rows = await search;
     const durationGap = (t: Track) =>
       group.durationMs && t.durationMs ? Math.abs(t.durationMs - group.durationMs) : 0;
     return rows
