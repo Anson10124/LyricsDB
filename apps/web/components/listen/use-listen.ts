@@ -44,6 +44,10 @@ const MAX_TRUSTED_DRIFT_MS = 3_000;
 const AGREEMENT_MS = 1_500;
 // Misses in a row before giving up on the song
 const MAX_MISSES = 2;
+// Quick re-listens for a surprising answer before settling back into the
+// normal rhythm (a song that keeps matching ambiguously shouldn't keep the
+// mic busy every few seconds)
+const MAX_CONFIRMS = 2;
 
 interface Sighting {
   trackId: string;
@@ -87,6 +91,7 @@ export function useListen() {
   const missesRef = useRef(0);
   // A surprising answer waiting for a second listen to confirm it
   const pendingRef = useRef<Sighting | null>(null);
+  const confirmsRef = useRef(0);
   // The next scheduled listen; a ref because listen and run refer to each other
   const runRef = useRef<() => Promise<void>>(async () => {});
 
@@ -111,6 +116,7 @@ export function useListen() {
   const follow = useCallback(
     (sighting: Sighting) => {
       pendingRef.current = null;
+      confirmsRef.current = 0;
       missesRef.current = 0;
       update({
         status: "following",
@@ -183,6 +189,7 @@ export function useListen() {
       const drift = Math.abs(response.offsetMs - expectedOffsetMs!);
       if (sameTrack && drift <= MAX_TRUSTED_DRIFT_MS) {
         pendingRef.current = null;
+        confirmsRef.current = 0;
         if (drift >= MIN_RESYNC_MS) {
           update({
             syncTo: { positionMs: response.offsetMs, atPerfMs: clip.startedAtPerfMs, playing: true },
@@ -197,9 +204,15 @@ export function useListen() {
       if (pending && agrees(pending, sighting)) {
         follow(sighting);
         schedule(FOLLOW_INTERVAL_MS);
-      } else {
+      } else if (confirmsRef.current < MAX_CONFIRMS) {
+        confirmsRef.current += 1;
         pendingRef.current = sighting;
         schedule(CONFIRM_INTERVAL_MS);
+      } else {
+        // Still no agreement: stay where we are and check again later
+        confirmsRef.current = 0;
+        pendingRef.current = null;
+        schedule(FOLLOW_INTERVAL_MS);
       }
     } catch (error) {
       if (controller.signal.aborted) return;

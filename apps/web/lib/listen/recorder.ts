@@ -118,12 +118,11 @@ export class MicListener {
     });
   }
 
-  // Maps a time on the audio clock to performance.now() time
+  // Maps a time on the audio clock to performance.now() time. Uses the
+  // context's processing clock rather than getOutputTimestamp, which follows
+  // the speakers and so runs behind by the output latency (large on Bluetooth)
+  // that has nothing to do with when the mic heard the sound.
   private toPerfTime(contextTime: number): number {
-    const stamp = this.context.getOutputTimestamp?.();
-    if (stamp?.contextTime !== undefined && stamp.performanceTime !== undefined) {
-      return stamp.performanceTime - (stamp.contextTime - contextTime) * 1000;
-    }
     return performance.now() - (this.context.currentTime - contextTime) * 1000;
   }
 
