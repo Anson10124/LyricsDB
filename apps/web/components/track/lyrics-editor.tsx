@@ -42,6 +42,7 @@ import {
   type TrackEdit,
   type TrackIdField,
 } from "@/lib/api-client";
+import { LyricsPreview } from "@/components/track/lyrics-preview";
 import { fade, press, spring } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +64,7 @@ interface Row {
   line: EditableLine;
 }
 
-type EditorTab = "lyrics" | "ids";
+type EditorTab = "lyrics" | "preview" | "ids";
 
 const ID_FIELDS: { field: TrackIdField; label: string; placeholder: string }[] =
   [
@@ -628,6 +629,7 @@ export function LyricsEditor({
                 {(
                   [
                     ["lyrics", "Lyrics", !lyrics],
+                    ["preview", "Preview", !lyrics],
                     ["ids", "Platform IDs", false],
                   ] as const
                 ).map(([key, label, disabled]) => (
@@ -653,7 +655,7 @@ export function LyricsEditor({
                 ))}
               </div>
 
-              {tab === "lyrics" && (
+              {tab !== "ids" && (
                 <label className="flex items-center gap-2 text-sm">
                   <span className="font-semibold">Offset</span>
                   <input
@@ -718,7 +720,17 @@ export function LyricsEditor({
             )}
 
             {/* Body */}
-            {tab === "lyrics" ? (
+            {tab === "preview" ? (
+              <div className="min-h-0 flex-1 border-t border-white/10">
+                {rows.length === 0 ? (
+                  <p className="py-16 text-center text-sm text-white/50">
+                    Every line was deleted. Close the editor to start over.
+                  </p>
+                ) : (
+                  <LyricsPreview lyrics={editedPayload} durationMs={track.durationMs} />
+                )}
+              </div>
+            ) : tab === "lyrics" ? (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex gap-2 border-y border-white/10 px-3 py-2 text-xs font-semibold text-white/50 sm:px-5">
                   <div className="flex min-w-0 flex-[3] gap-1 sm:gap-2">
