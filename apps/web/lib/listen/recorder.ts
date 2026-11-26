@@ -48,7 +48,10 @@ export class MicListener {
     } catch (error) {
       const name = error instanceof DOMException ? error.name : "";
       if (name === "NotAllowedError" || name === "SecurityError") {
-        throw new MicUnavailableError("Microphone access was blocked.", "denied");
+        throw new MicUnavailableError(
+          "Microphone access was blocked. Allow it in your browser's site settings, then try again.",
+          "denied",
+        );
       }
       if (name === "NotFoundError" || name === "OverconstrainedError") {
         throw new MicUnavailableError("No microphone was found.", "missing");
