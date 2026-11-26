@@ -57,6 +57,9 @@ const PLATFORM_NAMES: Record<SearchablePlatform, string> = {
 // Results shown to the person; more are fetched so filtering still leaves enough
 const RESULT_LIMIT = 8;
 const FETCH_LIMIT = 15;
+// Below this a result is a different song (an unrelated title the platform's
+// search padded the list with), not worth showing
+const MIN_SCORE = 0.2;
 
 // Searches are kept briefly so repeat clicks (or several people on one track)
 // don't reach the platform again. Only successes are kept.
@@ -121,7 +124,8 @@ export class PlatformSearchService {
     );
 
     const usable = ranked
-      .filter(({ candidate }) => {
+      .filter(({ candidate, score }) => {
+        if (score < MIN_SCORE) return false;
         const id = candidate.id?.trim();
         // An ID the edit endpoint would refuse is no use to offer
         return Boolean(id && ID_FORMATS[platform].test(id) && !rejected.has(id));

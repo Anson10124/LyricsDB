@@ -124,6 +124,15 @@ test("drops IDs already rejected for this track", async () => {
   assert.deepEqual(res.results.map((r) => r.id), ["222"]);
 });
 
+test("drops unrelated songs the platform padded its results with", async () => {
+  const resolver = resolverReturning([match("111", 0.9), match("222", 0.1), match("333", 0)]);
+  const res = await new PlatformSearchService(fakeDb({ track: baseTrack() }), resolver).search(
+    TRACK_ID,
+    "netease",
+  );
+  assert.deepEqual(res.results.map((r) => r.id), ["111"]);
+});
+
 test("drops IDs the edit endpoint would refuse", async () => {
   const resolver = resolverReturning([match("not-a-number"), match("222")]);
   const res = await new PlatformSearchService(fakeDb({ track: baseTrack() }), resolver).search(
