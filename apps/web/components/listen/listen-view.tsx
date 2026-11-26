@@ -104,8 +104,7 @@ function ListenPrompt({ state, onStart }: { state: ListenState; onStart: () => v
       </motion.div>
       {state.status === "idle" && (
         <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance">
-          Only a short fingerprint of 3 seconds of sound is sent to find the song, never the
-          audio itself. Recognition by NetEase Cloud Music.
+          Audio fingerprint is processed on your device, only hash is sent to the server. Recognition by NetEase Cloud Music.
         </motion.p>
       )}
     </motion.div>
