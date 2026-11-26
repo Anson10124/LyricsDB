@@ -227,7 +227,7 @@ interface LineRowProps {
 }
 
 const checkboxClass =
-  "size-4 cursor-pointer appearance-none rounded-full ring-2 ring-white/25 transition checked:bg-sky-400 checked:ring-sky-400";
+  "size-4 cursor-pointer appearance-none rounded-full ring-2 ring-white/25 transition checked:bg-primary checked:ring-primary";
 
 const LineRow = memo(function LineRow({
   index,
@@ -341,7 +341,7 @@ function AnnotationChip({
         className={cn(
           "flex min-w-0 flex-1 items-center gap-0.5 rounded-lg py-0.5 pr-1 transition-colors",
           dragging
-            ? "bg-zinc-800 shadow-2xl ring-1 ring-sky-300/60"
+            ? "bg-zinc-800 shadow-2xl ring-1 ring-primary/60"
             : "hover:bg-white/5",
         )}
       >
@@ -397,7 +397,7 @@ const AnnotationColumn = memo(function AnnotationColumn({
           {...provided.droppableProps}
           className={cn(
             "min-w-0 flex-[2] rounded-lg transition-colors",
-            snapshot.isDraggingOver && "bg-sky-400/5",
+            snapshot.isDraggingOver && "bg-primary/5",
             className,
           )}
         >
@@ -787,7 +787,7 @@ export function LyricsEditor({
                   >
                     {label}
                     {key === "ids" && idsChanged && (
-                      <span className="ml-1.5 inline-block size-1.5 rounded-full bg-sky-400 align-middle" />
+                      <span className="ml-1.5 inline-block size-1.5 rounded-full bg-primary align-middle" />
                     )}
                   </button>
                 ))}
@@ -955,7 +955,7 @@ export function LyricsEditor({
                         <span className="flex items-center gap-2 text-xs font-semibold text-white/70">
                           {label}
                           {changed && (
-                            <span className="rounded bg-sky-400/15 px-1.5 py-0.5 text-[10px] text-sky-300">
+                            <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">
                               {ids[field].trim() ? "changed" : "will be removed"}
                             </span>
                           )}
@@ -970,7 +970,7 @@ export function LyricsEditor({
                           autoComplete="off"
                           className={cn(
                             "rounded-xl bg-white/5 px-3 py-2 font-mono text-sm ring-1 ring-white/10 placeholder:text-white/20 focus:ring-white/30 focus:outline-none",
-                            changed && "ring-sky-400/40",
+                            changed && "ring-primary/40",
                           )}
                         />
                       </label>
