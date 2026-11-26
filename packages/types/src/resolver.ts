@@ -78,6 +78,8 @@ export interface MatchCandidate {
   aliases?: string[];
   url: string;
   id?: string;
+  // Cover art for showing the candidate to a person; not used for scoring
+  artworkUrl?: string;
   raw?: Record<string, unknown>;
 }
 
@@ -126,6 +128,9 @@ export interface ResolveOptions {
   minInclusionThreshold?: number;
   preferredCountry?: string;
   customHeaders?: Record<string, string>;
+  // Queue priority at the provider limiter: higher runs first, default 0.
+  // Background work such as editor searches runs below 0 so it never delays resolves.
+  priority?: number;
   onProgress?: (event: {
     stage: string;
     step?: string;
@@ -144,6 +149,13 @@ export interface MusicAdapter {
     metadata: ResolverTrackMetadata,
     options?: ResolveOptions,
   ): Promise<ResolvedLink | null>;
+  // Every catalog entry the search turned up, unscored. Unlike search(), upstream
+  // failures throw, so callers can tell "no results" from "the platform failed".
+  searchCandidates?(
+    query: string,
+    metadata: ResolverTrackMetadata,
+    options?: ResolveOptions,
+  ): Promise<MatchCandidate[]>;
 }
 
 export interface MusicParser {

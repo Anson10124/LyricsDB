@@ -295,16 +295,13 @@ class SingleProviderLimiter {
         signal.addEventListener("abort", queuedTask.onAbort, { once: true });
       }
 
-      if (priority > 0) {
-        // Higher priority tasks inserted ahead
-        const insertIdx = this.queue.findIndex((t) => t.priority < priority);
-        if (insertIdx === -1) {
-          this.queue.push(queuedTask as QueuedTask<unknown>);
-        } else {
-          this.queue.splice(insertIdx, 0, queuedTask as QueuedTask<unknown>);
-        }
-      } else {
+      // Ahead of every lower-priority task, behind equal ones. Default (0) work
+      // overtakes queued background work (below 0).
+      const insertIdx = this.queue.findIndex((t) => t.priority < priority);
+      if (insertIdx === -1) {
         this.queue.push(queuedTask as QueuedTask<unknown>);
+      } else {
+        this.queue.splice(insertIdx, 0, queuedTask as QueuedTask<unknown>);
       }
 
       this.processNext();

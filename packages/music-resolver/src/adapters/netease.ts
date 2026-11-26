@@ -93,6 +93,7 @@ export class NeteaseAdapter implements MusicAdapter {
       },
       timeout: httpOptions?.timeout,
       retries: httpOptions?.retries,
+      priority: httpOptions?.priority,
     });
   }
 
@@ -103,86 +104,7 @@ export class NeteaseAdapter implements MusicAdapter {
     options?: ResolveOptions,
   ): Promise<ResolvedLink | null> {
     try {
-      let searchType = NeteaseSearchType.Song;
-      if (metadata.type === "album") searchType = NeteaseSearchType.Album;
-      else if (metadata.type === "artist")
-        searchType = NeteaseSearchType.Artist;
-      else if (metadata.type === "playlist")
-        searchType = NeteaseSearchType.Playlist;
-
-      const response = await this.cloudSearch(
-        query,
-        { type: searchType, limit: 20 },
-        options,
-      );
-
-      if (response.code !== 200 || !response.result) {
-        return null;
-      }
-
-      const candidates: MatchCandidate[] = [];
-
-      if (searchType === NeteaseSearchType.Song && response.result.songs) {
-        for (const song of response.result.songs) {
-          const artists = song.ar?.map((a) => a.name).filter(Boolean) || [];
-          // `alia` holds song notes ("Live", "伴奏", theme credits), not artist names
-          const aliases: string[] = [];
-          if (song.ar) {
-            for (const ar of song.ar) {
-              if (ar.tns) aliases.push(...ar.tns);
-              if (ar.alias) aliases.push(...ar.alias);
-            }
-          }
-
-          candidates.push({
-            // NetEase keeps version labels in `alia`; fold them into the title so
-            // a live or instrumental entry is scored and stored as that version
-            title: withVersionLabels(song.name, song.alia),
-            artist: artists.join(", ") || undefined,
-            artists: artists.length > 0 ? artists : undefined,
-            album: song.al?.name,
-            durationMs: song.dt,
-            aliases: aliases.length > 0 ? aliases : undefined,
-            url: `https://music.163.com/#/song?id=${song.id}`,
-            id: String(song.id),
-          });
-        }
-      } else if (
-        searchType === NeteaseSearchType.Album &&
-        response.result.albums
-      ) {
-        for (const album of response.result.albums) {
-          candidates.push({
-            title: album.name,
-            artist: album.artist?.name,
-            url: `https://music.163.com/#/album?id=${album.id}`,
-            id: String(album.id),
-          });
-        }
-      } else if (
-        searchType === NeteaseSearchType.Artist &&
-        response.result.artists
-      ) {
-        for (const artist of response.result.artists) {
-          candidates.push({
-            title: artist.name,
-            url: `https://music.163.com/#/artist?id=${artist.id}`,
-            id: String(artist.id),
-          });
-        }
-      } else if (
-        searchType === NeteaseSearchType.Playlist &&
-        response.result.playlists
-      ) {
-        for (const playlist of response.result.playlists) {
-          candidates.push({
-            title: playlist.name,
-            url: `https://music.163.com/#/playlist?id=${playlist.id}`,
-            id: String(playlist.id),
-          });
-        }
-      }
-
+      const candidates = await this.searchCandidates(query, metadata, options);
       if (candidates.length === 0) return null;
 
       const { bestMatch } = findBestMatch(candidates, metadata, this.id);
@@ -190,5 +112,96 @@ export class NeteaseAdapter implements MusicAdapter {
     } catch {
       return null;
     }
+  }
+
+  async searchCandidates(
+    query: string,
+    metadata: TrackMetadata,
+    options?: ResolveOptions,
+  ): Promise<MatchCandidate[]> {
+    let searchType = NeteaseSearchType.Song;
+    if (metadata.type === "album") searchType = NeteaseSearchType.Album;
+    else if (metadata.type === "artist")
+      searchType = NeteaseSearchType.Artist;
+    else if (metadata.type === "playlist")
+      searchType = NeteaseSearchType.Playlist;
+
+    const response = await this.cloudSearch(
+      query,
+      { type: searchType, limit: 20 },
+      options,
+    );
+
+    if (response.code !== 200) {
+      throw new Error(`NetEase search failed with code ${response.code}`);
+    }
+    if (!response.result) return [];
+
+    const candidates: MatchCandidate[] = [];
+
+    if (searchType === NeteaseSearchType.Song && response.result.songs) {
+      for (const song of response.result.songs) {
+        const artists = song.ar?.map((a) => a.name).filter(Boolean) || [];
+        // `alia` holds song notes ("Live", "伴奏", theme credits), not artist names
+        const aliases: string[] = [];
+        if (song.ar) {
+          for (const ar of song.ar) {
+            if (ar.tns) aliases.push(...ar.tns);
+            if (ar.alias) aliases.push(...ar.alias);
+          }
+        }
+
+        candidates.push({
+          // NetEase keeps version labels in `alia`; fold them into the title so
+          // a live or instrumental entry is scored and stored as that version
+          title: withVersionLabels(song.name, song.alia),
+          artist: artists.join(", ") || undefined,
+          artists: artists.length > 0 ? artists : undefined,
+          album: song.al?.name,
+          durationMs: song.dt,
+          aliases: aliases.length > 0 ? aliases : undefined,
+          url: `https://music.163.com/#/song?id=${song.id}`,
+          id: String(song.id),
+          // Covers often come back as http://, which browsers block as mixed content
+          artworkUrl: song.al?.picUrl?.replace(/^http:\/\//, "https://"),
+        });
+      }
+    } else if (
+      searchType === NeteaseSearchType.Album &&
+      response.result.albums
+    ) {
+      for (const album of response.result.albums) {
+        candidates.push({
+          title: album.name,
+          artist: album.artist?.name,
+          url: `https://music.163.com/#/album?id=${album.id}`,
+          id: String(album.id),
+        });
+      }
+    } else if (
+      searchType === NeteaseSearchType.Artist &&
+      response.result.artists
+    ) {
+      for (const artist of response.result.artists) {
+        candidates.push({
+          title: artist.name,
+          url: `https://music.163.com/#/artist?id=${artist.id}`,
+          id: String(artist.id),
+        });
+      }
+    } else if (
+      searchType === NeteaseSearchType.Playlist &&
+      response.result.playlists
+    ) {
+      for (const playlist of response.result.playlists) {
+        candidates.push({
+          title: playlist.name,
+          url: `https://music.163.com/#/playlist?id=${playlist.id}`,
+          id: String(playlist.id),
+        });
+      }
+    }
+
+    return candidates;
   }
 }

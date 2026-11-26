@@ -24,12 +24,17 @@ interface SpotifyArtistItem {
   name?: string;
 }
 
+interface SpotifyCoverArt {
+  sources?: Array<{ url?: string; width?: number | null }>;
+}
+
 interface SpotifyTrackItem {
   uri: string;
   id?: string;
   name: string;
   duration?: { totalMilliseconds?: number };
-  album?: { name: string; uri?: string; id?: string };
+  album?: { name: string; uri?: string; id?: string; coverArt?: SpotifyCoverArt };
+  albumOfTrack?: { name?: string; coverArt?: SpotifyCoverArt };
   artists?: { items: SpotifyArtistItem[] };
 }
 
@@ -59,7 +64,8 @@ interface SpotifyTopResultItem {
   id?: string;
   name: string;
   artists?: { items: SpotifyArtistItem[] };
-  album?: { name: string };
+  album?: { name: string; coverArt?: SpotifyCoverArt };
+  albumOfTrack?: { name?: string; coverArt?: SpotifyCoverArt };
   duration?: { totalMilliseconds?: number };
   profile?: { name: string };
 }
@@ -107,6 +113,23 @@ function extractArtistNames(artists?: {
     .filter((n): n is string => Boolean(n.trim()));
 }
 
+// The cover closest to 300px wide, from whichever album field the response filled
+function coverUrl(item: {
+  album?: { coverArt?: SpotifyCoverArt };
+  albumOfTrack?: { coverArt?: SpotifyCoverArt };
+}): string | undefined {
+  const sources = (
+    item.albumOfTrack?.coverArt?.sources ?? item.album?.coverArt?.sources ?? []
+  ).filter((source): source is { url: string; width?: number | null } =>
+    Boolean(source.url),
+  );
+  if (sources.length === 0) return undefined;
+  const distance = (width?: number | null) => Math.abs((width ?? 300) - 300);
+  return sources.reduce((best, source) =>
+    distance(source.width) < distance(best.width) ? source : best,
+  ).url;
+}
+
 export interface SpotifyAdapterOptions {
   baseUrl?: string;
   apiUrl?: string;
@@ -147,59 +170,14 @@ export class SpotifyAdapter implements MusicAdapter {
     options?: ResolveOptions,
   ): Promise<ResolvedLink | null> {
     try {
-      let accessToken = await this.getAccessToken(options);
-
-      const executeQuery = async (
-        searchTerm: string,
-        token: string,
-      ): Promise<SpotifySearchResponse | null> => {
-        const variables = {
-          searchTerm,
-          offset: 0,
-          limit: 15,
-          numberOfTopResults: 15,
-        };
-
-        const extensions = {
-          persistedQuery: { version: 1, sha256Hash: SEARCH_DESKTOP_HASH },
-        };
-
-        const url = new URL(this.apiUrl);
-        url.searchParams.set("operationName", "searchDesktop");
-        url.searchParams.set("variables", JSON.stringify(variables));
-        url.searchParams.set("extensions", JSON.stringify(extensions));
-
-        return HttpClient.get<SpotifySearchResponse>(url.toString(), {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "app-platform": "WebPlayer",
-          },
-          timeout: options?.timeout ?? 10000,
-          retries: options?.retries ?? 1,
-        });
-      };
-
-      const runSearchWithRetry = async (
-        searchTerm: string,
-      ): Promise<SpotifySearchResponse | null> => {
-        try {
-          return await executeQuery(searchTerm, accessToken);
-        } catch {
-          // Invalidate cached token and retry once with fresh token
-          this.cachedToken = null;
-          this.tokenExpiresAt = 0;
-          accessToken = await this.getAccessToken(options, true);
-          return await executeQuery(searchTerm, accessToken);
-        }
-      };
-
       let data: SpotifySearchResponse | null = null;
 
       // 1. Try ISRC search if available for song type
       if (metadata.type === "song" && metadata.isrc) {
         try {
-          const isrcData = await runSearchWithRetry(
+          const isrcData = await this.runSearch(
             `isrc:${metadata.isrc.trim()}`,
+            options,
           );
           const isrcTracks =
             isrcData?.data?.search?.tracks?.items ||
@@ -214,114 +192,10 @@ export class SpotifyAdapter implements MusicAdapter {
 
       // 2. Regular keyword search if ISRC was not found
       if (!data) {
-        data = await runSearchWithRetry(query);
+        data = await this.runSearch(query, options);
       }
 
-      const search = data?.data?.search || data?.data?.searchV2;
-      if (!search) return null;
-
-      const candidates: MatchCandidate[] = [];
-      const seenIds = new Set<string>();
-
-      if (metadata.type === "song") {
-        const trackItems = search.tracks?.items || [];
-        for (const item of trackItems) {
-          const track = item.track || item;
-          if (!track?.uri) continue;
-          const { url: trackUrl, id } = uriToUrl(track.uri);
-          if (seenIds.has(id)) continue;
-          seenIds.add(id);
-
-          const artists = extractArtistNames(track.artists);
-          candidates.push({
-            title: track.name,
-            artist: artists.join(", ") || undefined,
-            artists: artists.length > 0 ? artists : undefined,
-            album: track.album?.name,
-            durationMs: track.duration?.totalMilliseconds,
-            url: trackUrl,
-            id,
-            raw: { album: track.album?.name },
-          });
-        }
-
-        // Also check topResults for tracks
-        if (data?.data?.search?.topResults?.items) {
-          for (const item of data.data.search.topResults.items) {
-            if (!item.uri || !item.uri.includes(":track:")) continue;
-            const { url: trackUrl, id } = uriToUrl(item.uri);
-            if (seenIds.has(id)) continue;
-            seenIds.add(id);
-
-            const artists = extractArtistNames(item.artists);
-            candidates.push({
-              title: item.name,
-              artist: artists.join(", ") || undefined,
-              artists: artists.length > 0 ? artists : undefined,
-              album: item.album?.name,
-              durationMs: item.duration?.totalMilliseconds,
-              url: trackUrl,
-              id,
-              raw: { album: item.album?.name },
-            });
-          }
-        }
-      } else if (metadata.type === "album") {
-        const albumItems = search.albums?.items || [];
-        for (const album of albumItems) {
-          if (!album?.uri) continue;
-          const { url: albumUrl, id } = uriToUrl(album.uri);
-          if (seenIds.has(id)) continue;
-          seenIds.add(id);
-
-          const artists = extractArtistNames(album.artists);
-          candidates.push({
-            title: album.name,
-            artist: artists.join(", ") || undefined,
-            artists: artists.length > 0 ? artists : undefined,
-            url: albumUrl,
-            id,
-          });
-        }
-      } else if (metadata.type === "artist") {
-        const artistItems = search.artists?.items || [];
-        for (const item of artistItems) {
-          const raw =
-            "data" in item
-              ? (item.data as SpotifyArtistData)
-              : (item as SpotifyArtistData);
-          if (!raw?.uri) continue;
-          const { url: artistUrl, id } = uriToUrl(raw.uri);
-          if (seenIds.has(id)) continue;
-          seenIds.add(id);
-
-          const name = raw.profile?.name || raw.name || "";
-          candidates.push({
-            title: name,
-            url: artistUrl,
-            id,
-          });
-        }
-      } else if (metadata.type === "playlist") {
-        const playlistItems = search.playlists?.items || [];
-        for (const item of playlistItems) {
-          const raw =
-            "data" in item
-              ? (item.data as SpotifyPlaylistItem)
-              : (item as SpotifyPlaylistItem);
-          if (!raw?.uri) continue;
-          const { url: playlistUrl, id } = uriToUrl(raw.uri);
-          if (seenIds.has(id)) continue;
-          seenIds.add(id);
-
-          candidates.push({
-            title: raw.name,
-            url: playlistUrl,
-            id,
-          });
-        }
-      }
-
+      const candidates = this.toCandidates(data, metadata);
       if (candidates.length === 0) return null;
 
       const { bestMatch } = findBestMatch(candidates, metadata, this.id);
@@ -329,6 +203,188 @@ export class SpotifyAdapter implements MusicAdapter {
     } catch {
       return null;
     }
+  }
+
+  async searchCandidates(
+    query: string,
+    metadata: TrackMetadata,
+    options?: ResolveOptions,
+  ): Promise<MatchCandidate[]> {
+    const candidates: MatchCandidate[] = [];
+    if (metadata.type === "song" && metadata.isrc) {
+      try {
+        const isrcData = await this.runSearch(
+          `isrc:${metadata.isrc.trim()}`,
+          options,
+        );
+        candidates.push(...this.toCandidates(isrcData, metadata));
+      } catch {
+        // The keyword search below still runs
+      }
+    }
+    const data = await this.runSearch(query, options);
+    if (!data?.data?.search && !data?.data?.searchV2) {
+      throw new Error("Spotify returned an unreadable search response");
+    }
+    candidates.push(...this.toCandidates(data, metadata));
+    return candidates;
+  }
+
+  // One search request, retried once with a fresh token if it fails
+  private async runSearch(
+    searchTerm: string,
+    options?: ResolveOptions,
+  ): Promise<SpotifySearchResponse | null> {
+    const executeQuery = (token: string) => {
+      const variables = {
+        searchTerm,
+        offset: 0,
+        limit: 15,
+        numberOfTopResults: 15,
+      };
+
+      const extensions = {
+        persistedQuery: { version: 1, sha256Hash: SEARCH_DESKTOP_HASH },
+      };
+
+      const url = new URL(this.apiUrl);
+      url.searchParams.set("operationName", "searchDesktop");
+      url.searchParams.set("variables", JSON.stringify(variables));
+      url.searchParams.set("extensions", JSON.stringify(extensions));
+
+      return HttpClient.get<SpotifySearchResponse>(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "app-platform": "WebPlayer",
+        },
+        timeout: options?.timeout ?? 10000,
+        retries: options?.retries ?? 1,
+        priority: options?.priority,
+      });
+    };
+
+    try {
+      return await executeQuery(await this.getAccessToken(options));
+    } catch {
+      // Invalidate cached token and retry once with fresh token
+      this.cachedToken = null;
+      this.tokenExpiresAt = 0;
+      return await executeQuery(await this.getAccessToken(options, true));
+    }
+  }
+
+  private toCandidates(
+    data: SpotifySearchResponse | null,
+    metadata: TrackMetadata,
+  ): MatchCandidate[] {
+    const search = data?.data?.search || data?.data?.searchV2;
+    if (!search) return [];
+
+    const candidates: MatchCandidate[] = [];
+    const seenIds = new Set<string>();
+
+    if (metadata.type === "song") {
+      const trackItems = search.tracks?.items || [];
+      for (const item of trackItems) {
+        const track = item.track || item;
+        if (!track?.uri) continue;
+        const { url: trackUrl, id } = uriToUrl(track.uri);
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+
+        const artists = extractArtistNames(track.artists);
+        candidates.push({
+          title: track.name,
+          artist: artists.join(", ") || undefined,
+          artists: artists.length > 0 ? artists : undefined,
+          album: track.album?.name,
+          durationMs: track.duration?.totalMilliseconds,
+          url: trackUrl,
+          id,
+          artworkUrl: coverUrl(track),
+          raw: { album: track.album?.name },
+        });
+      }
+
+      // Also check topResults for tracks
+      if (data?.data?.search?.topResults?.items) {
+        for (const item of data.data.search.topResults.items) {
+          if (!item.uri || !item.uri.includes(":track:")) continue;
+          const { url: trackUrl, id } = uriToUrl(item.uri);
+          if (seenIds.has(id)) continue;
+          seenIds.add(id);
+
+          const artists = extractArtistNames(item.artists);
+          candidates.push({
+            title: item.name,
+            artist: artists.join(", ") || undefined,
+            artists: artists.length > 0 ? artists : undefined,
+            album: item.album?.name,
+            durationMs: item.duration?.totalMilliseconds,
+            url: trackUrl,
+            id,
+            artworkUrl: coverUrl(item),
+            raw: { album: item.album?.name },
+          });
+        }
+      }
+    } else if (metadata.type === "album") {
+      const albumItems = search.albums?.items || [];
+      for (const album of albumItems) {
+        if (!album?.uri) continue;
+        const { url: albumUrl, id } = uriToUrl(album.uri);
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+
+        const artists = extractArtistNames(album.artists);
+        candidates.push({
+          title: album.name,
+          artist: artists.join(", ") || undefined,
+          artists: artists.length > 0 ? artists : undefined,
+          url: albumUrl,
+          id,
+        });
+      }
+    } else if (metadata.type === "artist") {
+      const artistItems = search.artists?.items || [];
+      for (const item of artistItems) {
+        const raw =
+          "data" in item
+            ? (item.data as SpotifyArtistData)
+            : (item as SpotifyArtistData);
+        if (!raw?.uri) continue;
+        const { url: artistUrl, id } = uriToUrl(raw.uri);
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+
+        const name = raw.profile?.name || raw.name || "";
+        candidates.push({
+          title: name,
+          url: artistUrl,
+          id,
+        });
+      }
+    } else if (metadata.type === "playlist") {
+      const playlistItems = search.playlists?.items || [];
+      for (const item of playlistItems) {
+        const raw =
+          "data" in item
+            ? (item.data as SpotifyPlaylistItem)
+            : (item as SpotifyPlaylistItem);
+        if (!raw?.uri) continue;
+        const { url: playlistUrl, id } = uriToUrl(raw.uri);
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+
+        candidates.push({
+          title: raw.name,
+          url: playlistUrl,
+          id,
+        });
+      }
+    }
+
+    return candidates;
   }
 
   async getAccessToken(

@@ -23,8 +23,15 @@ import {
   matchTrackWithMusixmatch,
 } from "./utils/musixmatch-matcher.js";
 import { fetchAppleArtworkMetadata } from "./utils/apple-animated-artwork.js";
-import { globalProviderLimiter } from "./utils/provider-limiter.js";
+import {
+  globalProviderLimiter,
+  ProviderRateLimitedError,
+} from "./utils/provider-limiter.js";
 import { backfillIsrc } from "./utils/isrc.js";
+import {
+  rankMatches,
+  type ScoredCandidateResult,
+} from "./utils/string-similarity.js";
 import {
   cleanSearchQuery,
   normalizeSongTitle,
@@ -465,6 +472,55 @@ export class MusicResolver {
       query,
       links,
     };
+  }
+
+  /**
+   * Searches one platform for a track and returns its catalog entries scored
+   * against it, best first, for a person to choose from. Runs the title + artist
+   * query, then the cleaned-title fallback when that found no confident match.
+   * Throws when the platform is cooling down or its search fails, so "no results"
+   * and "the platform failed" stay distinguishable. `platformId` is an adapter id
+   * (spotify, appleMusic, deezer, netease, qqMusic).
+   */
+  async searchPlatform(
+    platformId: string,
+    metadata: TrackMetadata,
+    options?: ResolveOptions,
+    limit = 10,
+  ): Promise<ScoredCandidateResult[]> {
+    const adapter = this.adapters.get(platformId);
+    if (!adapter?.searchCandidates) {
+      throw new Error(`Platform "${platformId}" can't be searched.`);
+    }
+    const limiter = globalProviderLimiter.getLimiter(platformId);
+    if (!limiter.isAvailable()) {
+      throw new ProviderRateLimitedError(
+        platformId,
+        limiter.getMetrics().remainingCooldownSeconds ?? 60,
+      );
+    }
+
+    const target = this.normalizeMetadata({ ...metadata });
+    const artist = target.artist || target.artists?.[0];
+    const withArtist = (title: string) =>
+      cleanSearchQuery(artist ? `${title} ${artist}` : title);
+
+    const query = withArtist(target.title);
+    const candidates = await adapter.searchCandidates(query, target, options);
+
+    const confident = rankMatches(candidates, target, 1)[0]?.isVerified;
+    const fallback = target.cleanTitle ? withArtist(target.cleanTitle) : query;
+    if (!confident && fallback !== query) {
+      try {
+        candidates.push(
+          ...(await adapter.searchCandidates(fallback, target, options)),
+        );
+      } catch {
+        // The first query's results still stand
+      }
+    }
+
+    return rankMatches(candidates, target, limit);
   }
 
   // Search across all platforms with a raw query and metadata object

@@ -339,6 +339,26 @@ export function scoreCandidate(
   };
 }
 
+// Every candidate scored against the target, best first, one entry per ID.
+// For showing a person the choices; findBestMatch picks one automatically.
+export function rankMatches(
+  candidates: MatchCandidate[],
+  target: TrackMetadata,
+  limit = Infinity,
+): ScoredCandidateResult[] {
+  const best = new Map<string, ScoredCandidateResult>();
+  for (const candidate of candidates) {
+    const key = candidate.id || candidate.url;
+    if (!key) continue;
+    const result = scoreCandidate(candidate, target);
+    const seen = best.get(key);
+    if (!seen || result.score > seen.score) best.set(key, result);
+  }
+  return [...best.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 export function findBestMatch(
   candidates: MatchCandidate[],
   query: string | TrackMetadata,
