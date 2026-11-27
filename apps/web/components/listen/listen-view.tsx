@@ -12,6 +12,7 @@ import { AmllPlayer } from "@/components/amll-player";
 import { CoverImage, optimizedCoverUrl } from "@/components/cover-image";
 import { SiteHeader } from "@/components/site-header";
 import { TrackBackground } from "@/components/track/track-background";
+import { useDeviceAudioSupport } from "@/lib/listen/device-audio-support";
 import { useListen, type ListenState, type ListenStatus } from "./use-listen";
 
 const glassButton =
@@ -35,6 +36,26 @@ const PROMPT_TEXT: Record<ListenStatus, { title: string; detail: string }> = {
   lost: { title: "Lost the song", detail: "Tap to listen again." },
   error: { title: "Couldn't listen", detail: "" },
 };
+
+// Where device mode needs different words from the mic
+const DEVICE_TEXT: Partial<Record<ListenStatus, { title: string; detail: string }>> = {
+  starting: {
+    title: "Choose what to share",
+    detail:
+      "Pick the tab playing the music (or your whole screen for a desktop app) and turn on “Share audio”.",
+  },
+  "no-match": {
+    title: "Couldn't recognise that",
+    detail: "Make sure the music is playing in what you shared, or try again when the singing starts.",
+  },
+};
+
+function promptText(state: ListenState) {
+  return (state.source === "device" && DEVICE_TEXT[state.status]) || PROMPT_TEXT[state.status];
+}
+
+// Statuses where the "Playing on this device?" link is offered
+const DEVICE_OFFER: ListenStatus[] = ["idle", "no-match", "error"];
 
 // The big round button; its halo follows the mic level while listening
 function ListenButton({
@@ -73,7 +94,7 @@ function ListenButton({
         whileHover={busy ? undefined : { scale: 1.04 }}
         whileTap={busy ? undefined : press}
         transition={spring.snappy}
-        aria-label={busy ? PROMPT_TEXT[state.status].title : "Start listening"}
+        aria-label={busy ? promptText(state).title : "Start listening"}
         className="relative flex size-32 items-center justify-center rounded-full bg-white text-black shadow-2xl shadow-black/40 transition-colors hover:bg-white/90 disabled:cursor-default sm:size-36 cursor-pointer"
       >
         {state.status === "starting" ? (
@@ -86,8 +107,18 @@ function ListenButton({
   );
 }
 
-function ListenPrompt({ state, onStart }: { state: ListenState; onStart: () => void }) {
-  const text = PROMPT_TEXT[state.status];
+function ListenPrompt({
+  state,
+  onStart,
+  onStartDevice,
+}: {
+  state: ListenState;
+  onStart: () => void;
+  onStartDevice: () => void;
+}) {
+  const text = promptText(state);
+  const deviceSupported = useDeviceAudioSupport();
+  const pickingShare = state.source === "device" && state.status === "starting";
   return (
     <motion.div
       variants={stagger(0.08, 0.1)}
@@ -106,6 +137,21 @@ function ListenPrompt({ state, onStart }: { state: ListenState; onStart: () => v
         <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance">
           Your audio stays on your device. Only audio fingerprint is sent to our server and NetEase Cloud Music for recognition.
         </motion.p>
+      )}
+      {pickingShare && (
+        <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance">
+          Your screen isn&apos;t recorded or sent anywhere. Only the audio fingerprint is used for recognition.
+        </motion.p>
+      )}
+      {deviceSupported && DEVICE_OFFER.includes(state.status) && (
+        <motion.button
+          type="button"
+          variants={rise}
+          onClick={onStartDevice}
+          className="-mt-4 text-sm text-white/55 underline-offset-4 transition-colors hover:text-white hover:underline cursor-pointer"
+        >
+          Playing on this device?
+        </motion.button>
       )}
     </motion.div>
   );
@@ -186,7 +232,7 @@ function Following({
                 className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-black/20 transition-colors hover:bg-white/90 disabled:opacity-70 cursor-pointer"
               >
                 {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Mic className="size-4" />}
-                {busy ? PROMPT_TEXT[state.status].title : "Lost the song · Listen again"}
+                {busy ? promptText(state).title : "Lost the song · Listen again"}
               </motion.button>
             )}
             {following && (
@@ -232,7 +278,7 @@ function Following({
 }
 
 export function ListenView() {
-  const { state, start, stop } = useListen();
+  const { state, startMic, startDevice, restart, stop } = useListen();
   const track = state.match?.track;
 
   return (
@@ -247,7 +293,7 @@ export function ListenView() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <Following state={state} track={track} onStart={start} onStop={stop} />
+            <Following state={state} track={track} onStart={restart} onStop={stop} />
           </motion.div>
         ) : (
           <motion.div
@@ -258,7 +304,7 @@ export function ListenView() {
             exit={{ opacity: 0 }}
           >
             <TrackBackground playing={false} />
-            <ListenPrompt state={state} onStart={start} />
+            <ListenPrompt state={state} onStart={startMic} onStartDevice={startDevice} />
           </motion.div>
         )}
       </AnimatePresence>

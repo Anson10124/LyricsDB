@@ -5,12 +5,20 @@ import type { AudioMatchResponse } from "@repo/types";
 import { FP_CLIP_SECONDS } from "@repo/audio-fingerprint";
 import { MatchError, matchAudio } from "@/lib/api-client";
 import { loadFingerprinter } from "@/lib/listen/fingerprint";
-import { MicListener, MicUnavailableError, type RecordedClip } from "@/lib/listen/recorder";
+import {
+  DeviceAudioError,
+  MicUnavailableError,
+  openDeviceAudio,
+  openMic,
+  type AudioListener,
+  type ListenSource,
+  type RecordedClip,
+} from "@/lib/listen/recorder";
 import type { PlayerSyncPoint } from "@/components/amll-player";
 
 export type ListenStatus =
   | "idle"
-  // Asking for the mic and loading the fingerprinter
+  // Asking for the mic (or the share picker) and loading the fingerprinter
   | "starting"
   | "listening"
   | "matching"
@@ -22,6 +30,8 @@ export type ListenStatus =
 
 export interface ListenState {
   status: ListenStatus;
+  // Where the audio comes from; kept after stopping so "Listen again" reuses it
+  source: ListenSource;
   // Loudness of the mic while listening, 0-1
   level: number;
   match: AudioMatchResponse | null;
@@ -73,6 +83,7 @@ function agrees(earlier: Sighting, later: Sighting): boolean {
 
 const INITIAL: ListenState = {
   status: "idle",
+  source: "mic",
   level: 0,
   match: null,
   syncTo: null,
@@ -85,7 +96,7 @@ export function useListen() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const micRef = useRef<MicListener | null>(null);
+  const micRef = useRef<AudioListener | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const missesRef = useRef(0);
@@ -268,45 +279,85 @@ export function useListen() {
     runRef.current = run;
   }, [run]);
 
-  const start = useCallback(async () => {
-    releaseMic();
-    pendingRef.current = null;
-    missesRef.current = 0;
-    const keepFollowing = stateRef.current.status === "lost";
-    update({
-      status: "starting",
-      level: 0,
-      error: null,
-      relistening: false,
-      ...(keepFollowing ? {} : { match: null, syncTo: null }),
-    });
-    try {
-      // Load the fingerprinter while the person answers the mic prompt
-      const [mic] = await Promise.all([MicListener.open(), loadFingerprinter()]);
-      micRef.current = mic;
-    } catch (error) {
-      update({
-        status: "error",
-        match: null,
-        syncTo: null,
-        error:
-          error instanceof MicUnavailableError
-            ? error.message
-            : "Couldn't start listening. Please try again.",
-      });
-      return;
-    }
-    await run();
-  }, [releaseMic, run, update]);
-
   const stop = useCallback(() => {
     releaseMic();
     pendingRef.current = null;
     setState(INITIAL);
   }, [releaseMic]);
 
+  const start = useCallback(
+    async (source: ListenSource) => {
+      const before = stateRef.current;
+      releaseMic();
+      pendingRef.current = null;
+      missesRef.current = 0;
+      const keepFollowing = before.status === "lost";
+      update({
+        status: "starting",
+        source,
+        level: 0,
+        error: null,
+        relistening: false,
+        ...(keepFollowing ? {} : { match: null, syncTo: null }),
+      });
+      // Ending the share from the browser bar resets listen mode, as long as
+      // this is still the stream in use
+      let opened: AudioListener | null = null;
+      const onShareEnded = () => {
+        if (opened && micRef.current === opened) stop();
+      };
+      try {
+        // Load the fingerprinter while the person answers the mic prompt or
+        // picker. Both open calls reach the browser before any await, so the
+        // share picker still counts as a response to the click.
+        const [listener] = await Promise.all([
+          (source === "device" ? openDeviceAudio(onShareEnded) : openMic()).then(
+            (l) => (opened = l),
+          ),
+          loadFingerprinter(),
+        ]);
+        // Sharing was stopped before listening could begin
+        if (listener.ended) {
+          void listener.close();
+          stop();
+          return;
+        }
+        micRef.current = listener;
+      } catch (error) {
+        // The stream opened but something else failed: don't leave it running
+        void (opened as AudioListener | null)?.close();
+        // Closing the picker isn't a failure: go back to where we were
+        if (error instanceof DeviceAudioError && error.reason === "cancelled") {
+          setState(before);
+          return;
+        }
+        if (!(error instanceof MicUnavailableError || error instanceof DeviceAudioError)) {
+          // Unexpected: keep the real cause visible for debugging
+          console.error("Listen mode couldn't start", error);
+        }
+        update({
+          status: "error",
+          match: null,
+          syncTo: null,
+          error:
+            error instanceof MicUnavailableError || error instanceof DeviceAudioError
+              ? error.message
+              : "Couldn't start listening. Please try again.",
+        });
+        return;
+      }
+      await run();
+    },
+    [releaseMic, run, stop, update],
+  );
+
+  const startMic = useCallback(() => start("mic"), [start]);
+  const startDevice = useCallback(() => start("device"), [start]);
+  // Listen again with whichever source was used last
+  const restart = useCallback(() => start(stateRef.current.source), [start]);
+
   // Free the mic when leaving the page
   useEffect(() => releaseMic, [releaseMic]);
 
-  return { state, start, stop };
+  return { state, startMic, startDevice, restart, stop };
 }
