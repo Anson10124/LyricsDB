@@ -69,6 +69,10 @@ interface AmllPlayerProps {
   allowPreview?: boolean;
   // Previous/next song in fullscreen move to neighbouring track pages (default on)
   allowTrackNavigation?: boolean;
+  // Replaces play/pause and the seek bar, for pages where the position only
+  // comes from syncTo. There is then no fullscreen, and clicking a lyric line
+  // doesn't seek.
+  controls?: React.ReactNode;
 }
 
 export interface PlayerSyncPoint {
@@ -98,6 +102,20 @@ function formatTime(ms: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+// The floating glass bar at the bottom of the lyrics
+export function PlayerBar({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ ...spring.smooth, delay: 0.35 }}
+      className="absolute bottom-3 left-1/2 z-20 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-white/10 p-1 shadow-lg shadow-black/20 ring-1 ring-white/15 backdrop-blur-2xl"
+    >
+      {children}
+    </motion.div>
+  );
 }
 
 function PillButton({
@@ -143,7 +161,9 @@ export function AmllPlayer({
   syncTo,
   allowPreview = true,
   allowTrackNavigation = true,
+  controls,
 }: AmllPlayerProps) {
+  const followOnly = Boolean(controls);
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -453,12 +473,13 @@ export function AmllPlayer({
 
   const handleLineClick = useCallback(
     (event: LyricLineMouseEvent) => {
+      if (followOnly) return;
       const targetLine = lyricLines[event.lineIndex];
       if (targetLine?.startTime === undefined) return;
       handleSeek(targetLine.startTime);
       setIsPlaying(true);
     },
-    [lyricLines, handleSeek],
+    [lyricLines, handleSeek, followOnly],
   );
 
   const handleOpenFullscreen = useCallback(() => {
@@ -592,72 +613,71 @@ export function AmllPlayer({
           />
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ ...spring.smooth, delay: 0.35 }}
-          className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/10 p-1 shadow-lg shadow-black/20 ring-1 ring-white/15 backdrop-blur-2xl"
-        >
-          <PillButton
-            label={isPlaying ? "Pause" : "Play"}
-            onClick={handleTogglePlay}
-            prominent
-          >
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span
-                key={isPlaying ? "pause" : "play"}
-                initial={{ opacity: 0, scale: 0.5, rotate: -30 }}
-                animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                exit={{ opacity: 0, scale: 0.5, rotate: 30 }}
-                transition={spring.snappy}
-                className="flex"
+        <PlayerBar>
+          {controls ?? (
+            <>
+              <PillButton
+                label={isPlaying ? "Pause" : "Play"}
+                onClick={handleTogglePlay}
+                prominent
               >
-                {isPlaying ? (
-                  <Pause className="size-4 fill-current" />
-                ) : (
-                  <Play className="size-4 translate-x-px fill-current" />
-                )}
-              </motion.span>
-            </AnimatePresence>
-          </PillButton>
-          <div className="flex items-center gap-2 px-2 text-[11px] font-medium tabular-nums text-white/70">
-            <span className="w-8 text-right">{formatTime(currentTime)}</span>
-            {/* Drawn bar underneath, transparent native input on top for a tall hit area */}
-            <div className="group relative flex h-6 w-24 items-center sm:w-44">
-              <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-[height] group-hover:h-1.5">
-                {/* The stretch of the song the audio preview covers */}
-                {clip && (
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span
+                    key={isPlaying ? "pause" : "play"}
+                    initial={{ opacity: 0, scale: 0.5, rotate: -30 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.5, rotate: 30 }}
+                    transition={spring.snappy}
+                    className="flex"
+                  >
+                    {isPlaying ? (
+                      <Pause className="size-4 fill-current" />
+                    ) : (
+                      <Play className="size-4 translate-x-px fill-current" />
+                    )}
+                  </motion.span>
+                </AnimatePresence>
+              </PillButton>
+              <div className="flex items-center gap-2 px-2 text-[11px] font-medium tabular-nums text-white/70">
+                <span className="w-8 text-right">{formatTime(currentTime)}</span>
+                {/* Drawn bar underneath, transparent native input on top for a tall hit area */}
+                <div className="group relative flex h-6 w-24 items-center sm:w-44">
+                  <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-[height] group-hover:h-1.5">
+                    {/* The stretch of the song the audio preview covers */}
+                    {clip && (
+                      <div
+                        className="absolute inset-y-0 rounded-full bg-white/40"
+                        style={{
+                          left: `${Math.min(100, (clip.startMs / durationMs) * 100)}%`,
+                          width: `${Math.max(0, (Math.min(clip.endMs, durationMs) - clip.startMs) / durationMs) * 100}%`,
+                        }}
+                      />
+                    )}
+                    <div
+                      className="relative h-full rounded-full bg-white/90"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
                   <div
-                    className="absolute inset-y-0 rounded-full bg-white/40"
-                    style={{
-                      left: `${Math.min(100, (clip.startMs / durationMs) * 100)}%`,
-                      width: `${Math.max(0, (Math.min(clip.endMs, durationMs) - clip.startMs) / durationMs) * 100}%`,
-                    }}
+                    className="pointer-events-none absolute size-3 rounded-full bg-white shadow transition-transform group-hover:scale-125 group-has-[:focus-visible]:ring-2 group-has-[:focus-visible]:ring-white/50"
+                    style={{ left: `calc(${progressPercent}% - ${progressPercent * 0.12}px)` }}
                   />
-                )}
-                <div
-                  className="relative h-full rounded-full bg-white/90"
-                  style={{ width: `${progressPercent}%` }}
-                />
+                  <input
+                    type="range"
+                    min={0}
+                    max={durationMs}
+                    step={100}
+                    value={Math.min(currentTime, durationMs)}
+                    onChange={(e) => handleSeek(Number(e.target.value))}
+                    aria-label="Seek"
+                    aria-valuetext={`${formatTime(currentTime)} of ${formatTime(durationMs)}`}
+                    className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+                  />
+                </div>
+                <span className="w-8">{formatTime(durationMs)}</span>
               </div>
-              <div
-                className="pointer-events-none absolute size-3 rounded-full bg-white shadow transition-transform group-hover:scale-125 group-has-[:focus-visible]:ring-2 group-has-[:focus-visible]:ring-white/50"
-                style={{ left: `calc(${progressPercent}% - ${progressPercent * 0.12}px)` }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={durationMs}
-                step={100}
-                value={Math.min(currentTime, durationMs)}
-                onChange={(e) => handleSeek(Number(e.target.value))}
-                aria-label="Seek"
-                aria-valuetext={`${formatTime(currentTime)} of ${formatTime(durationMs)}`}
-                className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
-              />
-            </div>
-            <span className="w-8">{formatTime(durationMs)}</span>
-          </div>
+            </>
+          )}
           {hasTranslation && (
             <PillButton
               label={showTranslation ? "Hide translation" : "Show translation"}
@@ -699,10 +719,12 @@ export function AmllPlayer({
               )}
             </PillButton>
           )}
-          <PillButton label="Fullscreen" onClick={handleOpenFullscreen}>
-            <Maximize className="size-4" />
-          </PillButton>
-        </motion.div>
+          {!followOnly && (
+            <PillButton label="Fullscreen" onClick={handleOpenFullscreen}>
+              <Maximize className="size-4" />
+            </PillButton>
+          )}
+        </PlayerBar>
       </div>
 
       {clip && (

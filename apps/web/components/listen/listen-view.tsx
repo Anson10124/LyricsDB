@@ -8,15 +8,15 @@ import type { SanitizedTrack, TrackRecord } from "@repo/types";
 import { resolveTrackArtwork } from "@/lib/artwork";
 import { uniqueArtists } from "@/lib/utils";
 import { press, rise, spring, stagger } from "@/lib/motion";
-import { AmllPlayer } from "@/components/amll-player";
-import { CoverImage, optimizedCoverUrl } from "@/components/cover-image";
+import { AmllPlayer, PlayerBar } from "@/components/amll-player";
+import { optimizedCoverUrl } from "@/components/cover-image";
 import { SiteHeader } from "@/components/site-header";
 import { TrackBackground } from "@/components/track/track-background";
 import { useDeviceAudioSupport } from "@/lib/listen/device-audio-support";
 import { useListen, type ListenState, type ListenStatus } from "./use-listen";
 
-const glassButton =
-  "inline-flex items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white/85 ring-1 ring-white/15 backdrop-blur-xl transition-colors hover:bg-white/20 hover:text-white cursor-pointer";
+const barButton =
+  "inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-2 rounded-full text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer sm:px-3";
 
 const BUSY: ListenStatus[] = ["starting", "listening", "matching"];
 
@@ -170,11 +170,68 @@ function Following({
 }) {
   const [playing, setPlaying] = useState(true);
   const artwork = resolveTrackArtwork(track.artwork, 1000);
-  const cover = artwork.imageCover ? optimizedCoverUrl(artwork.imageCover, 400) : undefined;
   const artistLine = uniqueArtists(track.artists).join(", ") || "Unknown Artist";
   const lyrics = state.match?.lyrics;
   const following = state.status === "following";
   const busy = BUSY.includes(state.status);
+
+  const controls = (
+    <>
+      <div className="flex min-w-0 items-center" aria-live="polite">
+        {following ? (
+          <span className="inline-flex h-9 min-w-0 items-center gap-2 px-3 text-sm font-medium text-white/85">
+            <span className="relative flex size-2 shrink-0">
+              {state.relistening && (
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-300 opacity-75" />
+              )}
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-300" />
+            </span>
+            <span className="truncate">
+              {state.relistening ? "Checking the song…" : "Listening along"}
+            </span>
+          </span>
+        ) : (
+          <motion.button
+            type="button"
+            onClick={onStart}
+            disabled={busy}
+            whileTap={busy ? undefined : press}
+            title={busy ? undefined : "Lost the song"}
+            className="inline-flex h-9 min-w-0 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black transition-colors hover:bg-white/90 disabled:opacity-70 cursor-pointer"
+          >
+            {busy ? (
+              <LoaderCircle className="size-4 shrink-0 animate-spin" />
+            ) : (
+              <Mic className="size-4 shrink-0" />
+            )}
+            <span className="truncate">{busy ? promptText(state).title : "Listen again"}</span>
+          </motion.button>
+        )}
+      </div>
+      {following && (
+        <motion.button
+          type="button"
+          onClick={onStop}
+          whileTap={press}
+          aria-label="Stop"
+          title="Stop"
+          className={barButton}
+        >
+          <Square className="size-3.5 fill-current" />
+          <span className="hidden sm:inline">Stop</span>
+        </motion.button>
+      )}
+      <Link
+        href={`/track/${encodeURIComponent(track.id)}`}
+        aria-label="Track page"
+        title="Track page"
+        className={barButton}
+      >
+        <ExternalLink className="size-3.5" />
+        <span className="hidden sm:inline">Track page</span>
+      </Link>
+    </>
+  );
 
   return (
     <>
@@ -182,97 +239,35 @@ function Following({
         imageCover={artwork.imageCover ? optimizedCoverUrl(artwork.imageCover, 128) : undefined}
         playing={following && playing}
       />
-      <div className="relative z-10 mx-auto grid h-full w-full max-w-6xl grid-rows-[auto_minmax(0,1fr)] gap-6 px-5 pt-24 pb-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-14 lg:pb-8">
-        <motion.aside
-          variants={stagger(0.06, 0.1)}
-          initial="hidden"
-          animate="show"
-          className="flex flex-col gap-5 lg:justify-center"
-        >
-          <div className="flex items-center gap-4 lg:flex-col lg:items-stretch lg:gap-6">
-            <motion.div
-              key={track.id}
-              initial={{ opacity: 0, scale: 0.88, y: 16 }}
-              animate={{ opacity: 1, scale: following && playing ? 1 : 0.9, y: 0 }}
-              transition={{ ...spring.soft, opacity: { duration: 0.6 } }}
-              className="relative aspect-square w-24 shrink-0 overflow-hidden rounded-xl bg-white/10 shadow-2xl shadow-black/40 ring-1 ring-white/10 sm:w-32 lg:w-full lg:rounded-2xl"
-            >
-              {cover && (
-                <CoverImage src={cover} alt={track.album || track.title} sizes="(min-width: 1024px) 400px, 128px" />
-              )}
-            </motion.div>
-            <motion.div variants={rise} className="flex min-w-0 flex-col gap-1">
-              <h1
-                className="line-clamp-2 text-2xl font-bold leading-tight tracking-tight text-balance sm:text-3xl"
-                title={track.title}
-              >
-                {track.title}
-              </h1>
-              <p className="truncate text-base font-medium text-white/75 sm:text-lg">{artistLine}</p>
-            </motion.div>
-          </div>
-
-          <motion.div variants={rise} className="flex flex-wrap items-center gap-2" aria-live="polite">
-            {following ? (
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-sm font-medium text-white/85 ring-1 ring-white/15 backdrop-blur-xl">
-                <span className="relative flex size-2">
-                  {state.relistening && (
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-300 opacity-75" />
-                  )}
-                  <span className="relative inline-flex size-2 rounded-full bg-emerald-300" />
-                </span>
-                {state.relistening ? "Checking the song…" : "Listening along"}
-              </span>
-            ) : (
-              <motion.button
-                type="button"
-                onClick={onStart}
-                disabled={busy}
-                whileTap={busy ? undefined : press}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-black/20 transition-colors hover:bg-white/90 disabled:opacity-70 cursor-pointer"
-              >
-                {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Mic className="size-4" />}
-                {busy ? promptText(state).title : "Lost the song · Listen again"}
-              </motion.button>
-            )}
-            {following && (
-              <motion.button type="button" onClick={onStop} whileTap={press} className={glassButton}>
-                <Square className="size-3.5 fill-current" />
-                Stop
-              </motion.button>
-            )}
-            <Link href={`/track/${encodeURIComponent(track.id)}`} className={glassButton}>
-              <ExternalLink className="size-3.5" />
-              Track page
-            </Link>
-          </motion.div>
-        </motion.aside>
-
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="relative min-h-0"
-          aria-label="Lyrics"
-        >
-          {lyrics && lyrics.length > 0 && state.syncTo ? (
-            <AmllPlayer
-              track={track}
-              rawLyrics={lyrics}
-              syncTo={state.syncTo}
-              allowPreview={false}
-              allowTrackNavigation={false}
-              onPlayingChange={setPlaying}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-center">
-              <p className="max-w-xs text-lg font-medium text-white/70 text-balance">
-                No synced lyrics for this song yet.
-              </p>
+      <motion.section
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className="relative z-10 mx-auto h-full w-full max-w-4xl px-5 pt-20 pb-6 lg:pb-8"
+        aria-label="Lyrics"
+      >
+        {lyrics && lyrics.length > 0 && state.syncTo ? (
+          <AmllPlayer
+            track={track}
+            rawLyrics={lyrics}
+            syncTo={state.syncTo}
+            allowPreview={false}
+            allowTrackNavigation={false}
+            onPlayingChange={setPlaying}
+            controls={controls}
+          />
+        ) : (
+          <div className="relative flex h-full items-center justify-center text-center">
+            {/* Names the song, as there are no lyrics to recognise it by */}
+            <div className="flex max-w-xs flex-col gap-2 text-balance">
+              <h1 className="text-2xl font-bold tracking-tight">{track.title}</h1>
+              <p className="text-base font-medium text-white/75">{artistLine}</p>
+              <p className="text-sm text-white/55">No synced lyrics for this song yet.</p>
             </div>
-          )}
-        </motion.section>
-      </div>
+            <PlayerBar>{controls}</PlayerBar>
+          </div>
+        )}
+      </motion.section>
     </>
   );
 }
