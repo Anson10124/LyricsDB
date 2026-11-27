@@ -133,16 +133,6 @@ function ListenPrompt({
         <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">{text.title}</h1>
         <p className="text-base text-white/70 text-balance">{state.error ?? text.detail}</p>
       </motion.div>
-      {state.status === "idle" && (
-        <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance">
-          Your audio stays on your device. Only audio fingerprint is sent to our server and NetEase Cloud Music for recognition.
-        </motion.p>
-      )}
-      {pickingShare && (
-        <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance">
-          Your screen isn&apos;t recorded or sent anywhere. Only the audio fingerprint is used for recognition.
-        </motion.p>
-      )}
       {deviceSupported && DEVICE_OFFER.includes(state.status) && (
         <motion.button
           type="button"
@@ -152,6 +142,16 @@ function ListenPrompt({
         >
           Playing on this device?
         </motion.button>
+      )}
+      {state.status === "idle" && (
+        <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance fixed bottom-4">
+          Your audio stays on your device. Only audio fingerprint is sent to our server and NetEase Cloud Music for recognition.
+        </motion.p>
+      )}
+      {pickingShare && (
+        <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance fixed bottom-4">
+          Your screen isn&apos;t recorded or sent anywhere. Only the audio fingerprint is used for recognition.
+        </motion.p>
       )}
     </motion.div>
   );
