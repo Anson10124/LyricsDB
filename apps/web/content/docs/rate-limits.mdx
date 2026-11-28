@@ -54,7 +54,7 @@ This budget is separate from the two above, so filling in a track's missing IDs 
 #### Song Recognition (12 RPM per IP)
 - `POST /api/match` *(identifies the song in a fingerprinted audio clip)*
 
-This budget is separate as well, and allows re-listening every ~25 seconds while following a song, with room for retries. Over the limit, the response is `429` with a `Retry-After-medium` header. A match normally answers from tracks already in the database; when the song isn't indexed yet, fetching it also counts toward the 6 RPM uncached limit (at most one per match). Recognition itself goes through NetEase, so while NetEase is cooling down it fails with `503`.
+This budget is separate as well, and allows re-listening every ~25 seconds while following a song, with room for retries. Over the limit, the response is `429` with a `Retry-After-medium` header. A match normally answers from tracks already in the database; when the song isn't indexed yet, fetching it also counts toward the 6 RPM uncached limit (at most one per match). Recognition itself goes through Shazam and/or NetEase. With `provider: "auto"`, a provider that is cooling down is skipped in favour of the other; the request fails with `503` only when every provider it may use is cooling down. Shazam allows only a few requests a minute per server, so while following a song `auto` asks NetEase first.
 
 ```mermaid
 flowchart TD
@@ -105,6 +105,7 @@ In addition to client IP throttling, LyricsDB manages outbound concurrency, rate
 | **Deezer** | 4 concurrent | 60 RPM | 60s exponential backoff |
 | **Apple Music** | 5 concurrent | 60 RPM | 60s exponential backoff |
 | **NetEase** | 5 concurrent | 120 RPM | 60s exponential backoff |
+| **Shazam** | 2 concurrent | 10 RPM | 60s exponential backoff; queued requests give up after 3s |
 | **QQ Music** | 4 concurrent | 60 RPM | 60s exponential backoff |
 | **Musixmatch** | 2 concurrent | 30 RPM | Immediate 120s cooldown on captcha/rate limit |
 | **LRCLIB** | 3 concurrent | 30 RPM | 60s backoff |

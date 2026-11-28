@@ -3221,7 +3221,7 @@
     },
     "/api/match": {
       "post": {
-        "description": "Recognises the song in a short audio clip, like Shazam, and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a fingerprint made by NetEase's afp.wasm (the /listen page makes it in the browser; no audio is uploaded) and matched with NetEase's song recognition. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
+        "description": "Recognises the song in a short audio clip and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a Shazam signature, a NetEase fingerprint (made by NetEase's afp.wasm), or both; the /listen page makes them in the browser, so no audio is uploaded. `provider` picks the service: auto (the default) asks Shazam first for a new song and NetEase first while following one (expectedTrackId set), falling back to the other when the first hears nothing, can't load the song, or is busy. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
         "operationId": "MatchController_match[0]",
         "parameters": [],
         "requestBody": {
@@ -3246,7 +3246,7 @@
             }
           },
           "400": {
-            "description": "Missing or malformed fingerprint",
+            "description": "Missing or malformed fingerprint or shazamSignature",
             "content": {
               "application/json": {
                 "schema": {
@@ -3256,7 +3256,7 @@
             }
           },
           "404": {
-            "description": "No song matched the clip (the body carries NetEase's noMatchReason)",
+            "description": "No song matched the clip (a NetEase miss carries its noMatchReason)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3276,7 +3276,7 @@
             }
           },
           "502": {
-            "description": "NetEase's song recognition failed",
+            "description": "The song recognition service failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3286,7 +3286,7 @@
             }
           },
           "503": {
-            "description": "NetEase is cooling down after errors or rate limits; try again later",
+            "description": "Shazam or NetEase is cooling down after errors or rate limits; try again later",
             "content": {
               "application/json": {
                 "schema": {
@@ -3304,7 +3304,7 @@
     },
     "/match": {
       "post": {
-        "description": "Recognises the song in a short audio clip, like Shazam, and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a fingerprint made by NetEase's afp.wasm (the /listen page makes it in the browser; no audio is uploaded) and matched with NetEase's song recognition. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
+        "description": "Recognises the song in a short audio clip and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a Shazam signature, a NetEase fingerprint (made by NetEase's afp.wasm), or both; the /listen page makes them in the browser, so no audio is uploaded. `provider` picks the service: auto (the default) asks Shazam first for a new song and NetEase first while following one (expectedTrackId set), falling back to the other when the first hears nothing, can't load the song, or is busy. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
         "operationId": "MatchController_match[1]",
         "parameters": [],
         "requestBody": {
@@ -3329,7 +3329,7 @@
             }
           },
           "400": {
-            "description": "Missing or malformed fingerprint",
+            "description": "Missing or malformed fingerprint or shazamSignature",
             "content": {
               "application/json": {
                 "schema": {
@@ -3339,7 +3339,7 @@
             }
           },
           "404": {
-            "description": "No song matched the clip (the body carries NetEase's noMatchReason)",
+            "description": "No song matched the clip (a NetEase miss carries its noMatchReason)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3359,7 +3359,7 @@
             }
           },
           "502": {
-            "description": "NetEase's song recognition failed",
+            "description": "The song recognition service failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3369,7 +3369,7 @@
             }
           },
           "503": {
-            "description": "NetEase is cooling down after errors or rate limits; try again later",
+            "description": "Shazam or NetEase is cooling down after errors or rate limits; try again later",
             "content": {
               "application/json": {
                 "schema": {
@@ -4367,12 +4367,27 @@
         "properties": {
           "fingerprint": {
             "type": "string",
-            "description": "Base64 audio fingerprint of a short clip, as made by NetEase's afp.wasm (lyricsdb's /listen page makes it in the browser from 3 s of 8 kHz mono audio)",
+            "description": "Base64 audio fingerprint of a short clip, as made by NetEase's afp.wasm (lyricsdb's /listen page makes it in the browser from 3 s of 8 kHz mono audio). Needed for NetEase; send it, `shazamSignature`, or both",
             "example": "LZ/yfarQHqXkyBgtLEu/LzGrKMGmJUfwlNVxidKfSVJL…"
+          },
+          "shazamSignature": {
+            "type": "string",
+            "description": "Shazam signature of a clip of up to 12 s, as a data URI (lyricsdb's /listen page makes it in the browser from 16 kHz mono audio). Needed for Shazam",
+            "example": "data:audio/vnd.shazam.sig;base64,gCX+yp0u…"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "shazam",
+              "netease"
+            ],
+            "default": "auto",
+            "description": "Which song recognition to use. auto tries Shazam then NetEase for a new song, and NetEase then Shazam while following one (expectedTrackId set); either is skipped when its input is missing"
           },
           "duration": {
             "type": "number",
-            "description": "Length of the fingerprinted clip in seconds (default 3)",
+            "description": "Length of the NetEase-fingerprinted clip in seconds (default 3)",
             "example": 3
           },
           "expectedTrackId": {
@@ -4385,10 +4400,7 @@
             "description": "While following a song: where in it the listener expects this clip to start, in ms. Helps pick the right repeat of a chorus",
             "example": 74500
           }
-        },
-        "required": [
-          "fingerprint"
-        ]
+        }
       },
       "AudioMatchCandidateDto": {
         "type": "object",
@@ -4438,6 +4450,58 @@
           "offsetMs"
         ]
       },
+      "ShazamMatchCandidateDto": {
+        "type": "object",
+        "properties": {
+          "shazamKey": {
+            "type": "string",
+            "example": "822309103",
+            "description": "Shazam track key"
+          },
+          "title": {
+            "type": "string",
+            "example": "All At Once"
+          },
+          "artists": {
+            "example": [
+              "Madison Beer"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "album": {
+            "type": "string",
+            "example": "F1 The Album",
+            "nullable": true
+          },
+          "isrc": {
+            "type": "string",
+            "example": "USAT22503087",
+            "nullable": true
+          },
+          "appleMusicId": {
+            "type": "string",
+            "example": "1821963553",
+            "nullable": true
+          },
+          "offsetMs": {
+            "type": "number",
+            "example": 30000,
+            "description": "Where in this song the clip started, in ms"
+          }
+        },
+        "required": [
+          "shazamKey",
+          "title",
+          "artists",
+          "album",
+          "isrc",
+          "appleMusicId",
+          "offsetMs"
+        ]
+      },
       "AudioMatchResponseDto": {
         "type": "object",
         "properties": {
@@ -4462,19 +4526,40 @@
               "type": "object"
             }
           },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "shazam",
+              "netease"
+            ],
+            "example": "shazam",
+            "description": "The service that recognised the clip"
+          },
           "candidates": {
-            "description": "Every upload NetEase heard in the clip, best guess first",
+            "description": "Every upload NetEase heard in the clip, best guess first (empty when Shazam answered)",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AudioMatchCandidateDto"
             }
+          },
+          "shazam": {
+            "nullable": true,
+            "description": "The song Shazam heard, when Shazam answered",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShazamMatchCandidateDto"
+              }
+            ]
           }
         },
         "required": [
           "track",
           "offsetMs",
           "lyrics",
-          "candidates"
+          "provider",
+          "candidates",
+          "shazam"
         ]
       }
     }
