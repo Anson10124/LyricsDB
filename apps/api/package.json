@@ -20,6 +20,7 @@
     "@nestjs/platform-express": "^11.0.11",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/throttler": "^6.5.0",
+    "@repo/audio-fingerprint": "workspace:*",
     "@repo/database": "workspace:*",
     "@repo/lyrics": "workspace:*",
     "@repo/music-resolver": "workspace:*",

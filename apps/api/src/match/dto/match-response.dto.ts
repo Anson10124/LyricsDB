@@ -21,6 +21,29 @@ export class AudioMatchCandidateDto {
   offsetMs!: number;
 }
 
+export class ShazamMatchCandidateDto {
+  @ApiProperty({ example: "822309103", description: "Shazam track key" })
+  shazamKey!: string;
+
+  @ApiProperty({ example: "All At Once" })
+  title!: string;
+
+  @ApiProperty({ example: ["Madison Beer"], type: [String] })
+  artists!: string[];
+
+  @ApiProperty({ example: "F1 The Album", nullable: true, type: String })
+  album!: string | null;
+
+  @ApiProperty({ example: "USAT22503087", nullable: true, type: String })
+  isrc!: string | null;
+
+  @ApiProperty({ example: "1821963553", nullable: true, type: String })
+  appleMusicId!: string | null;
+
+  @ApiProperty({ example: 30000, description: "Where in this song the clip started, in ms" })
+  offsetMs!: number;
+}
+
 export class AudioMatchResponseDto {
   @ApiProperty({ type: SanitizedTrackDto, description: "The recording the clip is from" })
   track!: SanitizedTrackDto;
@@ -40,8 +63,22 @@ export class AudioMatchResponseDto {
   lyrics!: unknown[] | null;
 
   @ApiProperty({
+    enum: ["shazam", "netease"],
+    example: "shazam",
+    description: "The service that recognised the clip",
+  })
+  provider!: "shazam" | "netease";
+
+  @ApiProperty({
     type: [AudioMatchCandidateDto],
-    description: "Every upload NetEase heard in the clip, best guess first",
+    description: "Every upload NetEase heard in the clip, best guess first (empty when Shazam answered)",
   })
   candidates!: AudioMatchCandidateDto[];
+
+  @ApiProperty({
+    type: ShazamMatchCandidateDto,
+    nullable: true,
+    description: "The song Shazam heard, when Shazam answered",
+  })
+  shazam!: ShazamMatchCandidateDto | null;
 }

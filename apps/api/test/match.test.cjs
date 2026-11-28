@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const {
   BadGatewayException,
+  BadRequestException,
   NotFoundException,
   ServiceUnavailableException,
 } = require("@nestjs/common");
@@ -131,13 +132,19 @@ function fakeTracks({ stored = {}, synced = {}, byId = {} } = {}) {
   };
 }
 
-function sources({ heard = HEARD, deezer = null, fail } = {}) {
-  const calls = { deezer: 0 };
+function sources({ heard = HEARD, deezer = null, fail, shazam = null, shazamFail } = {}) {
+  const calls = { deezer: 0, netease: 0, shazam: [] };
   return {
     calls,
     matchAudio: async () => {
+      calls.netease++;
       if (fail) throw fail;
       return heard;
+    },
+    matchShazam: async (uri, sampleMs) => {
+      calls.shazam.push(sampleMs);
+      if (shazamFail) throw shazamFail;
+      return { match: shazam, retryMs: null };
     },
     searchDeezer: async () => {
       calls.deezer++;
@@ -333,4 +340,196 @@ test("has its own per-IP rate limit", () => {
   assert.equal(MATCH_LIMIT_PER_MINUTE, 12);
   assert.equal(Reflect.getMetadata("THROTTLER:LIMITmedium", handler), 12);
   assert.equal(Reflect.getMetadata("THROTTLER:TTLmedium", handler), 60_000);
+});
+
+// --- Shazam ---
+
+const { encodeShazamSignature } = require("@repo/audio-fingerprint");
+
+// A well-formed 5 s signature (the fake Shazam doesn't read the peaks)
+const SIGNATURE = `data:audio/vnd.shazam.sig;base64,${Buffer.from(
+  encodeShazamSignature({
+    sampleCount: 80_000,
+    bands: new Map([[1, [{ pass: 10, magnitude: 9000, bin: 4000 }]]]),
+  }),
+).toString("base64")}`;
+
+// What Shazam names for a clip of the original, 52 s in
+const SHAZAM_HIT = {
+  shazamKey: "540880420",
+  title: "I Really Want to Stay at Your House",
+  artist: "Rosa Walton & Hallie Coggins",
+  album: "Cyberpunk 2077 (Original Soundtrack)",
+  isrc: "USLS52081705",
+  appleMusicId: "1544390331",
+  offsetMs: 52_000,
+};
+
+const BOTH = { ...DTO, shazamSignature: SIGNATURE };
+
+test("auto asks Shazam first and finds the indexed release by ISRC", async () => {
+  const tracksService = fakeTracks({ stored: { "isrc:USLS52081705": ORIGINAL } });
+  const src = sources({ shazam: SHAZAM_HIT });
+  const service = new MatchService(fakeDb([]), tracksService, src);
+
+  const res = await service.match(BOTH, "1.2.3.4");
+
+  assert.equal(res.provider, "shazam");
+  assert.equal(res.track.id, ORIGINAL.id);
+  assert.equal(res.offsetMs, 52_000);
+  assert.equal(res.shazam.isrc, "USLS52081705");
+  assert.deepEqual(res.candidates, []);
+  // The clip length comes from the signature, not the client
+  assert.deepEqual(src.calls.shazam, [5000]);
+  assert.equal(src.calls.netease, 0);
+  assert.deepEqual(tracksService.calls.sync, []);
+});
+
+test("syncs Shazam's Apple Music entry when it isn't indexed", async () => {
+  const tracksService = fakeTracks({ synced: { "apple:1544390331": ORIGINAL } });
+  const src = sources({ shazam: SHAZAM_HIT });
+  const service = new MatchService(fakeDb([]), tracksService, src);
+
+  const res = await service.match(BOTH, "1.2.3.4");
+
+  assert.equal(res.track.id, ORIGINAL.id);
+  assert.deepEqual(tracksService.calls.sync, ["apple:1544390331"]);
+  // The one live fetch was spent on Apple Music
+  assert.equal(src.calls.deezer, 0);
+});
+
+test("falls back to NetEase when Shazam hears nothing", async () => {
+  const src = sources({ shazam: null });
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    fakeTracks(),
+    src,
+  );
+
+  const res = await service.match(BOTH, "1.2.3.4");
+
+  assert.equal(res.provider, "netease");
+  assert.equal(res.track.id, ORIGINAL.id);
+  assert.equal(res.shazam, null);
+  assert.equal(src.calls.shazam.length, 1);
+});
+
+test("falls back to NetEase when Shazam is rate limited", async () => {
+  const src = sources({ shazamFail: new ProviderRateLimitedError("shazam", 60) });
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    fakeTracks(),
+    src,
+  );
+
+  const res = await service.match(BOTH, "1.2.3.4");
+
+  assert.equal(res.provider, "netease");
+});
+
+test("falls back to NetEase when Shazam's song can't be loaded", async () => {
+  // Nothing indexed and Apple Music has no such entry
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    fakeTracks(),
+    sources({ shazam: SHAZAM_HIT }),
+  );
+
+  const res = await service.match(BOTH, "1.2.3.4");
+
+  assert.equal(res.provider, "netease");
+});
+
+test("Shazam only doesn't fall back", async () => {
+  const src = sources({ shazam: null });
+  const service = new MatchService(fakeDb([]), fakeTracks(), src);
+
+  await assert.rejects(service.match({ ...BOTH, provider: "shazam" }, "1.2.3.4"), NotFoundException);
+  assert.equal(src.calls.netease, 0);
+});
+
+test("NetEase only doesn't ask Shazam", async () => {
+  const src = sources({ shazam: SHAZAM_HIT });
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    fakeTracks(),
+    src,
+  );
+
+  const res = await service.match({ ...BOTH, provider: "netease" }, "1.2.3.4");
+
+  assert.equal(res.provider, "netease");
+  assert.deepEqual(src.calls.shazam, []);
+});
+
+test("a fingerprint alone still works with the default mode", async () => {
+  const src = sources({ shazam: SHAZAM_HIT });
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    fakeTracks(),
+    src,
+  );
+
+  const res = await service.match(DTO, "1.2.3.4");
+
+  assert.equal(res.provider, "netease");
+  assert.deepEqual(src.calls.shazam, []);
+});
+
+test("a signature alone is answered by Shazam", async () => {
+  const tracksService = fakeTracks({ stored: { "isrc:USLS52081705": ORIGINAL } });
+  const service = new MatchService(fakeDb([]), tracksService, sources({ shazam: SHAZAM_HIT }));
+
+  const res = await service.match({ shazamSignature: SIGNATURE }, "1.2.3.4");
+
+  assert.equal(res.provider, "shazam");
+});
+
+test("rejects a request without the input its provider needs", async () => {
+  const service = new MatchService(fakeDb([]), fakeTracks(), sources());
+  await assert.rejects(service.match({ provider: "shazam", ...DTO }, "1.2.3.4"), BadRequestException);
+  await assert.rejects(service.match({}, "1.2.3.4"), BadRequestException);
+});
+
+test("rejects a malformed signature without calling Shazam", async () => {
+  const src = sources({ shazam: SHAZAM_HIT });
+  const service = new MatchService(fakeDb([]), fakeTracks(), src);
+
+  await assert.rejects(
+    service.match({ shazamSignature: "data:audio/vnd.shazam.sig;base64,AAAA" }, "1.2.3.4"),
+    BadRequestException,
+  );
+  assert.deepEqual(src.calls.shazam, []);
+});
+
+test("while following, auto asks NetEase first", async () => {
+  const tracksService = fakeTracks({ byId: { [ORIGINAL.id]: ORIGINAL } });
+  const src = sources({ shazam: SHAZAM_HIT });
+  const service = new MatchService(fakeDb([]), tracksService, src);
+
+  const res = await service.match(
+    { ...BOTH, expectedTrackId: ORIGINAL.id, expectedOffsetMs: 52_500 },
+    "1.2.3.4",
+  );
+
+  assert.equal(res.provider, "netease");
+  assert.equal(res.track.id, ORIGINAL.id);
+  assert.deepEqual(src.calls.shazam, []);
+});
+
+test("while following, Shazam confirms the followed track by title and position", async () => {
+  // Found through NetEase earlier, so it has neither the ISRC nor the Apple ID
+  const followed = track("0b0e9f8c-2c55-4a2b-9d38-0c6a1f7f1a11", { durationMs: 246652 });
+  const tracksService = fakeTracks({ byId: { [followed.id]: followed } });
+  const src = sources({ heard: { candidates: [], noMatchReason: 0 }, shazam: SHAZAM_HIT });
+  const service = new MatchService(fakeDb([]), tracksService, src);
+
+  const res = await service.match(
+    { ...BOTH, expectedTrackId: followed.id, expectedOffsetMs: 51_000 },
+    "1.2.3.4",
+  );
+
+  assert.equal(res.provider, "shazam");
+  assert.equal(res.track.id, followed.id);
+  assert.deepEqual(tracksService.calls.sync, []);
 });

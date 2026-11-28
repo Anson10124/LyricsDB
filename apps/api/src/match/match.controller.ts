@@ -28,17 +28,17 @@ export class MatchController {
   @ApiOperation({
     summary: "Identify a song from an audio fingerprint",
     description:
-      "Recognises the song in a short audio clip, like Shazam, and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a fingerprint made by NetEase's afp.wasm (the /listen page makes it in the browser; no audio is uploaded) and matched with NetEase's song recognition. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
+      "Recognises the song in a short audio clip and returns the track, where in it the clip started, and its synced lyrics. The clip is sent as a Shazam signature, a NetEase fingerprint (made by NetEase's afp.wasm), or both; the /listen page makes them in the browser, so no audio is uploaded. `provider` picks the service: auto (the default) asks Shazam first for a new song and NetEase first while following one (expectedTrackId set), falling back to the other when the first hears nothing, can't load the song, or is busy. When the uploads NetEase hears are covers of the original, the original recording is returned. Limited to 12 matches per minute per IP, separately from other endpoints; a match that finds a track not yet indexed also counts toward the uncached lyrics limit.",
   })
   @ApiBody({ type: MatchAudioDto })
   @ApiOkResponse({ type: AudioMatchResponseDto })
   @ApiBadRequestResponse({
     type: ErrorResponseDto,
-    description: "Missing or malformed fingerprint",
+    description: "Missing or malformed fingerprint or shazamSignature",
   })
   @ApiNotFoundResponse({
     type: ErrorResponseDto,
-    description: "No song matched the clip (the body carries NetEase's noMatchReason)",
+    description: "No song matched the clip (a NetEase miss carries its noMatchReason)",
   })
   @ApiTooManyRequestsResponse({
     type: ErrorResponseDto,
@@ -47,11 +47,11 @@ export class MatchController {
   @ApiResponse({
     status: 502,
     type: ErrorResponseDto,
-    description: "NetEase's song recognition failed",
+    description: "The song recognition service failed",
   })
   @ApiServiceUnavailableResponse({
     type: ErrorResponseDto,
-    description: "NetEase is cooling down after errors or rate limits; try again later",
+    description: "Shazam or NetEase is cooling down after errors or rate limits; try again later",
   })
   // Its own budget: overriding the global "medium" throttler gives this route a
   // separate per-IP limit
