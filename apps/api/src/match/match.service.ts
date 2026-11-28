@@ -102,6 +102,11 @@ function titleKey(title: string): string {
   return cleanSearchQuery(title).toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
+// The title key without any bracketed parts
+function bareTitleKey(title: string): string {
+  return titleKey(cleanSearchQuery(title).replace(/[([（【][^)\]）】]*[)\]）】]/g, " "));
+}
+
 @Injectable()
 export class MatchService {
   private readonly logger = new Logger(MatchService.name);
@@ -318,7 +323,7 @@ export class MatchService {
     return (
       dto.expectedOffsetMs !== undefined &&
       Math.abs(match.offsetMs - dto.expectedOffsetMs) <= AUDIO_MATCH_EXPECTED_TOLERANCE_MS &&
-      this.isSameSong(track, heard)
+      this.isFollowedSong(track, heard)
     );
   }
 
@@ -369,9 +374,35 @@ export class MatchService {
     // Still on the song the listener is following: no need to look it up again
     if (this.isFollowedPosition(group, dto)) {
       const expected = await this.tracksService.findById(dto.expectedTrackId!, clientIp);
-      if (this.isSameSong(expected, group)) return expected;
+      if (this.isFollowedSong(expected, group)) return expected;
+      // The followed track may have come from Shazam under a different title;
+      // if NetEase's upload resolves to the same release, keep following it
+      const resolved = await this.resolveGroup(group, clientIp, lookups);
+      return this.isSameRelease(resolved, expected) ? expected : resolved;
     }
     return this.resolveGroup(group, clientIp, lookups);
+  }
+
+  // The followed track is the song heard at the expected position. Titles are
+  // compared without bracketed parts, as services name one release differently
+  // ("Underdog" vs "Underdog (From F1® The Movie)"); length and version tags
+  // must still agree.
+  private isFollowedSong(track: Track, heard: HeardRecording): boolean {
+    return (
+      bareTitleKey(track.title) === bareTitleKey(heard.cleanTitle) &&
+      isSameRecording(storedRecordingInfo(track), {
+        title: heard.cleanTitle,
+        durationMs: heard.durationMs,
+      })
+    );
+  }
+
+  private isSameRelease(a: Track, b: Track): boolean {
+    return (
+      a.id === b.id ||
+      Boolean(a.isrc && a.isrc === b.isrc) ||
+      Boolean(a.appleMusicId && a.appleMusicId === b.appleMusicId)
+    );
   }
 
   // The best track for a recording NetEase heard. The uploads it names are often

@@ -533,3 +533,45 @@ test("while following, Shazam confirms the followed track by title and position"
   assert.equal(res.track.id, followed.id);
   assert.deepEqual(tracksService.calls.sync, []);
 });
+
+test("NetEase keeps following a track Shazam found under a longer title", async () => {
+  const followed = track("7a3c2f10-5b6e-4c1d-8e9f-0a1b2c3d4e5f", {
+    title: "I Really Want to Stay at Your House (From Cyberpunk 2077)",
+    durationMs: 246652,
+    isrc: "USLS52081705",
+  });
+  const tracksService = fakeTracks({ byId: { [followed.id]: followed } });
+  const db = fakeDb([]);
+  const service = new MatchService(db, tracksService, sources());
+
+  const res = await service.match(
+    { ...DTO, expectedTrackId: followed.id, expectedOffsetMs: 52_500 },
+    "1.2.3.4",
+  );
+
+  assert.equal(res.provider, "netease");
+  assert.equal(res.track.id, followed.id);
+  assert.deepEqual(db.calls, []);
+});
+
+test("NetEase keeps following when its upload resolves to the same release", async () => {
+  // Named differently enough that the titles can't be compared
+  const followed = track("9c8b7a65-4d3e-4f2a-9b1c-8d7e6f5a4b3c", {
+    title: "Stay at Your House",
+    durationMs: 246652,
+    isrc: ORIGINAL.isrc,
+  });
+  const tracksService = fakeTracks({ byId: { [followed.id]: followed } });
+  const service = new MatchService(
+    fakeDb([AI_COVER, CANTONESE, LONG_EDIT, ORIGINAL]),
+    tracksService,
+    sources(),
+  );
+
+  const res = await service.match(
+    { ...DTO, expectedTrackId: followed.id, expectedOffsetMs: 52_500 },
+    "1.2.3.4",
+  );
+
+  assert.equal(res.track.id, followed.id);
+});
