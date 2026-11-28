@@ -58,5 +58,5 @@ export {
 } from "./shazam/signature.js";
 
 // Clip length sent to Shazam. Longer clips match more often but take longer
-// to hear; Shazam accepts up to 12 s.
-export const SHAZAM_CLIP_SECONDS = 5;
+// to hear; Shazam accepts up to 12 s. Real recordings matched from 3-4 s.
+export const SHAZAM_CLIP_SECONDS = 4;
