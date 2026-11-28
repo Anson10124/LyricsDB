@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AudioLines, ExternalLink, LoaderCircle, Mic, MicOff, Square } from "lucide-react";
-import type { SanitizedTrack, TrackRecord } from "@repo/types";
+import type { AudioMatchMode, SanitizedTrack, TrackRecord } from "@repo/types";
 import { resolveTrackArtwork } from "@/lib/artwork";
 import { uniqueArtists } from "@/lib/utils";
 import { press, rise, spring, stagger } from "@/lib/motion";
@@ -13,7 +13,62 @@ import { optimizedCoverUrl } from "@/components/cover-image";
 import { SiteHeader } from "@/components/site-header";
 import { TrackBackground } from "@/components/track/track-background";
 import { useDeviceAudioSupport } from "@/lib/listen/device-audio-support";
-import { useListen, type ListenState, type ListenStatus } from "./use-listen";
+import { LISTEN_MODES, useListen, type ListenState, type ListenStatus } from "./use-listen";
+
+const MODE_LABELS: Record<AudioMatchMode, string> = {
+  auto: "Auto",
+  shazam: "Shazam",
+  netease: "NetEase",
+};
+
+const MODE_HINTS: Record<AudioMatchMode, string> = {
+  auto: "Shazam first, NetEase if it doesn't know the song",
+  shazam: "Only Shazam",
+  netease: "Only NetEase Cloud Music",
+};
+
+// Who gets the fingerprint in each mode, for the privacy note
+const MODE_RECIPIENTS: Record<AudioMatchMode, string> = {
+  auto: "Shazam and NetEase Cloud Music",
+  shazam: "Shazam",
+  netease: "NetEase Cloud Music",
+};
+
+// Picks which song recognition to use
+function ModePicker({
+  mode,
+  onChange,
+}: {
+  mode: AudioMatchMode;
+  onChange: (mode: AudioMatchMode) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Song recognition"
+      className="inline-flex items-center gap-1 rounded-full bg-white/10 p-1 ring-1 ring-white/15"
+    >
+      {LISTEN_MODES.map((option) => {
+        const selected = option === mode;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            title={MODE_HINTS[option]}
+            onClick={() => onChange(option)}
+            className={`h-7 rounded-full px-3 text-xs font-medium transition-colors cursor-pointer ${
+              selected ? "bg-white text-black" : "text-white/65 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            {MODE_LABELS[option]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const barButton =
   "inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-2 rounded-full text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer sm:px-3";
@@ -109,10 +164,14 @@ function ListenButton({
 
 function ListenPrompt({
   state,
+  mode,
+  onModeChange,
   onStart,
   onStartDevice,
 }: {
   state: ListenState;
+  mode: AudioMatchMode;
+  onModeChange: (mode: AudioMatchMode) => void;
   onStart: () => void;
   onStartDevice: () => void;
 }) {
@@ -143,9 +202,15 @@ function ListenPrompt({
           Playing on this device?
         </motion.button>
       )}
+      {DEVICE_OFFER.includes(state.status) && (
+        <motion.div variants={rise} className="-mt-2">
+          <ModePicker mode={mode} onChange={onModeChange} />
+        </motion.div>
+      )}
       {state.status === "idle" && (
         <motion.p variants={rise} className="max-w-xs text-xs text-white/50 text-balance fixed bottom-4">
-          Your audio stays on your device. Only audio fingerprint is sent to our server and NetEase Cloud Music for recognition.
+          Your audio stays on your device. Only an audio fingerprint is sent to our server and{" "}
+          {MODE_RECIPIENTS[mode]} for recognition.
         </motion.p>
       )}
       {pickingShare && (
@@ -189,6 +254,11 @@ function Following({
             <span className="truncate">
               {state.relistening ? "Checking the song…" : "Listening along"}
             </span>
+            {state.match && (
+              <span className="hidden shrink-0 text-xs font-normal text-white/50 sm:inline">
+                via {MODE_LABELS[state.match.provider]}
+              </span>
+            )}
           </span>
         ) : (
           <motion.button
@@ -273,7 +343,7 @@ function Following({
 }
 
 export function ListenView() {
-  const { state, startMic, startDevice, restart, stop } = useListen();
+  const { state, mode, setMode, startMic, startDevice, restart, stop } = useListen();
   const track = state.match?.track;
 
   return (
@@ -299,7 +369,13 @@ export function ListenView() {
             exit={{ opacity: 0 }}
           >
             <TrackBackground playing={false} />
-            <ListenPrompt state={state} onStart={startMic} onStartDevice={startDevice} />
+            <ListenPrompt
+              state={state}
+              mode={mode}
+              onModeChange={setMode}
+              onStart={startMic}
+              onStartDevice={startDevice}
+            />
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,10 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AudioMatchResponse } from "@repo/types";
+import type { AudioMatchMode, AudioMatchResponse } from "@repo/types";
 import { FP_CLIP_SECONDS } from "@repo/audio-fingerprint";
 import { MatchError, matchAudio } from "@/lib/api-client";
-import { loadFingerprinter } from "@/lib/listen/fingerprint";
+import {
+  clipSeconds,
+  fingerprintClip,
+  loadFingerprinter,
+  usesNetease,
+} from "@/lib/listen/fingerprint";
 import {
   DeviceAudioError,
   MicUnavailableError,
@@ -81,6 +86,18 @@ function agrees(earlier: Sighting, later: Sighting): boolean {
   );
 }
 
+export const LISTEN_MODES: AudioMatchMode[] = ["auto", "shazam", "netease"];
+const MODE_STORAGE_KEY = "lyricsdb.listen.provider";
+
+function savedMode(): AudioMatchMode | null {
+  try {
+    const value = localStorage.getItem(MODE_STORAGE_KEY);
+    return LISTEN_MODES.includes(value as AudioMatchMode) ? (value as AudioMatchMode) : null;
+  } catch {
+    return null;
+  }
+}
+
 const INITIAL: ListenState = {
   status: "idle",
   source: "mic",
@@ -95,6 +112,24 @@ export function useListen() {
   const [state, setState] = useState<ListenState>(INITIAL);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Which recognition service to use, remembered on this device. Read after
+  // mounting so the server-rendered page matches the first client render.
+  const [mode, setModeState] = useState<AudioMatchMode>("auto");
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  useEffect(() => {
+    const saved = savedMode();
+    if (saved) setModeState(saved);
+  }, []);
+  const setMode = useCallback((next: AudioMatchMode) => {
+    setModeState(next);
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {
+      // Not remembered, but still used for this visit
+    }
+  }, []);
 
   const micRef = useRef<AudioListener | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -151,17 +186,21 @@ export function useListen() {
     if (following) update({ relistening: true });
     else update({ status: "listening", level: 0, error: null });
 
+    const listenMode = modeRef.current;
     let clip: RecordedClip;
     try {
-      clip = await mic.record(FP_CLIP_SECONDS, (level) => update({ level }), controller.signal);
+      clip = await mic.record(
+        clipSeconds(listenMode),
+        (level) => update({ level }),
+        controller.signal,
+      );
     } catch (error) {
       if (controller.signal.aborted) return;
       throw error;
     }
     if (!following) update({ status: "matching", level: 0 });
 
-    const fingerprinter = await loadFingerprinter();
-    const fingerprint = fingerprinter.fingerprint(clip.samples);
+    const prints = await fingerprintClip(clip, listenMode);
     const expectedOffsetMs = following
       ? positionAt(current.syncTo!, clip.startedAtPerfMs)
       : undefined;
@@ -174,8 +213,9 @@ export function useListen() {
     try {
       const response = await matchAudio(
         {
-          fingerprint,
-          duration: FP_CLIP_SECONDS,
+          provider: listenMode,
+          ...prints,
+          duration: prints.fingerprint ? FP_CLIP_SECONDS : undefined,
           expectedTrackId: following ? current.match!.track.id : undefined,
           expectedOffsetMs,
         },
@@ -314,7 +354,8 @@ export function useListen() {
           (source === "device" ? openDeviceAudio(onShareEnded) : openMic()).then(
             (l) => (opened = l),
           ),
-          loadFingerprinter(),
+          // Shazam's signature needs no download
+          usesNetease(modeRef.current) ? loadFingerprinter() : null,
         ]);
         // Sharing was stopped before listening could begin
         if (listener.ended) {
@@ -359,5 +400,5 @@ export function useListen() {
   // Free the mic when leaving the page
   useEffect(() => releaseMic, [releaseMic]);
 
-  return { state, startMic, startDevice, restart, stop };
+  return { state, mode, setMode, startMic, startDevice, restart, stop };
 }

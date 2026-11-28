@@ -44,3 +44,19 @@ function toBase64(bytes: Uint8Array): string {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
+
+export {
+  createShazamSignature,
+  decodeShazamSignature,
+  encodeShazamSignature,
+  findShazamPeaks,
+  SHAZAM_SAMPLE_RATE,
+  ShazamBand,
+  type DecodedShazamSignature,
+  type ShazamPeak,
+  type ShazamSignature,
+} from "./shazam/signature.js";
+
+// Clip length sent to Shazam. Longer clips match more often but take longer
+// to hear; Shazam accepts up to 12 s. Real recordings matched from 3-4 s.
+export const SHAZAM_CLIP_SECONDS = 4;

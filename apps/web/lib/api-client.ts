@@ -1,4 +1,5 @@
 import type {
+  AudioMatchMode,
   AudioMatchResponse,
   LibraryStats,
   PlatformSearchResponse,
@@ -307,8 +308,13 @@ export class MatchError extends Error {
 }
 
 export interface MatchAudioRequest {
-  fingerprint: string;
-  duration: number;
+  // Which recognition to use; each needs its own input below
+  provider: AudioMatchMode;
+  // NetEase's fingerprint and the length of the clip it was made from
+  fingerprint?: string;
+  duration?: number;
+  // Shazam's signature (data URI)
+  shazamSignature?: string;
   // While following a song: the track and where in it the clip should start
   expectedTrackId?: string;
   expectedOffsetMs?: number;

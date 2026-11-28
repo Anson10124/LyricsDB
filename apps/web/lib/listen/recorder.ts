@@ -1,8 +1,8 @@
-import { FP_CLIP_SAMPLES, FP_SAMPLE_RATE, resample } from "@repo/audio-fingerprint";
-
 export interface RecordedClip {
-  // 8 kHz mono samples, ready for the fingerprinter
+  // Mono samples at the device's own rate; fingerprintClip resamples them
+  // for each recognition service
   samples: Float32Array;
+  sampleRate: number;
   // performance.now() time at which the person heard the first sample
   startedAtPerfMs: number;
 }
@@ -216,7 +216,8 @@ export class AudioListener {
         }
         cleanup();
         resolve({
-          samples: resample(data.samples, rate, FP_SAMPLE_RATE, FP_CLIP_SAMPLES),
+          samples: data.samples,
+          sampleRate: rate,
           startedAtPerfMs: this.toPerfTime(data.startTime) + this.heardDelayMs(),
         });
       };

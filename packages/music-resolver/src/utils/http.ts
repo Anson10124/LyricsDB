@@ -56,6 +56,9 @@ export function detectProviderFromUrl(url: string): string | undefined {
   if (lower.includes("qq.com") || lower.includes("qqmusic")) {
     return "qqMusic";
   }
+  if (lower.includes("shazam.com")) {
+    return "shazam";
+  }
   if (lower.includes("musixmatch.com")) {
     return "musixmatch";
   }

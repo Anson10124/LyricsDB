@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   HttpStatus,
   Inject,
   Injectable,
@@ -7,6 +8,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { decodeShazamSignature, SHAZAM_SAMPLE_RATE } from "@repo/audio-fingerprint";
 import { DatabaseClient, ilike, type Track, tracks } from "@repo/database";
 import {
   AUDIO_MATCH_EXPECTED_TOLERANCE_MS,
@@ -17,14 +19,21 @@ import {
   isCoverUpload,
   isSameRecording,
   matchAudioFingerprint,
+  matchShazamSignature,
   ProviderQueueFullError,
   ProviderQueueTimeoutError,
   ProviderRateLimitedError,
   type AudioMatchGroup,
   type AudioMatchResult,
   type ResolvedLink,
+  type ShazamMatch,
+  type ShazamMatchResult,
 } from "@repo/music-resolver";
-import type { AudioMatchResponse, SyncedLyricsPayload } from "@repo/types";
+import type {
+  AudioMatchProvider,
+  AudioMatchResponse,
+  SyncedLyricsPayload,
+} from "@repo/types";
 
 import { DATABASE_CONNECTION } from "../database/database.constants";
 import { storedRecordingInfo } from "../tracks/platform-ids";
@@ -33,7 +42,9 @@ import type { MatchAudioDto } from "./dto/match-request.dto";
 
 // The outside services a match talks to, swappable in tests
 export interface MatchSources {
+  // NetEase's audio match
   matchAudio(fingerprint: string, durationSec: number): Promise<AudioMatchResult>;
+  matchShazam(signatureUri: string, sampleMs: number): Promise<ShazamMatchResult>;
   // A Deezer catalog entry for the song, to find the original release
   searchDeezer(title: string, durationMs: number | null): Promise<ResolvedLink | null>;
 }
@@ -42,6 +53,7 @@ export const MATCH_SOURCES = "MATCH_SOURCES";
 
 export const defaultMatchSources: MatchSources = {
   matchAudio: (fingerprint, durationSec) => matchAudioFingerprint(fingerprint, durationSec),
+  matchShazam: (signatureUri, sampleMs) => matchShazamSignature(signatureUri, sampleMs),
   searchDeezer: (title, durationMs) =>
     new DeezerAdapter().search(
       title,
@@ -67,9 +79,32 @@ function catalogPresence(track: Track): number {
   return CATALOG_FIELDS.filter((field) => Boolean(track[field])).length;
 }
 
+// The recording a track is checked against: what a provider heard
+type HeardRecording = Pick<AudioMatchGroup, "cleanTitle" | "durationMs">;
+
+const PROVIDER_NAMES: Record<AudioMatchProvider, string> = {
+  shazam: "Shazam",
+  netease: "NetEase",
+};
+
+// A provider's answer that lets the next provider try: nothing heard, the
+// heard song couldn't be loaded, or the provider is busy or failing
+function canFallBack(err: unknown): boolean {
+  return (
+    err instanceof NotFoundException ||
+    err instanceof ServiceUnavailableException ||
+    err instanceof BadGatewayException
+  );
+}
+
 // A title reduced to its letters and digits, in any script
 function titleKey(title: string): string {
   return cleanSearchQuery(title).toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+// The title key without any bracketed parts
+function bareTitleKey(title: string): string {
+  return titleKey(cleanSearchQuery(title).replace(/[([（【][^)\]）】]*[)\]）】]/g, " "));
 }
 
 @Injectable()
@@ -83,14 +118,57 @@ export class MatchService {
   ) {}
 
   async match(dto: MatchAudioDto, clientIp: string): Promise<AudioMatchResponse> {
+    const order = this.providerOrder(dto);
+    if (order.length === 0) {
+      throw new BadRequestException(
+        dto.provider === "shazam"
+          ? "Shazam needs a shazamSignature."
+          : dto.provider === "netease"
+            ? "NetEase needs a fingerprint."
+            : "Send a fingerprint, a shazamSignature, or both.",
+      );
+    }
+
+    let lastError: unknown;
+    for (const provider of order) {
+      try {
+        return provider === "shazam"
+          ? await this.matchShazam(dto, clientIp)
+          : await this.matchNetease(dto, clientIp);
+      } catch (err) {
+        if (!canFallBack(err)) throw err;
+        lastError = err;
+      }
+    }
+    throw lastError;
+  }
+
+  // Which providers to ask, in order. Auto asks Shazam first for a new song,
+  // since it names the original recording; while following a song NetEase
+  // goes first, as Shazam only allows a few requests a minute per server.
+  // A provider whose input wasn't sent is skipped.
+  private providerOrder(dto: MatchAudioDto): AudioMatchProvider[] {
+    const mode = dto.provider ?? "auto";
+    const order: AudioMatchProvider[] =
+      mode !== "auto"
+        ? [mode]
+        : dto.expectedTrackId
+          ? ["netease", "shazam"]
+          : ["shazam", "netease"];
+    return order.filter((p) =>
+      p === "shazam" ? Boolean(dto.shazamSignature) : Boolean(dto.fingerprint),
+    );
+  }
+
+  private async matchNetease(dto: MatchAudioDto, clientIp: string): Promise<AudioMatchResponse> {
     let heard: AudioMatchResult;
     try {
       heard = await this.sources.matchAudio(
-        dto.fingerprint,
+        dto.fingerprint!,
         dto.duration ?? DEFAULT_CLIP_SECONDS,
       );
     } catch (err) {
-      throw this.toHttpError(err);
+      throw this.toHttpError(err, "netease");
     }
 
     const groups = groupAudioMatches(heard.candidates, {
@@ -112,8 +190,141 @@ export class MatchService {
       track: this.tracksService.sanitizeTrack(track),
       offsetMs: best.offsetMs,
       lyrics: await this.lyricsFor(track, clientIp),
+      provider: "netease",
       candidates: [best, ...groups.filter((g) => g !== best)].flatMap((g) => g.entries),
+      shazam: null,
     };
+  }
+
+  private async matchShazam(dto: MatchAudioDto, clientIp: string): Promise<AudioMatchResponse> {
+    const signature = dto.shazamSignature!;
+    const sampleMs = this.signatureSampleMs(signature);
+    let heard: ShazamMatchResult;
+    try {
+      heard = await this.sources.matchShazam(signature, sampleMs);
+    } catch (err) {
+      throw this.toHttpError(err, "shazam");
+    }
+    const match = heard.match;
+    if (!match) {
+      throw new NotFoundException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: "No song matched this clip.",
+        error: "Not Found",
+      });
+    }
+
+    const track = await this.shazamTrack(match, dto, clientIp);
+    return {
+      track: this.tracksService.sanitizeTrack(track),
+      offsetMs: match.offsetMs,
+      lyrics: await this.lyricsFor(track, clientIp),
+      provider: "shazam",
+      candidates: [],
+      shazam: {
+        shazamKey: match.shazamKey,
+        title: match.title,
+        artists: match.artist ? [match.artist] : [],
+        album: match.album,
+        isrc: match.isrc,
+        appleMusicId: match.appleMusicId,
+        offsetMs: match.offsetMs,
+      },
+    };
+  }
+
+  // Checks the signature is well formed before this server sends it on, and
+  // takes the clip length from it rather than trusting the client
+  private signatureSampleMs(uri: string): number {
+    const base64 = uri.slice(uri.indexOf(",") + 1);
+    try {
+      const { sampleCount } = decodeShazamSignature(Buffer.from(base64, "base64"));
+      const sampleMs = Math.round((sampleCount / SHAZAM_SAMPLE_RATE) * 1000);
+      if (sampleMs < 1000 || sampleMs > 12_000) throw new Error("the clip must be 1-12 s");
+      return sampleMs;
+    } catch (err) {
+      throw new BadRequestException(
+        `shazamSignature is not a valid signature: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // The track for the recording Shazam named. Shazam gives the release's ISRC
+  // and Apple Music ID, so there are no covers to work around:
+  // 1. the followed track, if it's this song
+  // 2. an indexed track with the ISRC or Apple Music ID
+  // 3. Apple Music's entry, synced live
+  // 4. Deezer's entry for the song
+  // At most one track is fetched live per request.
+  private async shazamTrack(
+    match: ShazamMatch,
+    dto: MatchAudioDto,
+    clientIp: string,
+  ): Promise<Track> {
+    const heard: HeardRecording = { cleanTitle: cleanSearchQuery(match.title), durationMs: null };
+
+    if (dto.expectedTrackId) {
+      const expected = await this.tracksService
+        .findById(dto.expectedTrackId, clientIp)
+        .catch((err: unknown) => {
+          if (err instanceof NotFoundException) return null;
+          throw err;
+        });
+      if (expected && this.isShazamSong(expected, match, heard, dto)) return expected;
+    }
+
+    let fallback: Track | undefined;
+    for (const [platform, id] of [
+      ["isrc", match.isrc],
+      ["apple", match.appleMusicId],
+    ] as const) {
+      if (!id) continue;
+      const stored = await this.tracksService.findByPlatformId(platform, id);
+      if (stored && this.hasLyrics(stored)) return stored;
+      fallback ??= stored ?? undefined;
+    }
+
+    let liveUsed = false;
+    if (!fallback && match.appleMusicId) {
+      liveUsed = true;
+      try {
+        const synced = await this.tracksService.getOrSyncTrack(
+          { platform: "apple", id: match.appleMusicId },
+          clientIp,
+        );
+        if (this.hasLyrics(synced)) return synced;
+        fallback = synced;
+      } catch (err) {
+        if (!(err instanceof NotFoundException)) throw err;
+        this.logger.debug(`Apple Music entry ${match.appleMusicId} from Shazam couldn't be loaded`);
+      }
+    }
+
+    if (!liveUsed) {
+      const fromDeezer = await this.originalFromDeezer(heard, clientIp);
+      if (fromDeezer?.track && this.hasLyrics(fromDeezer.track)) return fromDeezer.track;
+      fallback ??= fromDeezer?.track ?? undefined;
+    }
+
+    if (fallback) return fallback;
+    throw new NotFoundException(`Heard "${match.title}" but couldn't load it.`);
+  }
+
+  // Whether the followed track is the song Shazam heard: the same release, or
+  // the same title heard where the listener expected to be
+  private isShazamSong(
+    track: Track,
+    match: ShazamMatch,
+    heard: HeardRecording,
+    dto: MatchAudioDto,
+  ): boolean {
+    if (match.isrc && track.isrc === match.isrc) return true;
+    if (match.appleMusicId && track.appleMusicId === match.appleMusicId) return true;
+    return (
+      dto.expectedOffsetMs !== undefined &&
+      Math.abs(match.offsetMs - dto.expectedOffsetMs) <= AUDIO_MATCH_EXPECTED_TOLERANCE_MS &&
+      this.isFollowedSong(track, heard)
+    );
   }
 
   // Where every edit of a song shares the same audio (an intro, say), NetEase
@@ -163,9 +374,35 @@ export class MatchService {
     // Still on the song the listener is following: no need to look it up again
     if (this.isFollowedPosition(group, dto)) {
       const expected = await this.tracksService.findById(dto.expectedTrackId!, clientIp);
-      if (this.isSameSong(expected, group)) return expected;
+      if (this.isFollowedSong(expected, group)) return expected;
+      // The followed track may have come from Shazam under a different title;
+      // if NetEase's upload resolves to the same release, keep following it
+      const resolved = await this.resolveGroup(group, clientIp, lookups);
+      return this.isSameRelease(resolved, expected) ? expected : resolved;
     }
     return this.resolveGroup(group, clientIp, lookups);
+  }
+
+  // The followed track is the song heard at the expected position. Titles are
+  // compared without bracketed parts, as services name one release differently
+  // ("Underdog" vs "Underdog (From F1® The Movie)"); length and version tags
+  // must still agree.
+  private isFollowedSong(track: Track, heard: HeardRecording): boolean {
+    return (
+      bareTitleKey(track.title) === bareTitleKey(heard.cleanTitle) &&
+      isSameRecording(storedRecordingInfo(track), {
+        title: heard.cleanTitle,
+        durationMs: heard.durationMs,
+      })
+    );
+  }
+
+  private isSameRelease(a: Track, b: Track): boolean {
+    return (
+      a.id === b.id ||
+      Boolean(a.isrc && a.isrc === b.isrc) ||
+      Boolean(a.appleMusicId && a.appleMusicId === b.appleMusicId)
+    );
   }
 
   // The best track for a recording NetEase heard. The uploads it names are often
@@ -252,7 +489,7 @@ export class MatchService {
   // undefined when Deezer has nothing usable; otherwise the track (if it could
   // be loaded) and whether loading it spent this request's live fetch
   private async originalFromDeezer(
-    group: AudioMatchGroup,
+    group: HeardRecording,
     clientIp: string,
   ): Promise<{ track: Track | null; live: boolean } | undefined> {
     let link: ResolvedLink | null;
@@ -282,7 +519,7 @@ export class MatchService {
     return { track: this.isSameSong(synced, group) ? synced : null, live: true };
   }
 
-  private isSameSong(track: Track, group: AudioMatchGroup): boolean {
+  private isSameSong(track: Track, group: HeardRecording): boolean {
     return (
       titleKey(track.title) === titleKey(group.cleanTitle) &&
       isSameRecording(storedRecordingInfo(track), {
@@ -310,21 +547,22 @@ export class MatchService {
     }
   }
 
-  private toHttpError(err: unknown): Error {
+  private toHttpError(err: unknown, provider: AudioMatchProvider): Error {
+    const name = PROVIDER_NAMES[provider];
     if (err instanceof ProviderRateLimitedError) {
       return new ServiceUnavailableException({
         statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-        message: `NetEase is busy right now. Try again in ${err.retryAfterSeconds}s.`,
+        message: `${name} is busy right now. Try again in ${err.retryAfterSeconds}s.`,
         error: "Service Unavailable",
         retryAfter: err.retryAfterSeconds,
       });
     }
     if (err instanceof ProviderQueueFullError || err instanceof ProviderQueueTimeoutError) {
-      return new ServiceUnavailableException("NetEase is busy right now. Try again shortly.");
+      return new ServiceUnavailableException(`${name} is busy right now. Try again shortly.`);
     }
     this.logger.warn(
-      `NetEase audio match failed: ${err instanceof Error ? err.message : String(err)}`,
+      `${name} audio match failed: ${err instanceof Error ? err.message : String(err)}`,
     );
-    return new BadGatewayException("Couldn't reach NetEase's song recognition right now.");
+    return new BadGatewayException(`Couldn't reach ${name}'s song recognition right now.`);
   }
 }
