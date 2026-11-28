@@ -84,9 +84,10 @@ test("rejects a corrupted signature", () => {
   assert.throws(() => decodeShazamSignature(bytes), /CRC/);
 });
 
-// Guards against accidental changes to the algorithm. This output was checked
-// against Shazam's live tag endpoint with real recordings, which recognised
-// them at the right positions; update the hash only on purpose.
+// Guards against accidental changes to the algorithm. The algorithm (not this
+// synthetic clip) was checked against Shazam's live tag endpoint with real
+// recordings, which it recognised at the right positions; update the hash
+// only after checking a change live again.
 test("signature output is stable", () => {
   const hash = createHash("sha256").update(bytesOf(createShazamSignature(chords(4)).uri)).digest("hex");
   assert.equal(hash, GOLDEN_HASH);

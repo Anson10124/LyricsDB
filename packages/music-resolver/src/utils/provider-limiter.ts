@@ -113,6 +113,17 @@ const DEFAULT_PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     maxQueueSize: 60,
     consecutiveFailureThreshold: 6,
   },
+  // Shazam's tag endpoint refuses an IP after a handful of requests a minute;
+  // a short queue wait lets callers fall back to NetEase instead of waiting
+  shazam: {
+    concurrency: 2,
+    rpm: 10,
+    baseCooldownMs: 60_000,
+    maxCooldownMs: 600_000,
+    queueTimeoutMs: 3_000,
+    maxQueueSize: 10,
+    consecutiveFailureThreshold: 3,
+  },
   qqMusic: {
     concurrency: 4,
     rpm: 60,
